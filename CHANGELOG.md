@@ -3,6 +3,9 @@
 Running log, newest first. The Lead reads this to find root causes and prioritize.
 Entry format: `## YYYY-MM-DD · <Title> (<Author>)` followed by terse bullets. Name the fixture combo on render/summary cycles.
 
+## 2026-09-27 · Claude usage meter assigned (Ingrid Halvorsen)
+- Max asked whether the team had it. It was designed in issue #2 but unowned. Now in the goal model and Phase 1a/1b: Tendai builds the status-line hook and reader (QA Bartek), Diego draws the bar with its stale marker (QA Lucía). Pi-hop caveat dropped since the Mac is the home box.
+
 ## 2026-09-27 · Wellness signals chosen (Ingrid Halvorsen)
 - Max picked four automatic Watch signals: HRV, resting HR, VO2 max, time in daylight. All logged-only metrics declined. Stored daily with 28-day baselines and deviation bands; web-page trends and summary facts only, never a target, win, or panel. `wellness_daily` added to the schema plan; issue #1 step 3 data types extended.
 
