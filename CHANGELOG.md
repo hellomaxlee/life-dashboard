@@ -3,8 +3,8 @@
 Running log, newest first. The Lead reads this to find root causes and prioritize.
 Entry format: `## YYYY-MM-DD · <Title> (<Author>)` followed by terse bullets. Name the fixture combo on render/summary cycles.
 
-## 2026-09-27 · One pull a day at 06:30 (Ingrid Halvorsen)
-- Max: pull consistently at 06:30, his wake-up. Evening push dropped. The Today panel describes yesterday plus last night; the third-dot party plays the morning after. Week closes after Monday 06:30. Issue #1 step 3 reduced to one automation.
+## 2026-09-27 · Pulls at 06:30 and 22:00 (Ingrid Halvorsen)
+- Max settled on two pushes: 06:30 (wake-up) and 22:00. Today panel shows today's dot as of the last push with an "as of" mark; a post-22:00 workout lands at 06:30. Week closes after Monday 06:30. Issue #1 step 3 asks for two automations.
 
 ## 2026-09-27 · Goal model v2: effort load, zones, twice-daily pulls (Ingrid Halvorsen)
 - Max's answers: every type counts; average HR was unfair to lifting. New rule: Edwards load (Z1–Z5 minutes ×1–5) ≥ a bar calibrated to a 4-mile run; placeholder 100 until three real runs set it. Zones by percent of max HR 189. No HR samples → no dot. Duration floor and avg-HR test retired; "whatever is most consistent" → one rule, no second path.
