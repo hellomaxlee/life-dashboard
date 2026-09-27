@@ -87,4 +87,4 @@ Every render or summary test cycle uses a NEW fixture combination across: day ty
 - `CHANGELOG.md` — one dated entry per push, newest first
 
 ## GitHub
-No remote yet. When one exists, use the `gh` CLI against it. Issue closure: the last comment states testing extent, verification method, and reason for closure.
+Remote: `https://github.com/hellomaxlee/life-dashboard.git` (private), `origin`. Working branch `dev` tracks `origin/dev`; promote via `dev → main` PR. Use the `gh` CLI against it. Issue closure: the last comment states testing extent, verification method, and reason for closure.

@@ -3,6 +3,9 @@
 Running log, newest first. The Lead reads this to find root causes and prioritize.
 Entry format: `## YYYY-MM-DD · <Title> (<Author>)` followed by terse bullets. Name the fixture combo on render/summary cycles.
 
+## 2026-09-26 · Connect GitHub remote (Ingrid Halvorsen)
+- `origin` → github.com/hellomaxlee/life-dashboard (private). `dev` pushed and tracking. `main` bootstrap left to Max (pre-push hook guards it). Reusable `/connect-repo` skill written to `~/.claude/skills/`.
+
 ## Kickoff
 Roster and first tasks, decided 2026-09-26:
 - Ingrid Halvorsen (Lead) — write `notes.txt § Goal model` v1: the event/load target, the streak and rest-day rules, the home timezone, the reading count; acceptance criteria for every week-1 task below.
