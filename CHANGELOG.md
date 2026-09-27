@@ -3,6 +3,9 @@
 Running log, newest first. The Lead reads this to find root causes and prioritize.
 Entry format: `## YYYY-MM-DD · <Title> (<Author>)` followed by terse bullets. Name the fixture combo on render/summary cycles.
 
+## 2026-09-26 · Steps are not a target (Ingrid Halvorsen)
+- Steps dropped from daily wins and config at Max's request; the quality workout is the win that matters. Steps stay on the Today screen as a plain number. Daily wins are now sleep ≥ 7 h, quality workout, book finished.
+
 ## 2026-09-26 · Threshold 45 min, HR set; setup issue opened (Ingrid Halvorsen)
 - Quality workout floor raised 40 → 45 min at Max's request. Max HR 212 − 23 = 189; zone-2 floor 0.60 × 189 = 113 bpm. `notes.txt § Goal model`, CLAUDE.md invariant, and risks updated.
 - Claude subscription usage bar on the Week screen: researched, see issue #2. Setup to-dos for Max: issue #1.

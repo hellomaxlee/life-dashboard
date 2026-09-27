@@ -6,7 +6,7 @@ Ambition: a single-user life dashboard covering training, sleep, and reading, ma
 Sources: Apple Health via Health Auto Export REST push (chosen over manual XML and Shortcuts); Strava for workouts; Goodreads public `read` shelf RSS (API is dead since 2020).
 Hosting: always-on home box on the LAN. **Decision 2026-09-26: run on Max's Mac first (launchd), migrate to a Raspberry Pi later with a written step-by-step guide; Max has no Pi experience.** SQLite backups make the move a file copy.
 Habits: derived from the data, not manual check-offs.
-Progress means (revised 2026-09-26, see § Goal model): 3 quality workouts per week, any sport; a streak of weeks that hit 3; daily small wins (sleep, steps, a workout, a finished book); 12 books a year. No event on the calendar. Training load is computed and shown on the web page, not judged on the device.
+Progress means (revised 2026-09-26, see § Goal model): 3 quality workouts per week, any sport; a streak of weeks that hit 3; daily small wins (sleep, a quality workout, a finished book); 12 books a year. No event on the calendar. Training load is computed and shown on the web page, not judged on the device.
 Phase-1 view: LAN web page previewing the same frames the device will show.
 Audience: personal only, single user. No EP role.
 Stack: Python, FastAPI, SQLite (Max's choice).
@@ -41,14 +41,14 @@ v1, answered by Max on 2026-09-26. Every metric cites this section.
 | Weekly target | 3 quality workouts per week. Shown as three dots. | `week.target = 3` |
 | Rest day | Any day with no quality workout. Rest is never penalized and never breaks anything; Max's work schedule is volatile, so there are no fixed rest days. | — |
 | Weeks-hit streak | Consecutive completed weeks with ≥ 3 quality workouts. The current week is in progress and neither extends nor breaks it until Sunday ends. | — |
-| Daily small wins | (a) slept ≥ 7.0 h last night; (b) steps ≥ `steps.target` (default 8,000, **Max may adjust**); (c) a quality workout today; (d) finished a book today (Goodreads `read` shelf gained an entry). Each win gets a small on-device reinforcement. | `sleep.target_hours = 7.0`, `steps.target = 8000` |
+| Daily small wins | (a) slept ≥ 7.0 h last night; (b) a quality workout today; (c) finished a book today (Goodreads `read` shelf gained an entry). Each win gets a small on-device reinforcement. Steps are **not** a target (Max, 2026-09-26: the quality workout is what matters); they are shown as a plain number and feed nothing. | `sleep.target_hours = 7.0` |
 | Week complete | Third dot filled → a party animation plays on the device. Once per week, at the moment the third workout lands. | — |
 | Reading | Books on the Goodreads `read` shelf with a read-at date in the current calendar year, target 12. | `books.target_per_year = 12` |
 | Sleep | A session belongs to the day you wake. Shown against 7 h; a metric and a daily win, not a streak. | — |
 | Training load | HR-based TRIMP, 7-day acute and 42-day chronic EWMA, balance = acute/chronic. Computed for every day, displayed on the web page and in the summary; not a device screen in v1. | — |
 | Dedupe | A Health workout and a Strava activity that overlap in time (start within 5 min, duration within 10 %) are one activity; Strava wins for distance and name, Health wins for HR samples. | — |
 
-Rotation on the Pixoo, in order: **Week** (three dots + weeks-hit streak) → **Today** (sleep vs 7 h, steps, workout done?) → **Books + summary line** (books this year vs 12, one-line daily summary scrolling). Load screen dropped from the device rotation at Max's request; it lives on the web page.
+Rotation on the Pixoo, in order: **Week** (three dots + weeks-hit streak) → **Today** (sleep vs 7 h, workout done?, steps as a plain number) → **Books + summary line** (books this year vs 12, one-line daily summary scrolling). Load screen dropped from the device rotation at Max's request; it lives on the web page.
 
 Design brief from Max: "Be clever and creative and colorful." Wins are celebrated; misses are shown plainly, never nagged.
 
@@ -72,7 +72,7 @@ Build order, with "both in parallel" chosen for ingest and render.
 **Max's to-dos before Phase 1 can go live**
 1. Create a Strava API application at strava.com/settings/api and put the client id and secret in `.env`.
 2. Confirm the Goodreads user id / `read` shelf RSS URL.
-3. Adjust `steps.target` in `config.toml` if 8,000 is wrong (HR values are set: max 189, zone-2 floor 113).
+3. Nothing left to fill: HR max 189, zone-2 floor 113, no steps target.
 4. Once the service runs on the Mac, point Health Auto Export at `http://<mac-lan-ip>:8080/ingest/health` with an automation for workouts, sleep, heart rate, and steps.
 
 ## Architecture assumptions
