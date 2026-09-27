@@ -3,6 +3,11 @@
 Running log, newest first. The Lead reads this to find root causes and prioritize.
 Entry format: `## YYYY-MM-DD · <Title> (<Author>)` followed by terse bullets. Name the fixture combo on render/summary cycles.
 
+## 2026-09-27 · Goal model v2: effort load, zones, twice-daily pulls (Ingrid Halvorsen)
+- Max's answers: every type counts; average HR was unfair to lifting. New rule: Edwards load (Z1–Z5 minutes ×1–5) ≥ a bar calibrated to a 4-mile run; placeholder 100 until three real runs set it. Zones by percent of max HR 189. No HR samples → no dot. Duration floor and avg-HR test retired; "whatever is most consistent" → one rule, no second path.
+- Pulls: Health Auto Export at 05:00 and 22:00, Goodreads at 06:00. Week closes after Monday 05:00. Today panel gains an "as of" mark.
+- New risk: Health Auto Export may not carry per-workout HR samples; verified on day one. Issue #1 step 3 updated.
+
 ## 2026-09-27 · Strava removed entirely (Ingrid Halvorsen)
 - Max: not optional, gone. `tools.backfill` and the bulk-export path deleted from CLAUDE.md, notes, profiles, and issue #1. Non-goals now exclude any Strava integration or import. Dedupe referent is Watch + phone app in HealthKit only.
 

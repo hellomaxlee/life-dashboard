@@ -33,12 +33,14 @@ Quietly-fails candidates and their Managers:
 3. Summary copy drifting into platitudes or inventing a number (Ingrid ratifies; the grounding gate is Theodora's first deliverable).
 
 ## Goal model
-v1, answered by Max on 2026-09-26. Every metric cites this section.
+v2, answered by Max on 2026-09-26 and 2026-09-27. Every metric cites this section.
 
 | Term | Definition | Config key |
 |---|---|---|
 | Home timezone | `America/New_York`. Days and weeks are local; a week is Monday 00:00 to Sunday 23:59. | `home_tz` |
-| Quality workout | Any sport, duration ≥ 45 min, average heart rate at or above the zone-2 floor. Max HR = 212 − 23 = 189 (Max, 2026-09-26); zone-2 floor = 0.60 × 189 = 113 bpm. Walks and shorter sessions are recorded and shown but do not count. | `workout.min_minutes = 45`, `hr_max = 189`, `workout.zone2_floor_bpm = 113` |
+| Quality workout | Any type (run, lift, ride, row, swim, HIIT, sport, hike). One rule for all: **effort load ≥ the bar**. Effort load = Edwards TRIMP = minutes in Z1 ×1 + Z2 ×2 + Z3 ×3 + Z4 ×4 + Z5 ×5, computed from the workout's HR samples. No duration floor and no average-HR test; the load carries both. A workout with **no HR samples does not count** (Max, 2026-09-27) and is drawn as a hollow dot on the web page only. Rationale: average HR punishes lifting (rest between sets); time-in-zone lets a hard lift and a 4-mile run earn the same dot. | `workout.load_bar` (placeholder 100 until calibrated) |
+| HR zones | Percent of max HR 189 (212 − 23). Z1 95–112, Z2 113–131, Z3 132–150, Z4 151–169, Z5 170+. Below 95 scores 0. | `hr_max = 189`, `zones.pct = [0.50, 0.60, 0.70, 0.80, 0.90]` |
+| Load bar calibration | The bar is what a 4-mile run costs Max. Placeholder 100. After the first three logged runs of ≥ 4 miles, the bar becomes the median of their loads, rounded to 5, written to config with the three source workout ids. Re-calibrate only on Max's word. | `workout.load_bar`, `workout.load_bar_calibrated_from = []` |
 | Weekly target | 3 quality workouts per week. Shown as three dots. | `week.target = 3` |
 | Rest day | Any day with no quality workout. Rest is never penalized and never breaks anything; Max's work schedule is volatile, so there are no fixed rest days. | — |
 | Weeks-hit streak | Consecutive completed weeks with ≥ 3 quality workouts. The current week is in progress and neither extends nor breaks it until Sunday ends. | — |
@@ -46,10 +48,11 @@ v1, answered by Max on 2026-09-26. Every metric cites this section.
 | Week complete | Third dot filled → a party animation plays on the device. Once per week, at the moment the third workout lands. | — |
 | Reading | Books on the Goodreads `read` shelf with a read-at date in the current calendar year, target 12. | `books.target_per_year = 12` |
 | Sleep | A session belongs to the day you wake. Shown against 7 h; a metric and a daily win, not a streak. | — |
+| Pull schedule | Health Auto Export pushes twice a day: ~05:00 (yesterday's workouts, last night's sleep) and ~22:00 (today's workouts). Goodreads polled once a day at 06:00. Claude usage file read whenever it changes. A week closes after the Monday 05:00 push, so a Sunday-night workout still counts for its week. | `pull.health = ["05:00", "22:00"]`, `pull.goodreads = "06:00"` |
 | Training load | HR-based TRIMP, 7-day acute and 42-day chronic EWMA, balance = acute/chronic. Computed for every day, displayed on the web page and in the summary; not a device screen in v1. | — |
 | Dedupe | Two workouts that overlap in time (start within 5 min, duration within 10 %) are one activity regardless of HealthKit source app; the record with HR samples wins for HR, the longer distance wins for distance, every provenance is kept. | — |
 
-Rotation on the Pixoo, in order: **Week** (three dots + weeks-hit streak) → **Today** (sleep vs 7 h, workout done?, steps as a plain number) → **Books + summary line** (books this year vs 12, one-line daily summary scrolling). Load screen dropped from the device rotation at Max's request; it lives on the web page.
+Rotation on the Pixoo, in order: **Week** (three dots + weeks-hit streak) → **Today** (last night's sleep vs 7 h, today's dot as of the last push with an "as of HH:MM" mark, steps as a plain number) → **Books + summary line** (books this year vs 12, one-line daily summary scrolling). Load screen dropped from the device rotation at Max's request; it lives on the web page.
 
 Design brief from Max: "Be clever and creative and colorful." Wins are celebrated; misses are shown plainly, never nagged.
 
@@ -62,7 +65,7 @@ Build order, with "both in parallel" chosen for ingest and render.
 
 **Phase 1b — Render (Diego, QA Lucía).** Frame contract extended from one 64x64 frame to a *clip* (list of frames + per-frame ms) so celebrations are first-class; bitmap font legible at 1x under LED gamma; three screens; win sparkle and week-complete party clip; LAN preview page at 1x and 8x with the gamma emulator; Pixoo adapter using the local HTTP API (`Draw/SendHttpGif` on port 80, to be verified on hardware) plus a file adapter for tests. Acceptance: `/frame-preview` eye test at 1x on every screen and both celebrations.
 
-**Phase 2 — Metrics (Fatima, QA Bartek).** Quality-workout classifier, weekly count, weeks-hit streak with the in-progress-week rule, daily wins, books YTD, TRIMP load. Acceptance: golden cases pass; a mutant that counts a 35-min run turns the gate red.
+**Phase 2 — Metrics (Fatima, QA Bartek).** Zone bucketing from HR samples, Edwards load, the load-bar classifier and its calibration routine, weekly count, weeks-hit streak with the in-progress-week rule, daily wins, books YTD, TRIMP load. Acceptance: golden cases pass; a mutant that scores Z2 minutes ×1 instead of ×2 turns the gate red; a workout fixture with no HR samples earns no dot.
 
 **Phase 3 — Summary (Theodora, ratified by Ingrid).** Prompt from the voice brief; grounding gate; ban list; rule-based fallback; spend counter and cap. Acceptance: one real summary read end to end; a summary with an invented number is rejected.
 
@@ -72,8 +75,8 @@ Build order, with "both in parallel" chosen for ingest and render.
 
 **Max's to-dos before Phase 1 can go live**
 1. Confirm the Goodreads user id / `read` shelf RSS URL.
-2. Nothing left to fill: HR max 189, zone-2 floor 113, no steps target.
-3. Once the service runs on the Mac, point Health Auto Export at `http://<mac-lan-ip>:8080/ingest/health` with an automation for workouts, sleep, heart rate, and steps.
+2. Nothing left to fill: HR max 189, zones by percent of max, load bar placeholder 100 until calibrated.
+3. Once the service runs on the Mac, point Health Auto Export at `http://<mac-lan-ip>:8080/ingest/health` with two automations (05:00 and 22:00) for workouts with heart-rate samples, sleep, and steps.
 
 ## Architecture assumptions
 | Area | Decision | Rationale |
@@ -96,5 +99,6 @@ Build order, with "both in parallel" chosen for ingest and render.
 | Sleep attribution across midnight | wrong day gets the sleep; the daily win lands on the wrong day | "sleep belongs to the wake day" invariant with a boundary fixture; Fatima |
 | Summary voice becomes platitudes or nagging | the most-read surface loses trust | ban list, grounding gate, fixed-judge comparison; Theodora/Ingrid |
 | Pi power loss mid-write | SQLite corruption | WAL mode, nightly backup, restore drill; Callum |
-| Zone-2 floor wrong | every workout counts or none does; the weekly dots lie | 113 bpm is derived from a formula, not a lab test; a mutant that lowers it to 100 must flip a golden case; Max revisits after two weeks of real data; Ingrid |
+| Load bar wrong | every workout counts or none does; the weekly dots lie | placeholder 100 is a guess; calibration from three real 4-mile runs is a Phase 2 deliverable with the source ids recorded; Ingrid |
+| Health Auto Export omits per-workout HR samples | no zones, no load, no dots | confirm the workout payload carries HR samples on day one (issue #1 step 3); if not, fall back to the workout's avg/min/max and say so in the CHANGELOG; Tendai |
 | Week completes at 23:59 Sunday but the Health Auto Export push lands Monday | party plays a day late or the streak breaks falsely | weekly rollup waits for the last poll after midnight; a late-arriving Sunday workout re-opens the week; Fatima/Bartek |
