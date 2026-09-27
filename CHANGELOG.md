@@ -3,6 +3,10 @@
 Running log, newest first. The Lead reads this to find root causes and prioritize.
 Entry format: `## YYYY-MM-DD · <Title> (<Author>)` followed by terse bullets. Name the fixture combo on render/summary cycles.
 
+## 2026-09-27 · Issue #1 steps 1–2 done; Goodreads feed verified (Ingrid Halvorsen)
+- Max added `GOODREADS_RSS_URL` to `.env` (git-ignored) and confirmed the goal numbers. Feed fetched once: HTTP 200, 75 items. `.env.example` key renamed to match.
+- Data finding: only 19 of 75 books carry a read-at date, 1 in 2026; date-added is always present (1 in 2026). Reading rule gains a date-added fallback with a date-inferred mark. Bartek to ratify.
+
 ## 2026-09-27 · Pulls at 06:30 and 22:00 (Ingrid Halvorsen)
 - Max settled on two pushes: 06:30 (wake-up) and 22:00. Today panel shows today's dot as of the last push with an "as of" mark; a post-22:00 workout lands at 06:30. Week closes after Monday 06:30. Issue #1 step 3 asks for two automations.
 
