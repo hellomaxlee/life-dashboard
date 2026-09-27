@@ -3,6 +3,9 @@
 Running log, newest first. The Lead reads this to find root causes and prioritize.
 Entry format: `## YYYY-MM-DD · <Title> (<Author>)` followed by terse bullets. Name the fixture combo on render/summary cycles.
 
+## 2026-09-27 · Wellness signals chosen (Ingrid Halvorsen)
+- Max picked four automatic Watch signals: HRV, resting HR, VO2 max, time in daylight. All logged-only metrics declined. Stored daily with 28-day baselines and deviation bands; web-page trends and summary facts only, never a target, win, or panel. `wellness_daily` added to the schema plan; issue #1 step 3 data types extended.
+
 ## 2026-09-27 · Voice brief v1; Pixoo reaffirmed over e-ink; Pi deferred (Ingrid Halvorsen)
 - Max named the sources (Stoic, Aristotelian habit, Buddhist non-attachment) and admired qualities (steady self-leadership, resilience, self-awareness) with a hard rule: no impersonation, no capitalizing on any voice. Repetition minimized by three coded mechanisms (lens rotation, 14-line memory, trigram similarity gate). Ten hand-written lines across fixture cells and a seed ban list written to `notes.txt § Voice brief`. Theodora's Phase 3 prompt derives from it.
 - E-ink weighed for the text-heavy summary; Max keeps the Pixoo for colour and celebration. Raspberry Pi deferred; Mac is the home box.

@@ -48,6 +48,7 @@ v2, answered by Max on 2026-09-26 and 2026-09-27. Every metric cites this sectio
 | Week complete | Third dot filled → a party animation plays on the device. Once per week, at the moment the third workout lands. | — |
 | Reading | Books on the Goodreads `read` shelf with a read-at date in the current calendar year, target 12. **Feed checked 2026-09-27:** 75 items, only 19 carry `user_read_at`, 1 in 2026; `user_date_added` is always present (1 in 2026). Rule: use `user_read_at`; when it is empty, fall back to `user_date_added` and mark the book as date-inferred on the web page. Max can fix dates on Goodreads any time and the next poll picks them up. | `books.target_per_year = 12`, `books.fallback_to_date_added = true` |
 | Sleep | A session belongs to the day you wake. Shown against 7 h; a metric and a daily win, not a streak. | — |
+| Wellness signals | Stored daily, never a target or a win (Max, 2026-09-27): **HRV** (overnight SDNN), **resting heart rate**, **VO2 max** estimate, **time in daylight**. Each gets a 28-day rolling baseline; a deviation beyond a configured band (HRV −20 %, resting HR +5 bpm, daylight < 20 min) is a fact the summary may state, never a verdict. Shown as trends on the web page; VO2 max monthly. Not on any device panel. Logged-only metrics (mood, mindful minutes, weight, intake) are excluded. | `wellness.baseline_days = 28`, `wellness.bands = {hrv_pct: -20, rhr_bpm: 5, daylight_min: 20}` |
 | Pull schedule | Health Auto Export pushes twice a day: **06:30** (Max's wake-up: last night's sleep, anything since 22:00) and **22:00** (today's workouts). Goodreads polled at 06:30. Claude usage file read whenever it changes. The Today panel shows last night's sleep and today's dot as of the last push; a workout after 22:00 lands at 06:30. A week closes after the Monday 06:30 push, so a Sunday-night workout still counts for its week. The party for a third dot plays at whichever push brings it. | `pull.health = ["06:30", "22:00"]`, `pull.goodreads = "06:30"` |
 | Training load | HR-based TRIMP, 7-day acute and 42-day chronic EWMA, balance = acute/chronic. Computed for every day, displayed on the web page and in the summary; not a device screen in v1. | — |
 | Dedupe | Two workouts that overlap in time (start within 5 min, duration within 10 %) are one activity regardless of HealthKit source app; the record with HR samples wins for HR, the longer distance wins for distance, every provenance is kept. | — |
@@ -99,9 +100,9 @@ Answered by Max on 2026-09-27 and accepted the same day without edits; his one-l
 ## Plan (2026-09-26)
 Build order, with "both in parallel" chosen for ingest and render.
 
-**Phase 0 — Foundations (Ingrid, Bartek).** `config.toml` with every key above; SQLite schema and migrations (`raw_archive`, `activities`, `sleep_sessions`, `steps_daily`, `books`, `daily_metrics`, `weekly_metrics`); fixture set for a train day, a rest day, a Sunday that completes a week, and a Watch+phone-app overlap. Acceptance: migrations apply on an empty db twice without change; golden cases written by hand before any engine code.
+**Phase 0 — Foundations (Ingrid, Bartek).** `config.toml` with every key above; SQLite schema and migrations (`raw_archive`, `activities`, `sleep_sessions`, `steps_daily`, `wellness_daily`, `books`, `daily_metrics`, `weekly_metrics`); fixture set for a train day, a rest day, a Sunday that completes a week, and a Watch+phone-app overlap. Acceptance: migrations apply on an empty db twice without change; golden cases written by hand before any engine code.
 
-**Phase 1a — Ingest (Tendai, QA Bartek).** `POST /ingest/health` archiving raw first, idempotent on replay; Goodreads RSS daily poll; dedupe rule with the overlap fixture and a mutant that removes it. Acceptance: `tools.replay` twice → identical metrics table.
+**Phase 1a — Ingest (Tendai, QA Bartek).** `POST /ingest/health` archiving raw first, idempotent on replay, parsing workouts, sleep, steps, HRV, resting HR, VO2 max, and time in daylight; Goodreads RSS daily poll; dedupe rule with the overlap fixture and a mutant that removes it. Acceptance: `tools.replay` twice → identical metrics table.
 
 **Phase 1b — Render (Diego, QA Lucía).** Frame contract extended from one 64x64 frame to a *clip* (list of frames + per-frame ms) so celebrations are first-class; bitmap font legible at 1x under LED gamma; three screens; win sparkle and week-complete party clip; LAN preview page at 1x and 8x with the gamma emulator; Pixoo adapter using the local HTTP API (`Draw/SendHttpGif` on port 80, to be verified on hardware) plus a file adapter for tests. Acceptance: `/frame-preview` eye test at 1x on every screen and both celebrations.
 
@@ -116,7 +117,7 @@ Build order, with "both in parallel" chosen for ingest and render.
 **Max's to-dos before Phase 1 can go live**
 1. ~~Confirm the Goodreads `read` shelf RSS URL.~~ Done 2026-09-27; in `.env` as `GOODREADS_RSS_URL`, fetched once, 75 items.
 2. ~~Confirm goal numbers.~~ Done 2026-09-27.
-3. Once the service runs on the Mac, point Health Auto Export at `http://<mac-lan-ip>:8080/ingest/health` with two automations (06:30 and 22:00) for workouts with heart-rate samples, sleep, and steps.
+3. Once the service runs on the Mac, point Health Auto Export at `http://<mac-lan-ip>:8080/ingest/health` with two automations (06:30 and 22:00) for workouts with heart-rate samples, sleep, steps, HRV, resting heart rate, VO2 max, and time in daylight.
 
 ## Architecture assumptions
 | Area | Decision | Rationale |
