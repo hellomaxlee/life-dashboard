@@ -44,7 +44,7 @@ Rules that survive any refactor. Break one and the dashboard is wrong even if th
 - **Every displayed number traces to a metrics row.** The model never computes or invents a figure; a grounding gate rejects any summary whose numbers are not in its payload.
 - **The frame is device-agnostic.** Renderers emit a 64x64 RGB frame or a clip of them with per-frame durations; adapters only transport. Legibility is judged at 1x under LED gamma, never at browser zoom.
 - **The display never blanks.** Model unavailable or over budget means rule-based copy, not an empty frame.
-- **Voice: balanced, sustainable, no shame.** Rest counts as progress. Wins are celebrated on the device; misses are shown plainly, never nagged. Streak-anxiety copy ("don't break the chain") and moralizing are banned by a ban list the summary gate enforces.
+- **Voice: balanced, sustainable, no shame.** Rest counts as progress. Wins are celebrated on the device; misses are shown plainly, never nagged. Streak-anxiety copy ("don't break the chain") and moralizing are banned by a ban list the summary gate enforces. No impersonation of any named person; ancient sources paraphrased sparingly. Repetition is controlled by lens rotation, a recent-lines memory, and a similarity gate. See `notes.txt § Voice brief`.
 
 ## Working Rules
 - Verify by execution. A claim of "fixed" names the command, fixture, or measurement that proved it.

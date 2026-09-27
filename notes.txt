@@ -2,7 +2,7 @@
 
 ## Intake (2026-09-26)
 Ambition: a single-user life dashboard covering training, sleep, and reading, made visible on a piece of hardware (64x64 pixel matrix). Software and backend first, hardware second.
-**Device (2026-09-26): Divoom Pixoo-64 II assumed for all design work; not yet purchased, purchase is Max's call.**
+**Device (2026-09-26): Divoom Pixoo-64 II assumed for all design work; not yet purchased, purchase is Max's call. Reaffirmed 2026-09-27 after weighing e-ink: e-ink fit the twice-daily cadence and the text summary, but Max wants colour and celebration; the full summary lives on the web page to compensate.**
 Sources: Apple Health via Health Auto Export REST push (chosen over manual XML and Shortcuts); Goodreads public `read` shelf RSS (API is dead since 2020).
 **Strava dropped (2026-09-27):** its API requires a paid Strava subscription. Apple Health already holds every workout the goal model needs (duration, avg HR, HR samples, distance). If Max records in the Strava phone app, the app's Health integration writes the workout to HealthKit and it arrives through the same push.
 Hosting: always-on home box on the LAN. **Decision 2026-09-26: run on Max's Mac first (launchd); Max has no Pi experience. Revised 2026-09-27: the Mac is plugged in most of the time and a missed push is acceptable, so the Mac is the home box for the foreseeable future. The Pi is a learning project, not a dependency; the guide lives at `additional/raspberry-pi-guide.tex` and Phase 5 hardware work does not wait on it.** SQLite backups make any move a file copy.
@@ -55,6 +55,46 @@ v2, answered by Max on 2026-09-26 and 2026-09-27. Every metric cites this sectio
 Rotation on the Pixoo, in order: **Week** (three dots + weeks-hit streak) → **Today** (last night's sleep vs 7 h, today's dot as of the last push with an "as of HH:MM" mark, steps as a plain number) → **Books + summary line** (books this year vs 12, one-line daily summary scrolling). Load screen dropped from the device rotation at Max's request; it lives on the web page.
 
 Design brief from Max: "Be clever and creative and colorful." Wins are celebrated; misses are shown plainly, never nagged.
+
+## Voice brief
+Answered by Max on 2026-09-27. Theodora drafts from this; Ingrid ratifies. Every summary is judged against it.
+
+**Sources it may draw on.** Stoic practice (what is in my control, the obstacle as material, the evening review); Aristotle on habit (we are what we repeatedly do, virtue as a mean, practical wisdom); Buddhist non-attachment (the effort is yours, the result is not; begin again without drama). Qualities Max admires and the voice may embody without naming anyone: steady leadership of oneself, resilience under discomfort, honest self-awareness about one's own biases.
+
+**Rule on names and voices.** No impersonation and no capitalizing on a particular voice. Never "as X says", never a line styled after a living person, never a quote attributed to a living person. Ancient sources may be paraphrased and named at most once in seven days, and only when the day's numbers actually illustrate the idea.
+
+**Register.** A quiet friend who noticed. Concrete before abstract: the number first, the thought second. Calm, occasionally wry, never a coach, never a preacher. Second person, present tense. It talks to a tired person at 22:00 and a hopeful one at 06:30.
+
+**Shape.** One sentence for the device (≤ 110 characters, scrolls on the Books panel). An optional second sentence on the web page only. Every number is a lookup from the metrics payload; the model never adds, averages, or compares beyond what the payload states.
+
+**Minimize repetition (Max's explicit ask).** Three mechanisms, all enforced in code, not by hope:
+1. *Lens rotation.* Each day is assigned a lens from a seven-day cycle: control / habit / non-attachment / self-awareness / resilience / rest-as-work / plain gratitude. The prompt receives only that day's lens.
+2. *Recent-lines memory.* The prompt receives the last 14 device lines and must not reuse their opening three words, their central image, or their named source.
+3. *Similarity gate.* A new line whose trigram similarity to any of the last 30 exceeds a threshold (start at 0.5, tune on real output) is rejected and regenerated once, then falls back to rule-based copy.
+
+**Ban list, seed.** Grows from real rejections. Rejected on match, case-insensitive:
+"don't break the chain", "no excuses", "crush", "grind", "beast", "lazy", "should have", "you failed", "only N left", "disappoint", "stay hard", "no days off", "hustle", "guilt", "shame", "you need to", "you must", "just do it", any exclamation mark, any emoji, any second exclamatory clause.
+
+**Hard days.** A week that ends at one dot gets a true sentence, not a consolation. The line names what happened, then places it. It never asks for more next week and never mentions the streak that ended.
+
+**Ten hand-written lines across the fixture cells** (day type × completeness × streak × season). These are the contrastive examples for the prompt and the first golden cases for the gate.
+
+| Cell | Line |
+|---|---|
+| train / all sources / alive / base | Third dot this week, load 118. What you repeat is what you become; this week you repeated the right thing. |
+| rest / all sources / alive / base | No workout, 7.4 h of sleep. Rest is not the absence of training. It is where the training lands. |
+| train / workout without HR / alive / peak | A 52-minute session with no heart-rate data, so no dot. The work was real; the record just did not see it. |
+| rest / sleep missing / broken last week / base | One dot last week. That week is over and owes you nothing; this one has not started yet. |
+| train / all sources / never started / off | First quality workout on record, load 104. Every long habit has a day it was one day old. |
+| rest / Health delayed / alive / base | Health data has not arrived; last night's sleep is unknown. Not knowing is fine. Guessing is what to avoid. |
+| race-week / all sources / alive / peak | Two dots by Wednesday, load balance 1.3. Enough has been done; the remaining work is to not add to it. |
+| travel / all sources / broken last week / off | Away from home, no workout, 6.1 h of sleep. You control the packing, not the schedule. |
+| rest / all sources / alive / base | Finished *Little Fires Everywhere*, 1 of 12 this year. A page a night is how the number moves. |
+| train / all sources / alive / base | Second dot, 6.6 h of sleep. Notice the pull to do more tonight, and notice it is not the same as needing to. |
+
+**Lines Max would hate (the negative examples).** "Don't let the streak die!" · "Only one more and you're done!" · "You slacked off yesterday." · "As Marcus Aurelius said, ..." (twice in a week) · "Be a beast." · Any line with a number that is not in the payload.
+
+**Fallback copy.** Rule-based, from templates keyed by the same fixture cells, using the same lens rotation, so the device never blanks and the fallback is not visibly worse for a day.
 
 ## Plan (2026-09-26)
 Build order, with "both in parallel" chosen for ingest and render.

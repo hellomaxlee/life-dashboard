@@ -3,6 +3,10 @@
 Running log, newest first. The Lead reads this to find root causes and prioritize.
 Entry format: `## YYYY-MM-DD · <Title> (<Author>)` followed by terse bullets. Name the fixture combo on render/summary cycles.
 
+## 2026-09-27 · Voice brief v1; Pixoo reaffirmed over e-ink; Pi deferred (Ingrid Halvorsen)
+- Max named the sources (Stoic, Aristotelian habit, Buddhist non-attachment) and admired qualities (steady self-leadership, resilience, self-awareness) with a hard rule: no impersonation, no capitalizing on any voice. Repetition minimized by three coded mechanisms (lens rotation, 14-line memory, trigram similarity gate). Ten hand-written lines across fixture cells and a seed ban list written to `notes.txt § Voice brief`. Theodora's Phase 3 prompt derives from it.
+- E-ink weighed for the text-heavy summary; Max keeps the Pixoo for colour and celebration. Raspberry Pi deferred; Mac is the home box.
+
 ## 2026-09-27 · Raspberry Pi guide; Mac confirmed as home box (Ingrid Halvorsen)
 - Max: the Mac is plugged in most of the time and missed pushes are acceptable. Mac stays the home box; the Pi is a learning project. `additional/raspberry-pi-guide.tex` (+ PDF) written for a first-time Pi user: shopping list, headless flash, SSH and keys, ten Linux commands, uv + Python 3.12, clone on `main`, systemd unit, data migration with replay check, pull-style nightly backup, care and troubleshooting.
 - Guide assumes `tools.backup --out` and `tools.replay --since` as specified in CLAUDE.md; both are still to be built.
