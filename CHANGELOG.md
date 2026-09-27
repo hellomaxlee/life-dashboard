@@ -3,6 +3,10 @@
 Running log, newest first. The Lead reads this to find root causes and prioritize.
 Entry format: `## YYYY-MM-DD · <Title> (<Author>)` followed by terse bullets. Name the fixture combo on render/summary cycles.
 
+## 2026-09-26 · Threshold 45 min, HR set; setup issue opened (Ingrid Halvorsen)
+- Quality workout floor raised 40 → 45 min at Max's request. Max HR 212 − 23 = 189; zone-2 floor 0.60 × 189 = 113 bpm. `notes.txt § Goal model`, CLAUDE.md invariant, and risks updated.
+- Claude subscription usage bar on the Week screen: researched, see issue #2. Setup to-dos for Max: issue #1.
+
 ## 2026-09-26 · Goal model v1 and build plan (Ingrid Halvorsen)
 - Intake round with Max (three question rounds). Progress is weekly: 3 quality workouts (≥ 40 min, avg HR ≥ zone-2 floor), any sport; rest is any other day; streak = weeks hit. Daily wins: sleep ≥ 7 h, steps ≥ 8,000, workout, book finished. 12 books/yr. Timezone America/New_York.
 - Device: Pixoo-64 II assumed, not purchased. Rotation: Week → Today → Books+summary; load stays on the web page. Party clip on the third dot; small reinforcement per daily win. Frame contract widened to clips.

@@ -37,7 +37,7 @@ v1, answered by Max on 2026-09-26. Every metric cites this section.
 | Term | Definition | Config key |
 |---|---|---|
 | Home timezone | `America/New_York`. Days and weeks are local; a week is Monday 00:00 to Sunday 23:59. | `home_tz` |
-| Quality workout | Any sport, duration ≥ 40 min, average heart rate at or above the zone-2 floor. Walks and shorter sessions are recorded and shown but do not count. | `workout.min_minutes = 40`, `workout.zone2_floor_bpm` (**Max to fill**; until then derive as 0.60 × `hr_max`) |
+| Quality workout | Any sport, duration ≥ 45 min, average heart rate at or above the zone-2 floor. Max HR = 212 − 23 = 189 (Max, 2026-09-26); zone-2 floor = 0.60 × 189 = 113 bpm. Walks and shorter sessions are recorded and shown but do not count. | `workout.min_minutes = 45`, `hr_max = 189`, `workout.zone2_floor_bpm = 113` |
 | Weekly target | 3 quality workouts per week. Shown as three dots. | `week.target = 3` |
 | Rest day | Any day with no quality workout. Rest is never penalized and never breaks anything; Max's work schedule is volatile, so there are no fixed rest days. | — |
 | Weeks-hit streak | Consecutive completed weeks with ≥ 3 quality workouts. The current week is in progress and neither extends nor breaks it until Sunday ends. | — |
@@ -72,7 +72,7 @@ Build order, with "both in parallel" chosen for ingest and render.
 **Max's to-dos before Phase 1 can go live**
 1. Create a Strava API application at strava.com/settings/api and put the client id and secret in `.env`.
 2. Confirm the Goodreads user id / `read` shelf RSS URL.
-3. Fill `workout.zone2_floor_bpm` (or `hr_max`) and adjust `steps.target` in `config.toml`.
+3. Adjust `steps.target` in `config.toml` if 8,000 is wrong (HR values are set: max 189, zone-2 floor 113).
 4. Once the service runs on the Mac, point Health Auto Export at `http://<mac-lan-ip>:8080/ingest/health` with an automation for workouts, sleep, heart rate, and steps.
 
 ## Architecture assumptions
@@ -96,5 +96,5 @@ Build order, with "both in parallel" chosen for ingest and render.
 | Sleep attribution across midnight | wrong day gets the sleep; the daily win lands on the wrong day | "sleep belongs to the wake day" invariant with a boundary fixture; Fatima |
 | Summary voice becomes platitudes or nagging | the most-read surface loses trust | ban list, grounding gate, fixed-judge comparison; Theodora/Ingrid |
 | Pi power loss mid-write | SQLite corruption | WAL mode, nightly backup, restore drill; Callum |
-| Zone-2 floor unset | every workout counts or none does; the weekly dots lie | config key is required at startup; startup fails loudly without it; Ingrid |
+| Zone-2 floor wrong | every workout counts or none does; the weekly dots lie | 113 bpm is derived from a formula, not a lab test; a mutant that lowers it to 100 must flip a golden case; Max revisits after two weeks of real data; Ingrid |
 | Week completes at 23:59 Sunday but the Strava poll lands Monday | party plays a day late or the streak breaks falsely | weekly rollup waits for the last poll after midnight; a late-arriving Sunday workout re-opens the week; Fatima/Bartek |
