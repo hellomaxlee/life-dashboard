@@ -3,6 +3,9 @@
 Running log, newest first. The Lead reads this to find root causes and prioritize.
 Entry format: `## YYYY-MM-DD · <Title> (<Author>)` followed by terse bullets. Name the fixture combo on render/summary cycles.
 
+## 2026-09-27 · Load bar calibrates itself (Ingrid Halvorsen)
+- Max: calibration should be automatic. First bar from the first three ≥ 4-mile runs; re-calibrated every 3 months from the trailing window; changes apply forward only so the streak never rewrites. "Say calibrate" removed from Max's checklist.
+
 ## 2026-09-27 · Claude usage meter assigned (Ingrid Halvorsen)
 - Max asked whether the team had it. It was designed in issue #2 but unowned. Now in the goal model and Phase 1a/1b: Tendai builds the status-line hook and reader (QA Bartek), Diego draws the bar with its stale marker (QA Lucía). Pi-hop caveat dropped since the Mac is the home box.
 
