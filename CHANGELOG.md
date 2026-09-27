@@ -3,6 +3,10 @@
 Running log, newest first. The Lead reads this to find root causes and prioritize.
 Entry format: `## YYYY-MM-DD · <Title> (<Author>)` followed by terse bullets. Name the fixture combo on render/summary cycles.
 
+## 2026-09-27 · Raspberry Pi guide; Mac confirmed as home box (Ingrid Halvorsen)
+- Max: the Mac is plugged in most of the time and missed pushes are acceptable. Mac stays the home box; the Pi is a learning project. `additional/raspberry-pi-guide.tex` (+ PDF) written for a first-time Pi user: shopping list, headless flash, SSH and keys, ten Linux commands, uv + Python 3.12, clone on `main`, systemd unit, data migration with replay check, pull-style nightly backup, care and troubleshooting.
+- Guide assumes `tools.backup --out` and `tools.replay --since` as specified in CLAUDE.md; both are still to be built.
+
 ## 2026-09-27 · Issue #1 steps 1–2 done; Goodreads feed verified (Ingrid Halvorsen)
 - Max added `GOODREADS_RSS_URL` to `.env` (git-ignored) and confirmed the goal numbers. Feed fetched once: HTTP 200, 75 items. `.env.example` key renamed to match.
 - Data finding: only 19 of 75 books carry a read-at date, 1 in 2026; date-added is always present (1 in 2026). Reading rule gains a date-added fallback with a date-inferred mark. Bartek to ratify.

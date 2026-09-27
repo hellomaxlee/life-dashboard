@@ -1,0 +1,406 @@
+\documentclass[11pt,letterpaper]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{xurl}
+\usepackage{hyperref}
+\usepackage{parskip}
+
+\hypersetup{colorlinks=true, linkcolor=blue!60!black, urlcolor=blue!60!black}
+
+\definecolor{shellbg}{gray}{0.95}
+\lstdefinestyle{shell}{
+  basicstyle=\ttfamily\small,
+  backgroundcolor=\color{shellbg},
+  frame=single, framerule=0pt, framesep=4pt,
+  breaklines=true, breakatwhitespace=true,
+  columns=fullflexible, keepspaces=true,
+  showstringspaces=false,
+  xleftmargin=4pt, xrightmargin=4pt,
+}
+\lstset{style=shell}
+
+\newcommand{\file}[1]{\texttt{#1}}
+\newcommand{\cmd}[1]{\texttt{#1}}
+
+\title{Raspberry Pi for life-dashboard\\
+  \large A first-timer's guide from unboxing to an always-on service}
+\author{Prepared for Max}
+\date{September 2026}
+
+\begin{document}
+\maketitle
+
+\section*{Read this first}
+
+The dashboard runs on your Mac today, and that is fine: the Mac is plugged in most of the time and a missed 10\,pm push is not a big deal. This guide exists because you want to learn the Pi. Treat it as a project in its own right. Nothing in the dashboard depends on finishing it.
+
+What you will have at the end: a small Linux computer next to your router that boots by itself after a power cut, runs the dashboard as a background service, receives the Health Auto Export pushes, polls Goodreads, drives the Pixoo, and copies its database back to the Mac every night.
+
+The guide is written for macOS as the computer you sit at. Every command you type on the Mac is marked \textbf{Mac}; every command you type on the Pi over SSH is marked \textbf{Pi}. If a command fails, do not guess; copy the error into Claude Code and ask.
+
+\tableofcontents
+\newpage
+
+\section{What to buy}
+
+\begin{tabular}{@{}p{2.2cm}p{5.4cm}p{7.9cm}@{}}
+\toprule
+Item & Suggestion & Why \\
+\midrule
+Board & Raspberry Pi 5, 4\,GB & Plenty for a Python service. The 2\,GB works too; the 8\,GB is wasted here. A Pi 4 (4\,GB) is fine if you find one cheap. \\
+Power supply & Official Raspberry Pi 27\,W USB-C (Pi 5) or 15\,W (Pi 4) & Under-powered phone chargers cause random reboots and SD corruption. Buy the official one. \\
+Case & Official case with fan, or any case with a heatsink & The Pi 5 throttles without cooling. \\
+Storage & 32\,GB or 64\,GB microSD, A2 rated, from SanDisk or Samsung & A2 rating matters for a database workload. Buy two; cards fail. \\
+Card reader & USB-C microSD reader & To flash the card from the Mac. \\
+Ethernet cable & Any Cat 5e or 6 & Optional. Wired is steadier than Wi-Fi for a box that never moves. \\
+\bottomrule
+\end{tabular}
+
+\medskip
+You do not need a monitor, keyboard, or mouse. The Pi will be set up ``headless'' and you will only ever talk to it from the Mac.
+
+Optional later: a small USB SSD replaces the microSD for durability. Skip it for the first build.
+
+\section{Flash the operating system}
+
+\subsection{Install Raspberry Pi Imager on the Mac}
+
+Download it from \url{https://www.raspberrypi.com/software/} or, if you have Homebrew:
+
+\begin{lstlisting}
+# Mac
+brew install --cask raspberry-pi-imager
+\end{lstlisting}
+
+\subsection{Write the card}
+
+Put the microSD in the reader and plug it into the Mac. Open Raspberry Pi Imager and choose:
+
+\begin{enumerate}[nosep]
+  \item \textbf{Device:} your board (Raspberry Pi 5 or 4).
+  \item \textbf{Operating System:} \emph{Raspberry Pi OS (other)} $\rightarrow$ \emph{Raspberry Pi OS Lite (64-bit)}. Lite means no desktop, which you do not need.
+  \item \textbf{Storage:} the microSD card. Check the size so you do not pick a backup drive.
+\end{enumerate}
+
+Click \textbf{Next}, then \textbf{Edit Settings}. This step is what makes headless setup possible. Fill in:
+
+\begin{itemize}[nosep]
+  \item \textbf{General} tab
+  \begin{itemize}[nosep]
+    \item Hostname: \cmd{dashboard}
+    \item Username: \cmd{max}; a password you will remember
+    \item Wireless LAN: your home Wi-Fi name and password, country \cmd{US}. Fill this in even if you plan to use Ethernet; it is a fallback.
+    \item Locale: time zone \cmd{America/New\_York}, keyboard \cmd{us}
+  \end{itemize}
+  \item \textbf{Services} tab
+  \begin{itemize}[nosep]
+    \item Enable SSH: on. Choose \emph{Use password authentication} for now. You will switch to keys in Section~\ref{sec:keys}.
+  \end{itemize}
+\end{itemize}
+
+Save, confirm, and let it write and verify. Eject the card, put it in the Pi, connect Ethernet if you have it, and plug in the power. The green light flickers for about a minute on first boot.
+
+\section{First contact over SSH}
+
+\subsection{Find the Pi}
+
+Wait two minutes after power-on, then from the Mac:
+
+\begin{lstlisting}
+# Mac
+ping -c 3 dashboard.local
+\end{lstlisting}
+
+If that answers, you are done finding it. If it does not, open your router's admin page and look for a device named \cmd{dashboard} in the client list; note its IP address and use that in place of \cmd{dashboard.local} below.
+
+\subsection{Log in}
+
+\begin{lstlisting}
+# Mac
+ssh max@dashboard.local
+\end{lstlisting}
+
+Type \cmd{yes} to the fingerprint question the first time, then your password. The prompt changes to \cmd{max@dashboard:\textasciitilde \$}. You are now typing on the Pi. \cmd{exit} brings you back to the Mac.
+
+\subsection{Update everything}
+
+\begin{lstlisting}
+# Pi
+sudo apt update && sudo apt full-upgrade -y
+sudo reboot
+\end{lstlisting}
+
+\cmd{sudo} means ``do this as administrator''. The Pi reboots and drops your SSH session; wait a minute and log in again.
+
+\subsection{Give the Pi a fixed address}
+
+Health Auto Export and the Pixoo will both point at the Pi's IP address, so it must never change. Do this on the router, not the Pi: find the DHCP settings, locate the \cmd{dashboard} client, and choose \emph{Reserve} or \emph{Assign static IP}. Write the address down; this guide calls it \cmd{PI\_IP}.
+
+\subsection{SSH keys instead of passwords}
+\label{sec:keys}
+
+Keys let you log in without typing a password and are safer. On the Mac, if you have never made a key:
+
+\begin{lstlisting}
+# Mac
+ssh-keygen -t ed25519 -C "max mac"
+\end{lstlisting}
+
+Press Enter at every prompt. Then copy the public key to the Pi:
+
+\begin{lstlisting}
+# Mac
+ssh-copy-id max@dashboard.local
+\end{lstlisting}
+
+Test with \cmd{ssh max@dashboard.local}; it should not ask for a password. Optionally turn password logins off:
+
+\begin{lstlisting}
+# Pi
+sudo sed -i 's/^#\?PasswordAuthentication .*/PasswordAuthentication no/' /etc/ssh/sshd_config
+sudo systemctl restart ssh
+\end{lstlisting}
+
+\section{Linux in ten commands}
+
+You will use these constantly. Everything else you can look up.
+
+\begin{tabular}{@{}lp{9cm}@{}}
+\toprule
+Command & Meaning \\
+\midrule
+\cmd{pwd} & Where am I? \\
+\cmd{ls -la} & List files here, including hidden ones. \\
+\cmd{cd dir} \quad \cmd{cd ..} \quad \cmd{cd} & Go into \cmd{dir}; go up one; go home. \\
+\cmd{cat file} \quad \cmd{less file} & Print a file; page through a long one (\cmd{q} to quit). \\
+\cmd{nano file} & Edit a file. Ctrl-O saves, Ctrl-X quits. \\
+\cmd{sudo cmd} & Run \cmd{cmd} as administrator. \\
+\cmd{systemctl status name} & Is the service \cmd{name} running? \\
+\cmd{journalctl -u name -f} & Follow the service's log live. Ctrl-C stops. \\
+\cmd{df -h} \quad \cmd{free -h} & Disk space; memory. \\
+\cmd{sudo reboot} \quad \cmd{sudo poweroff} & Restart; shut down cleanly before pulling power. \\
+\bottomrule
+\end{tabular}
+
+\section{Install the tools}
+
+\subsection{git and build basics}
+
+\begin{lstlisting}
+# Pi
+sudo apt install -y git curl build-essential libsqlite3-dev
+\end{lstlisting}
+
+\subsection{uv and Python 3.12}
+
+Raspberry Pi OS ships Python 3.11. The project pins 3.12, and \cmd{uv} installs it without touching the system copy.
+
+\begin{lstlisting}
+# Pi
+curl -LsSf https://astral.sh/uv/install.sh | sh
+source ~/.local/bin/env
+uv python install 3.12
+uv --version
+\end{lstlisting}
+
+\section{Get the project onto the Pi}
+
+\subsection{Clone}
+
+The repo is private, so the Pi needs a way to read it. The simplest is a fine-grained GitHub token with read access to this one repository, created at \url{https://github.com/settings/personal-access-tokens}. Then:
+
+\begin{lstlisting}
+# Pi
+cd ~
+git clone https://github.com/hellomaxlee/life-dashboard.git
+cd life-dashboard
+git checkout main
+uv sync
+\end{lstlisting}
+
+When git asks for a password, paste the token. To stop it asking every time:
+
+\begin{lstlisting}
+# Pi
+git config --global credential.helper store
+\end{lstlisting}
+
+The Pi tracks \cmd{main}. Development stays on \cmd{dev} on the Mac; promoting \cmd{dev} to \cmd{main} by pull request is what makes a deploy.
+
+\subsection{Secrets and config}
+
+Copy the two files git does not carry. On the Mac, from the project directory:
+
+\begin{lstlisting}
+# Mac
+scp .env config.toml max@dashboard.local:~/life-dashboard/
+\end{lstlisting}
+
+Then on the Pi confirm they arrived and that \cmd{.env} is readable only by you:
+
+\begin{lstlisting}
+# Pi
+chmod 600 ~/life-dashboard/.env
+ls -la ~/life-dashboard/.env ~/life-dashboard/config.toml
+\end{lstlisting}
+
+\subsection{Smoke test by hand}
+
+\begin{lstlisting}
+# Pi
+cd ~/life-dashboard
+uv run pytest -q
+uv run fastapi run app/main.py --port 8080
+\end{lstlisting}
+
+From the Mac, open \url{http://dashboard.local:8080} in a browser. If the preview page loads, stop the server with Ctrl-C. Note \cmd{fastapi run}, not \cmd{fastapi dev}: \cmd{dev} reloads on file changes and is for the Mac.
+
+\section{Run it as a service}
+
+A systemd unit starts the dashboard at boot, restarts it if it crashes, and keeps its logs. Create the file:
+
+\begin{lstlisting}
+# Pi
+sudo nano /etc/systemd/system/life-dashboard.service
+\end{lstlisting}
+
+Paste this, then Ctrl-O, Enter, Ctrl-X:
+
+\begin{lstlisting}
+[Unit]
+Description=life-dashboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=max
+WorkingDirectory=/home/max/life-dashboard
+EnvironmentFile=/home/max/life-dashboard/.env
+ExecStart=/home/max/.local/bin/uv run fastapi run app/main.py --port 8080
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+\end{lstlisting}
+
+Enable and start it:
+
+\begin{lstlisting}
+# Pi
+sudo systemctl daemon-reload
+sudo systemctl enable --now life-dashboard
+systemctl status life-dashboard
+\end{lstlisting}
+
+You want to see \emph{active (running)}. To watch the log live:
+
+\begin{lstlisting}
+# Pi
+journalctl -u life-dashboard -f
+\end{lstlisting}
+
+The scheduler inside the app owns the 6:30 and 10\,pm work, the Goodreads poll, and the Pixoo refresh, so there is no cron to set up for those.
+
+\section{Move the data from the Mac}
+
+Do this once, when you decide the Pi is taking over. Stop the service on both machines first so nothing writes mid-copy.
+
+\begin{lstlisting}
+# Pi
+sudo systemctl stop life-dashboard
+\end{lstlisting}
+
+\begin{lstlisting}
+# Mac, from the project directory
+rsync -av --progress data/ max@dashboard.local:~/life-dashboard/data/
+\end{lstlisting}
+
+\cmd{rsync} copies only what changed, so running it twice is safe. Then on the Pi:
+
+\begin{lstlisting}
+# Pi
+cd ~/life-dashboard
+uv run python -m tools.replay --since 2026-01-01
+sudo systemctl start life-dashboard
+\end{lstlisting}
+
+The replay recomputes every metric from the raw archive and must report zero differences against the copied database. If it reports any, stop and ask before going further.
+
+Finally, in Health Auto Export on the phone, change both automations' URL to the Pi, and set the Pixoo adapter host in \cmd{config.toml} if it was pointing at the Mac:
+
+\begin{lstlisting}
+http://PI_IP:8080/ingest/health
+\end{lstlisting}
+
+\section{Nightly backup to the Mac}
+
+The backup runs from the Mac and pulls, so the Pi never needs credentials for the Mac. On the Mac, create \file{\textasciitilde/bin/pi-backup.sh}:
+
+\begin{lstlisting}
+#!/bin/sh
+set -e
+DEST="$HOME/life-dashboard-backups/$(date +%F)"
+mkdir -p "$DEST"
+ssh max@dashboard.local 'cd ~/life-dashboard && uv run python -m tools.backup --out /tmp/dash.sqlite3'
+scp -q max@dashboard.local:/tmp/dash.sqlite3 "$DEST/dash.sqlite3"
+rsync -a max@dashboard.local:~/life-dashboard/data/raw/ "$DEST/raw/"
+echo "backup ok $DEST"
+\end{lstlisting}
+
+\cmd{tools.backup} uses SQLite's online backup API so the copy is consistent even while the service is running. Make it executable and schedule it with a launchd agent at 3\,am; the exact plist is in \file{tools/workflows/backup.md} once that tool exists. Test restore at least once: copy a backup to the Mac's own \file{data/} directory, run the replay, and confirm zero differences. A backup you have never restored is a hope, not a backup.
+
+\section{Keeping it healthy}
+
+\begin{itemize}
+  \item \textbf{Power cuts.} The Pi boots by itself and systemd restarts the service. SQLite runs in WAL mode so a cut mid-write loses at most the last transaction. Test it once on purpose: pull the plug, wait, plug in, check \cmd{systemctl status life-dashboard}.
+  \item \textbf{SD card wear.} Cards die after enough writes. The nightly backup is the real protection. Keep the second card flashed and ready; recovery is ``swap card, clone, copy \file{.env} and \file{config.toml}, restore data'', about twenty minutes.
+  \item \textbf{Updates.} Once a month, update the OS; whenever \cmd{main} changes, deploy the dashboard:
+\begin{lstlisting}
+# Pi
+sudo apt update && sudo apt full-upgrade -y && sudo reboot
+cd ~/life-dashboard && git pull && uv sync && sudo systemctl restart life-dashboard
+\end{lstlisting}
+  \item \textbf{Disk.} \cmd{df -h} now and then. The raw archive grows slowly; \cmd{journalctl --vacuum-time=30d} trims old logs.
+  \item \textbf{Temperature.} \cmd{vcgencmd measure\_temp}. Under 70\,$^\circ$C is fine; above 80 means the fan or heatsink is not doing its job.
+  \item \textbf{Shut down cleanly.} \cmd{sudo poweroff} and wait for the green light to stop before pulling power. Yanking power on a running Pi is the single most common way to corrupt a card.
+\end{itemize}
+
+\section{When something goes wrong}
+
+\begin{tabular}{@{}p{5.5cm}p{9.5cm}@{}}
+\toprule
+Symptom & Try \\
+\midrule
+\cmd{ping dashboard.local} fails & Wait longer after boot. Check the router's client list. Try the IP instead of the name. Confirm the Wi-Fi password in Imager was right by re-flashing. \\
+SSH says \emph{connection refused} & SSH was not enabled in Imager. Re-flash with the Services tab set. \\
+SSH says \emph{host key changed} & You re-flashed. Run \cmd{ssh-keygen -R dashboard.local} on the Mac and try again. \\
+Service is \emph{failed} & \cmd{journalctl -u life-dashboard -n 50} shows the last fifty log lines. Usually a missing \file{.env} value or a port already in use. \\
+Preview page loads on the Pi but the phone push never arrives & Phone and Pi on the same Wi-Fi? URL uses \cmd{PI\_IP}, port 8080, path \cmd{/ingest/health}? \cmd{journalctl -u life-dashboard -f} while you tap \emph{Run now} on the phone. \\
+Random reboots & Almost always the power supply. Use the official one. \\
+Everything slow, \cmd{free -h} shows no free memory & Something is leaking. \cmd{sudo systemctl restart life-dashboard} now; report it so it gets fixed. \\
+\bottomrule
+\end{tabular}
+
+\section*{Appendix: the whole thing on one page}
+
+\begin{enumerate}[nosep]
+  \item Flash Raspberry Pi OS Lite 64-bit with hostname \cmd{dashboard}, user \cmd{max}, Wi-Fi, SSH on.
+  \item \cmd{ssh max@dashboard.local}; update and reboot (Section~3.3).
+  \item Reserve the Pi's IP on the router.
+  \item \cmd{ssh-copy-id max@dashboard.local}.
+  \item Install git and build tools; install \cmd{uv}; \cmd{uv python install 3.12}.
+  \item Clone the repo on \cmd{main}; \cmd{uv sync}; \cmd{scp .env config.toml} from the Mac.
+  \item Create the systemd unit; \cmd{enable --now}; check \cmd{status}.
+  \item When ready to switch: stop the service, \cmd{rsync data/}, replay, start, repoint the phone.
+  \item Nightly pull backup from the Mac; restore it once to prove it.
+\end{enumerate}
+
+\end{document}

@@ -5,7 +5,7 @@ Ambition: a single-user life dashboard covering training, sleep, and reading, ma
 **Device (2026-09-26): Divoom Pixoo-64 II assumed for all design work; not yet purchased, purchase is Max's call.**
 Sources: Apple Health via Health Auto Export REST push (chosen over manual XML and Shortcuts); Goodreads public `read` shelf RSS (API is dead since 2020).
 **Strava dropped (2026-09-27):** its API requires a paid Strava subscription. Apple Health already holds every workout the goal model needs (duration, avg HR, HR samples, distance). If Max records in the Strava phone app, the app's Health integration writes the workout to HealthKit and it arrives through the same push.
-Hosting: always-on home box on the LAN. **Decision 2026-09-26: run on Max's Mac first (launchd), migrate to a Raspberry Pi later with a written step-by-step guide; Max has no Pi experience.** SQLite backups make the move a file copy.
+Hosting: always-on home box on the LAN. **Decision 2026-09-26: run on Max's Mac first (launchd); Max has no Pi experience. Revised 2026-09-27: the Mac is plugged in most of the time and a missed push is acceptable, so the Mac is the home box for the foreseeable future. The Pi is a learning project, not a dependency; the guide lives at `additional/raspberry-pi-guide.tex` and Phase 5 hardware work does not wait on it.** SQLite backups make any move a file copy.
 Habits: derived from the data, not manual check-offs.
 Progress means (revised 2026-09-26, see § Goal model): 3 quality workouts per week, any sport; a streak of weeks that hit 3; daily small wins (sleep, a quality workout, a finished book); 12 books a year. No event on the calendar. Training load is computed and shown on the web page, not judged on the device.
 Phase-1 view: LAN web page previewing the same frames the device will show.
@@ -69,7 +69,7 @@ Build order, with "both in parallel" chosen for ingest and render.
 
 **Phase 3 — Summary (Theodora, ratified by Ingrid).** Prompt from the voice brief; grounding gate; ban list; rule-based fallback; spend counter and cap. Acceptance: one real summary read end to end; a summary with an invented number is rejected.
 
-**Phase 4 — Run it (Callum, QA Bartek).** launchd unit on the Mac, APScheduler jobs, nightly backup + restore diff, egress allowlist test, kill-mid-sync drill. Then the Raspberry Pi guide (shopping list, flashing, SSH, systemd, migrating the db) written for a first-time Pi user.
+**Phase 4 — Run it (Callum, QA Bartek).** launchd unit on the Mac, APScheduler jobs, nightly backup + restore diff, egress allowlist test, kill-mid-sync drill. The Raspberry Pi guide (`additional/raspberry-pi-guide.tex`) is written; migration is optional and on Max's schedule.
 
 **Phase 5 — Hardware.** Max buys the Pixoo-64 II; adapter smoke test; 1x eye test on the real LEDs; brightness schedule.
 
