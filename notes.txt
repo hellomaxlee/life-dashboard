@@ -48,11 +48,11 @@ v2, answered by Max on 2026-09-26 and 2026-09-27. Every metric cites this sectio
 | Week complete | Third dot filled → a party animation plays on the device. Once per week, at the moment the third workout lands. | — |
 | Reading | Books on the Goodreads `read` shelf with a read-at date in the current calendar year, target 12. | `books.target_per_year = 12` |
 | Sleep | A session belongs to the day you wake. Shown against 7 h; a metric and a daily win, not a streak. | — |
-| Pull schedule | Health Auto Export pushes twice a day: ~05:00 (yesterday's workouts, last night's sleep) and ~22:00 (today's workouts). Goodreads polled once a day at 06:00. Claude usage file read whenever it changes. A week closes after the Monday 05:00 push, so a Sunday-night workout still counts for its week. | `pull.health = ["05:00", "22:00"]`, `pull.goodreads = "06:00"` |
+| Pull schedule | One Health Auto Export push a day at **06:30** (Max's wake-up), carrying yesterday's workouts and last night's sleep. Goodreads polled at 06:30 too. Claude usage file read whenever it changes. The day the panels describe is therefore *yesterday plus last night*; a week closes after the Monday 06:30 push, so a Sunday-night workout still counts for its week. The party for a third dot plays the morning after. | `pull.health = "06:30"`, `pull.goodreads = "06:30"` |
 | Training load | HR-based TRIMP, 7-day acute and 42-day chronic EWMA, balance = acute/chronic. Computed for every day, displayed on the web page and in the summary; not a device screen in v1. | — |
 | Dedupe | Two workouts that overlap in time (start within 5 min, duration within 10 %) are one activity regardless of HealthKit source app; the record with HR samples wins for HR, the longer distance wins for distance, every provenance is kept. | — |
 
-Rotation on the Pixoo, in order: **Week** (three dots + weeks-hit streak) → **Today** (last night's sleep vs 7 h, today's dot as of the last push with an "as of HH:MM" mark, steps as a plain number) → **Books + summary line** (books this year vs 12, one-line daily summary scrolling). Load screen dropped from the device rotation at Max's request; it lives on the web page.
+Rotation on the Pixoo, in order: **Week** (three dots + weeks-hit streak) → **Today** (last night's sleep vs 7 h, whether yesterday earned a dot, yesterday's steps as a plain number; refreshed once at 06:30) → **Books + summary line** (books this year vs 12, one-line daily summary scrolling). Load screen dropped from the device rotation at Max's request; it lives on the web page.
 
 Design brief from Max: "Be clever and creative and colorful." Wins are celebrated; misses are shown plainly, never nagged.
 
@@ -76,7 +76,7 @@ Build order, with "both in parallel" chosen for ingest and render.
 **Max's to-dos before Phase 1 can go live**
 1. Confirm the Goodreads user id / `read` shelf RSS URL.
 2. Nothing left to fill: HR max 189, zones by percent of max, load bar placeholder 100 until calibrated.
-3. Once the service runs on the Mac, point Health Auto Export at `http://<mac-lan-ip>:8080/ingest/health` with two automations (05:00 and 22:00) for workouts with heart-rate samples, sleep, and steps.
+3. Once the service runs on the Mac, point Health Auto Export at `http://<mac-lan-ip>:8080/ingest/health` with one automation at 06:30 for workouts with heart-rate samples, sleep, and steps.
 
 ## Architecture assumptions
 | Area | Decision | Rationale |
