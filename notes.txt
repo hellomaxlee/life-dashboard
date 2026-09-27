@@ -4,7 +4,7 @@
 Ambition: a single-user life dashboard covering training, sleep, and reading, made visible on a piece of hardware (64x64 pixel matrix). Software and backend first, hardware second.
 **Device (2026-09-26): Divoom Pixoo-64 II assumed for all design work; not yet purchased, purchase is Max's call.**
 Sources: Apple Health via Health Auto Export REST push (chosen over manual XML and Shortcuts); Goodreads public `read` shelf RSS (API is dead since 2020).
-**Strava dropped (2026-09-27):** its API requires a paid Strava subscription. Apple Health already holds every workout the goal model needs (duration, avg HR, HR samples, distance). If Max records in the Strava phone app, the app's Health integration writes the workout to HealthKit and it arrives through the same push. History can be backfilled once from Strava's free bulk export.
+**Strava dropped (2026-09-27):** its API requires a paid Strava subscription. Apple Health already holds every workout the goal model needs (duration, avg HR, HR samples, distance). If Max records in the Strava phone app, the app's Health integration writes the workout to HealthKit and it arrives through the same push.
 Hosting: always-on home box on the LAN. **Decision 2026-09-26: run on Max's Mac first (launchd), migrate to a Raspberry Pi later with a written step-by-step guide; Max has no Pi experience.** SQLite backups make the move a file copy.
 Habits: derived from the data, not manual check-offs.
 Progress means (revised 2026-09-26, see § Goal model): 3 quality workouts per week, any sport; a streak of weeks that hit 3; daily small wins (sleep, a quality workout, a finished book); 12 books a year. No event on the calendar. Training load is computed and shown on the web page, not judged on the device.
@@ -17,8 +17,8 @@ Constraints (derived, not stated): health data stays on the LAN; no device purch
 ## Competency map
 | Competency | Load-bearing? | Verified by | Owner |
 |---|---|---|---|
-| Source ingestion: Health Auto Export payloads, Goodreads RSS, one-time Strava export backfill | yes | fixture replay; reconciliation counts against the source apps' own totals | Tendai (build), Bartek (QA) |
-| Same-workout deduplication (Watch + phone app both in HealthKit, or a backfilled export overlapping a live push) | yes | overlap fixture with near-identical start times and durations; zero double-count in any metric | Bartek |
+| Source ingestion: Health Auto Export payloads, Goodreads RSS | yes | fixture replay; reconciliation counts against the source apps' own totals | Tendai (build), Bartek (QA) |
+| Same-workout deduplication (Watch + phone app both in HealthKit) | yes | overlap fixture with near-identical start times and durations; zero double-count in any metric | Bartek |
 | Metric semantics: training load, streaks, rest days, day boundaries, counts | yes | hand-computed golden cases; spot-check load trend against the Health app's own weekly totals | Fatima (build), Bartek (QA) |
 | 64x64 rendering: legibility, bitmap font, LED palette and gamma, layouts | yes | human eye at 1x on a calibrated preview and on the device; pixel-exact snapshot tests | Diego (build), Lucía (QA) |
 | Device adapters and hardware choice | supporting until a device is bought | written comparison against stated criteria; adapter smoke against the real device | Lucía |
@@ -47,7 +47,7 @@ v1, answered by Max on 2026-09-26. Every metric cites this section.
 | Reading | Books on the Goodreads `read` shelf with a read-at date in the current calendar year, target 12. | `books.target_per_year = 12` |
 | Sleep | A session belongs to the day you wake. Shown against 7 h; a metric and a daily win, not a streak. | — |
 | Training load | HR-based TRIMP, 7-day acute and 42-day chronic EWMA, balance = acute/chronic. Computed for every day, displayed on the web page and in the summary; not a device screen in v1. | — |
-| Dedupe | Two workouts that overlap in time (start within 5 min, duration within 10 %) are one activity regardless of HealthKit source app or backfill origin; the record with HR samples wins for HR, the longer distance wins for distance, every provenance is kept. | — |
+| Dedupe | Two workouts that overlap in time (start within 5 min, duration within 10 %) are one activity regardless of HealthKit source app; the record with HR samples wins for HR, the longer distance wins for distance, every provenance is kept. | — |
 
 Rotation on the Pixoo, in order: **Week** (three dots + weeks-hit streak) → **Today** (sleep vs 7 h, workout done?, steps as a plain number) → **Books + summary line** (books this year vs 12, one-line daily summary scrolling). Load screen dropped from the device rotation at Max's request; it lives on the web page.
 
@@ -58,7 +58,7 @@ Build order, with "both in parallel" chosen for ingest and render.
 
 **Phase 0 — Foundations (Ingrid, Bartek).** `config.toml` with every key above; SQLite schema and migrations (`raw_archive`, `activities`, `sleep_sessions`, `steps_daily`, `books`, `daily_metrics`, `weekly_metrics`); fixture set for a train day, a rest day, a Sunday that completes a week, and a Watch+phone-app overlap. Acceptance: migrations apply on an empty db twice without change; golden cases written by hand before any engine code.
 
-**Phase 1a — Ingest (Tendai, QA Bartek).** `POST /ingest/health` archiving raw first, idempotent on replay; Goodreads RSS daily poll; `tools.backfill` for a Strava bulk-export zip (FIT/GPX/TCX → activities, optional, run once); dedupe rule with the overlap fixture and a mutant that removes it. Acceptance: `tools.replay` twice → identical metrics table.
+**Phase 1a — Ingest (Tendai, QA Bartek).** `POST /ingest/health` archiving raw first, idempotent on replay; Goodreads RSS daily poll; dedupe rule with the overlap fixture and a mutant that removes it. Acceptance: `tools.replay` twice → identical metrics table.
 
 **Phase 1b — Render (Diego, QA Lucía).** Frame contract extended from one 64x64 frame to a *clip* (list of frames + per-frame ms) so celebrations are first-class; bitmap font legible at 1x under LED gamma; three screens; win sparkle and week-complete party clip; LAN preview page at 1x and 8x with the gamma emulator; Pixoo adapter using the local HTTP API (`Draw/SendHttpGif` on port 80, to be verified on hardware) plus a file adapter for tests. Acceptance: `/frame-preview` eye test at 1x on every screen and both celebrations.
 
@@ -71,10 +71,9 @@ Build order, with "both in parallel" chosen for ingest and render.
 **Phase 5 — Hardware.** Max buys the Pixoo-64 II; adapter smoke test; 1x eye test on the real LEDs; brightness schedule.
 
 **Max's to-dos before Phase 1 can go live**
-1. (Optional) Request a Strava bulk export (Settings → My Account → Download or Delete Your Account → Request Your Archive) for a one-time history backfill.
-2. Confirm the Goodreads user id / `read` shelf RSS URL.
-3. Nothing left to fill: HR max 189, zone-2 floor 113, no steps target.
-4. Once the service runs on the Mac, point Health Auto Export at `http://<mac-lan-ip>:8080/ingest/health` with an automation for workouts, sleep, heart rate, and steps.
+1. Confirm the Goodreads user id / `read` shelf RSS URL.
+2. Nothing left to fill: HR max 189, zone-2 floor 113, no steps target.
+3. Once the service runs on the Mac, point Health Auto Export at `http://<mac-lan-ip>:8080/ingest/health` with an automation for workouts, sleep, heart rate, and steps.
 
 ## Architecture assumptions
 | Area | Decision | Rationale |
@@ -82,7 +81,7 @@ Build order, with "both in parallel" chosen for ingest and render.
 | Storage | SQLite, one file, hand-written migrations | one user, one box; backup is a file copy |
 | Raw archive | every inbound payload written verbatim to `data/raw/<source>/<utc-ts>.json` before parsing | recompute any metric from scratch; replay is the idempotency proof |
 | Health export | Health Auto Export app posting JSON to `POST /ingest/health` | HealthKit has no server API; the app is the least-manual path |
-| Strava | No API. Optional one-time backfill from the free bulk-export zip via `tools.backfill` | the API needs a paid subscription; Health has the same workouts |
+| Strava | Not a source, not an import. Removed entirely | the API needs a paid subscription; Health has the same workouts |
 | Reading | Goodreads shelf RSS polled daily | the only supported channel left; CSV export as a manual backfill |
 | Frames | Pillow → 64x64 RGB frames; a *clip* is a list of frames with per-frame durations; adapters transport (Pixoo local HTTP API, file) | keeps the device swap to one adapter; celebrations need animation |
 | Summary model | Anthropic SDK; id pinned in config; monthly cap enforced in code | budget is small and must be a hard stop |
@@ -93,7 +92,7 @@ Build order, with "both in parallel" chosen for ingest and render.
 |---|---|---|
 | Pixoo-64 II local API is undocumented | command names and payload limits are community-reverse-engineered and may differ by firmware | adapter verified against the real device in Phase 5; file adapter keeps everything else testable; Lucía |
 | Health Auto Export payload shape changes | one app update breaks ingest silently | raw archive + schema-version check + fixture per known shape; Tendai |
-| Watch and a phone app both write the same run to HealthKit, or a backfill overlaps a live push | double-counted load and streaks | dedupe rule with an overlap fixture and a mutant that removes it; Bartek |
+| Watch and a phone app both write the same run to HealthKit | double-counted load and streaks | dedupe rule with an overlap fixture and a mutant that removes it; Bartek |
 | Sleep attribution across midnight | wrong day gets the sleep; the daily win lands on the wrong day | "sleep belongs to the wake day" invariant with a boundary fixture; Fatima |
 | Summary voice becomes platitudes or nagging | the most-read surface loses trust | ban list, grounding gate, fixed-judge comparison; Theodora/Ingrid |
 | Pi power loss mid-write | SQLite corruption | WAL mode, nightly backup, restore drill; Callum |

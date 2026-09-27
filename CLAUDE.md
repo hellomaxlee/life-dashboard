@@ -11,14 +11,14 @@ life-dashboard: a single-user life dashboard that turns Max's training, sleep, a
 5. The daily summary cites only numbers present in the metrics table, stays within a configured monthly budget, and falls back to rule-based copy when the model is unavailable.
 6. The service survives a restart and a power cut with no data loss; a backup restores to an identical metrics table.
 
-**Non-goals:** multi-user or auth; a phone app; coaching plans or workout prescription; strength-set logging; a Strava integration (its API needs a paid subscription; Apple Health has everything the goal model needs); replacing the Health app as the system of record for raw data.
+**Non-goals:** multi-user or auth; a phone app; coaching plans or workout prescription; strength-set logging; any Strava integration or import (its API needs a paid subscription; Apple Health has everything the goal model needs); replacing the Health app as the system of record for raw data.
 
 ## Stack
 Python 3.12 · uv · FastAPI · SQLite (stdlib `sqlite3`, hand-written migrations) · APScheduler · httpx · Pillow (frames) · pytest · ruff
 - SQLite over Postgres: one user, one box, one file to back up.
 - Pillow over a browser canvas: frames are PNG bytes the device adapters transport; no browser in the render path.
 - LLM: Anthropic SDK, model id pinned in `config.toml`, never hardcoded; load `/claude-api` before choosing or changing it.
-- Health Auto Export (iOS) pushes JSON to `POST /ingest/health`; Goodreads via the public `read` shelf RSS. Strava history, if wanted, enters once via its free bulk export (`tools.backfill`), never via the API.
+- Health Auto Export (iOS) pushes JSON to `POST /ingest/health`; Goodreads via the public `read` shelf RSS.
 
 ## Commands
 | Task | Command |
@@ -30,7 +30,6 @@ Python 3.12 · uv · FastAPI · SQLite (stdlib `sqlite3`, hand-written migration
 | Render a frame | `uv run python -m tools.render --date YYYY-MM-DD --scale 8` |
 | Replay raw archive | `uv run python -m tools.replay --since YYYY-MM-DD` |
 | Sync sources now | `uv run python -m tools.sync --source goodreads` |
-| Backfill Strava export | `uv run python -m tools.backfill --strava-export export.zip` |
 
 ## Code Style
 ruff is the authority (format + lint). Type hints on every public function. No comments where the name says it. Timestamps stored as UTC ISO strings, displayed in the home timezone from config. Small modules named for the thing they own: `app/ingest/`, `app/metrics/`, `app/render/`, `app/summary/`, `app/web/`.
@@ -38,7 +37,7 @@ ruff is the authority (format + lint). Type hints on every public function. No c
 ## Invariants
 Rules that survive any refactor. Break one and the dashboard is wrong even if the tests pass.
 - **Health data stays home.** Raw samples never leave the LAN. Outbound calls are the Goodreads pull and the summary call, which sends daily aggregates only, never raw samples or sub-day timestamps. An egress test enforces the allowlist.
-- **One canonical activity.** A workout reported by more than one HealthKit source (Watch, a phone app, a backfilled export) merges into one record with every provenance kept; no metric counts it twice.
+- **One canonical activity.** A workout reported by more than one HealthKit source (Watch, a phone app) merges into one record with every provenance kept; no metric counts it twice.
 - **Raw before parsed.** Every inbound payload is archived verbatim in `data/raw/` before parsing, so any metric can be recomputed from scratch.
 - **Day and week boundaries are America/New_York local.** Weeks run Monday to Sunday. A sleep session belongs to the day you wake.
 - **Progress is weekly.** A quality workout is ≥ 45 min with average HR at or above the zone-2 floor (113 bpm, from max HR 189). Three per week is the target; the streak counts weeks that hit it. Any day without one is rest, and rest never breaks anything. See `notes.txt § Goal model`.

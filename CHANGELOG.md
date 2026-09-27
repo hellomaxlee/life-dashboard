@@ -3,6 +3,9 @@
 Running log, newest first. The Lead reads this to find root causes and prioritize.
 Entry format: `## YYYY-MM-DD · <Title> (<Author>)` followed by terse bullets. Name the fixture combo on render/summary cycles.
 
+## 2026-09-27 · Strava removed entirely (Ingrid Halvorsen)
+- Max: not optional, gone. `tools.backfill` and the bulk-export path deleted from CLAUDE.md, notes, profiles, and issue #1. Non-goals now exclude any Strava integration or import. Dedupe referent is Watch + phone app in HealthKit only.
+
 ## 2026-09-27 · Strava dropped as a source (Ingrid Halvorsen)
 - Strava's API requires a paid subscription (developers.strava.com, checked 2026-09-27). Max chose to drop it. Apple Health via Health Auto Export is the sole workout source; Strava-app recordings reach HealthKit through the app's Health integration.
 - Dedupe survives with a new referent: same workout from two HealthKit source apps, or a backfill overlapping a live push. `tools.backfill` added to the plan for a one-time bulk-export import.
