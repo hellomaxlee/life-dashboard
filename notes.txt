@@ -1,11 +1,12 @@
 # life-dashboard — Project Notes
 
 ## Intake (2026-09-26)
-Ambition: a single-user life dashboard covering training, sleep, and reading, made visible on a piece of hardware (64x64 pixel matrix; Pixoo-64 II is the candidate, not chosen). Software and backend first, hardware second.
+Ambition: a single-user life dashboard covering training, sleep, and reading, made visible on a piece of hardware (64x64 pixel matrix). Software and backend first, hardware second.
+**Device (2026-09-26): Divoom Pixoo-64 II assumed for all design work; not yet purchased, purchase is Max's call.**
 Sources: Apple Health via Health Auto Export REST push (chosen over manual XML and Shortcuts); Strava for workouts; Goodreads public `read` shelf RSS (API is dead since 2020).
-Hosting: always-on home box (Raspberry Pi or Mac mini) on the LAN.
+Hosting: always-on home box on the LAN. **Decision 2026-09-26: run on Max's Mac first (launchd), migrate to a Raspberry Pi later with a written step-by-step guide; Max has no Pi experience.** SQLite backups make the move a file copy.
 Habits: derived from the data, not manual check-offs.
-Progress means: training toward an event or load target, and streaks/counts (active days, workouts per week, books per year). Sleep is tracked as a metric and an input to the voice, not a scored goal yet.
+Progress means (revised 2026-09-26, see § Goal model): 3 quality workouts per week, any sport; a streak of weeks that hit 3; daily small wins (sleep, steps, a workout, a finished book); 12 books a year. No event on the calendar. Training load is computed and shown on the web page, not judged on the device.
 Phase-1 view: LAN web page previewing the same frames the device will show.
 Audience: personal only, single user. No EP role.
 Stack: Python, FastAPI, SQLite (Max's choice).
@@ -31,7 +32,48 @@ Quietly-fails candidates and their Managers:
 3. Summary copy drifting into platitudes or inventing a number (Ingrid ratifies; the grounding gate is Theodora's first deliverable).
 
 ## Goal model
-(Ingrid's first task. Until written: active day = any activity ≥ 20 min or ≥ 3,000 steps above baseline; rest days declared in `config.toml`; week starts Monday, home timezone from config; load model = HR-based TRIMP with 7-day acute and 42-day chronic EWMA.)
+v1, answered by Max on 2026-09-26. Every metric cites this section.
+
+| Term | Definition | Config key |
+|---|---|---|
+| Home timezone | `America/New_York`. Days and weeks are local; a week is Monday 00:00 to Sunday 23:59. | `home_tz` |
+| Quality workout | Any sport, duration ≥ 40 min, average heart rate at or above the zone-2 floor. Walks and shorter sessions are recorded and shown but do not count. | `workout.min_minutes = 40`, `workout.zone2_floor_bpm` (**Max to fill**; until then derive as 0.60 × `hr_max`) |
+| Weekly target | 3 quality workouts per week. Shown as three dots. | `week.target = 3` |
+| Rest day | Any day with no quality workout. Rest is never penalized and never breaks anything; Max's work schedule is volatile, so there are no fixed rest days. | — |
+| Weeks-hit streak | Consecutive completed weeks with ≥ 3 quality workouts. The current week is in progress and neither extends nor breaks it until Sunday ends. | — |
+| Daily small wins | (a) slept ≥ 7.0 h last night; (b) steps ≥ `steps.target` (default 8,000, **Max may adjust**); (c) a quality workout today; (d) finished a book today (Goodreads `read` shelf gained an entry). Each win gets a small on-device reinforcement. | `sleep.target_hours = 7.0`, `steps.target = 8000` |
+| Week complete | Third dot filled → a party animation plays on the device. Once per week, at the moment the third workout lands. | — |
+| Reading | Books on the Goodreads `read` shelf with a read-at date in the current calendar year, target 12. | `books.target_per_year = 12` |
+| Sleep | A session belongs to the day you wake. Shown against 7 h; a metric and a daily win, not a streak. | — |
+| Training load | HR-based TRIMP, 7-day acute and 42-day chronic EWMA, balance = acute/chronic. Computed for every day, displayed on the web page and in the summary; not a device screen in v1. | — |
+| Dedupe | A Health workout and a Strava activity that overlap in time (start within 5 min, duration within 10 %) are one activity; Strava wins for distance and name, Health wins for HR samples. | — |
+
+Rotation on the Pixoo, in order: **Week** (three dots + weeks-hit streak) → **Today** (sleep vs 7 h, steps, workout done?) → **Books + summary line** (books this year vs 12, one-line daily summary scrolling). Load screen dropped from the device rotation at Max's request; it lives on the web page.
+
+Design brief from Max: "Be clever and creative and colorful." Wins are celebrated; misses are shown plainly, never nagged.
+
+## Plan (2026-09-26)
+Build order, with "both in parallel" chosen for ingest and render.
+
+**Phase 0 — Foundations (Ingrid, Bartek).** `config.toml` with every key above; SQLite schema and migrations (`raw_archive`, `activities`, `sleep_sessions`, `steps_daily`, `books`, `daily_metrics`, `weekly_metrics`); fixture set for a train day, a rest day, a Sunday that completes a week, and a Health+Strava overlap. Acceptance: migrations apply on an empty db twice without change; golden cases written by hand before any engine code.
+
+**Phase 1a — Ingest (Tendai, QA Bartek).** `POST /ingest/health` archiving raw first, idempotent on replay; Strava OAuth + 15-min poll with token refresh; Goodreads RSS daily poll; dedupe rule with the overlap fixture and a mutant that removes it. Acceptance: `tools.replay` twice → identical metrics table.
+
+**Phase 1b — Render (Diego, QA Lucía).** Frame contract extended from one 64x64 frame to a *clip* (list of frames + per-frame ms) so celebrations are first-class; bitmap font legible at 1x under LED gamma; three screens; win sparkle and week-complete party clip; LAN preview page at 1x and 8x with the gamma emulator; Pixoo adapter using the local HTTP API (`Draw/SendHttpGif` on port 80, to be verified on hardware) plus a file adapter for tests. Acceptance: `/frame-preview` eye test at 1x on every screen and both celebrations.
+
+**Phase 2 — Metrics (Fatima, QA Bartek).** Quality-workout classifier, weekly count, weeks-hit streak with the in-progress-week rule, daily wins, books YTD, TRIMP load. Acceptance: golden cases pass; a mutant that counts a 35-min run turns the gate red.
+
+**Phase 3 — Summary (Theodora, ratified by Ingrid).** Prompt from the voice brief; grounding gate; ban list; rule-based fallback; spend counter and cap. Acceptance: one real summary read end to end; a summary with an invented number is rejected.
+
+**Phase 4 — Run it (Callum, QA Bartek).** launchd unit on the Mac, APScheduler jobs, nightly backup + restore diff, egress allowlist test, kill-mid-sync drill. Then the Raspberry Pi guide (shopping list, flashing, SSH, systemd, migrating the db) written for a first-time Pi user.
+
+**Phase 5 — Hardware.** Max buys the Pixoo-64 II; adapter smoke test; 1x eye test on the real LEDs; brightness schedule.
+
+**Max's to-dos before Phase 1 can go live**
+1. Create a Strava API application at strava.com/settings/api and put the client id and secret in `.env`.
+2. Confirm the Goodreads user id / `read` shelf RSS URL.
+3. Fill `workout.zone2_floor_bpm` (or `hr_max`) and adjust `steps.target` in `config.toml`.
+4. Once the service runs on the Mac, point Health Auto Export at `http://<mac-lan-ip>:8080/ingest/health` with an automation for workouts, sleep, heart rate, and steps.
 
 ## Architecture assumptions
 | Area | Decision | Rationale |
@@ -41,17 +83,18 @@ Quietly-fails candidates and their Managers:
 | Health export | Health Auto Export app posting JSON to `POST /ingest/health` | HealthKit has no server API; the app is the least-manual path |
 | Strava | OAuth refresh tokens + polling every 15 min; webhooks later if needed | polling stays under the 100/15-min and 1,000/day limits for one athlete |
 | Reading | Goodreads shelf RSS polled daily | the only supported channel left; CSV export as a manual backfill |
-| Frames | Pillow → 64x64 RGB PNG; adapters transport (Pixoo HTTP API, Tidbyt, file) | keeps the device swap to one adapter |
+| Frames | Pillow → 64x64 RGB frames; a *clip* is a list of frames with per-frame durations; adapters transport (Pixoo local HTTP API, file) | keeps the device swap to one adapter; celebrations need animation |
 | Summary model | Anthropic SDK; id pinned in config; monthly cap enforced in code | budget is small and must be a hard stop |
 | Time | store UTC, compute days in the home timezone | streaks and sleep depend on local day boundaries |
 
 ## Risks
 | Risk | Why it bites | Mitigation / owner |
 |---|---|---|
-| Device not chosen | the Pixoo API is undocumented and closed-ish; Tidbyt was acquired and its cloud may not last | frame contract is device-agnostic; Lucía's memo before purchase |
+| Pixoo-64 II local API is undocumented | command names and payload limits are community-reverse-engineered and may differ by firmware | adapter verified against the real device in Phase 5; file adapter keeps everything else testable; Lucía |
 | Health Auto Export payload shape changes | one app update breaks ingest silently | raw archive + schema-version check + fixture per known shape; Tendai |
 | Strava and Watch both record the same run | double-counted load and streaks | dedupe rule with an overlap fixture and a mutant that removes it; Bartek |
-| Sleep attribution across midnight | wrong day gets the sleep; streak logic drifts | "sleep belongs to the wake day" invariant with a boundary fixture; Fatima |
+| Sleep attribution across midnight | wrong day gets the sleep; the daily win lands on the wrong day | "sleep belongs to the wake day" invariant with a boundary fixture; Fatima |
 | Summary voice becomes platitudes or nagging | the most-read surface loses trust | ban list, grounding gate, fixed-judge comparison; Theodora/Ingrid |
 | Pi power loss mid-write | SQLite corruption | WAL mode, nightly backup, restore drill; Callum |
-| Goal model never written | metrics have no referent | Ingrid's first task gates Fatima's engine |
+| Zone-2 floor unset | every workout counts or none does; the weekly dots lie | config key is required at startup; startup fails loudly without it; Ingrid |
+| Week completes at 23:59 Sunday but the Strava poll lands Monday | party plays a day late or the streak breaks falsely | weekly rollup waits for the last poll after midnight; a late-arriving Sunday workout re-opens the week; Fatima/Bartek |

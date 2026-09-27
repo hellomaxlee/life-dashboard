@@ -3,6 +3,12 @@
 Running log, newest first. The Lead reads this to find root causes and prioritize.
 Entry format: `## YYYY-MM-DD · <Title> (<Author>)` followed by terse bullets. Name the fixture combo on render/summary cycles.
 
+## 2026-09-26 · Goal model v1 and build plan (Ingrid Halvorsen)
+- Intake round with Max (three question rounds). Progress is weekly: 3 quality workouts (≥ 40 min, avg HR ≥ zone-2 floor), any sport; rest is any other day; streak = weeks hit. Daily wins: sleep ≥ 7 h, steps ≥ 8,000, workout, book finished. 12 books/yr. Timezone America/New_York.
+- Device: Pixoo-64 II assumed, not purchased. Rotation: Week → Today → Books+summary; load stays on the web page. Party clip on the third dot; small reinforcement per daily win. Frame contract widened to clips.
+- Hosting: Mac now, Pi later with a beginner guide.
+- Written to `notes.txt § Goal model` and `§ Plan`; CLAUDE.md Project, Done, and Invariants aligned. Open: `zone2_floor_bpm`, Strava API app, Goodreads shelf URL (Max).
+
 ## 2026-09-26 · Connect GitHub remote (Ingrid Halvorsen)
 - `origin` → github.com/hellomaxlee/life-dashboard (private). `dev` pushed and tracking. `main` bootstrap left to Max (pre-push hook guards it). Reusable `/connect-repo` skill written to `~/.claude/skills/`.
 

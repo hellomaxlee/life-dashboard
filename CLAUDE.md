@@ -1,13 +1,13 @@
 # CLAUDE.md
 
 ## Project
-life-dashboard: a single-user life dashboard that turns Max's training, sleep, and reading into a glanceable picture of progress, first on a LAN web page and then on a 64x64 pixel-matrix display (Pixoo-64 class; device not yet chosen). The backend ingests Apple Health (via Health Auto Export REST push), Strava, and a Goodreads RSS shelf; computes training load, streaks, and counts against stated goals; renders device-agnostic frames; and writes one short daily summary in a balanced, wisdom-leaning voice that favors sustainable habits over streak anxiety. Runs on an always-on home box (Raspberry Pi or Mac mini). Personal only.
+life-dashboard: a single-user life dashboard that turns Max's training, sleep, and reading into a glanceable picture of progress, first on a LAN web page and then on a Divoom Pixoo-64 II (assumed for design; not yet purchased). The backend ingests Apple Health (via Health Auto Export REST push), Strava, and a Goodreads RSS shelf; computes weekly quality-workout counts, a weeks-hit streak, daily small wins, and training load against stated goals; renders device-agnostic frames and short celebration clips; and writes one short daily summary in a balanced, wisdom-leaning voice that favors sustainable habits over streak anxiety. Runs on Max's Mac now, a Raspberry Pi later. Personal only.
 
 **Done means:**
 1. A day's Health Auto Export push, a Strava sync, and a Goodreads poll land in SQLite idempotently; replaying the same payloads changes no metric.
 2. The same workout recorded by both Apple Watch and Strava is one activity everywhere; no metric double-counts it.
-3. Training load (acute, chronic, balance), active-day streaks with explicit rest days, and books-this-year match hand-computed golden cases.
-4. A 64x64 frame for today renders in the browser at 1x and 8x, is legible at 1x under LED gamma, and reaches a physical device through an adapter.
+3. Quality-workout counts per week, the weeks-hit streak, daily wins, training load (acute, chronic, balance), and books-this-year match hand-computed golden cases.
+4. Every rotation screen and both celebration clips render in the browser at 1x and 8x, are legible at 1x under LED gamma, and reach the Pixoo through an adapter.
 5. The daily summary cites only numbers present in the metrics table, stays within a configured monthly budget, and falls back to rule-based copy when the model is unavailable.
 6. The service survives a restart and a power cut with no data loss; a backup restores to an identical metrics table.
 
@@ -39,11 +39,12 @@ Rules that survive any refactor. Break one and the dashboard is wrong even if th
 - **Health data stays home.** Raw samples never leave the LAN. Outbound calls are Strava and Goodreads pulls and the summary call, which sends daily aggregates only, never raw samples or sub-day timestamps. An egress test enforces the allowlist.
 - **One canonical activity.** A workout seen in Health and Strava merges into one record with both provenances kept; no metric counts it twice.
 - **Raw before parsed.** Every inbound payload is archived verbatim in `data/raw/` before parsing, so any metric can be recomputed from scratch.
-- **Day boundaries are home-timezone local.** A sleep session belongs to the day you wake. Rest days are declared, and a declared rest day never breaks a streak.
+- **Day and week boundaries are America/New_York local.** Weeks run Monday to Sunday. A sleep session belongs to the day you wake.
+- **Progress is weekly.** A quality workout is ≥ 40 min with average HR at or above the zone-2 floor. Three per week is the target; the streak counts weeks that hit it. Any day without one is rest, and rest never breaks anything. See `notes.txt § Goal model`.
 - **Every displayed number traces to a metrics row.** The model never computes or invents a figure; a grounding gate rejects any summary whose numbers are not in its payload.
-- **The frame is device-agnostic.** Renderers emit a 64x64 RGB frame; adapters only transport. Legibility is judged at 1x under LED gamma, never at browser zoom.
+- **The frame is device-agnostic.** Renderers emit a 64x64 RGB frame or a clip of them with per-frame durations; adapters only transport. Legibility is judged at 1x under LED gamma, never at browser zoom.
 - **The display never blanks.** Model unavailable or over budget means rule-based copy, not an empty frame.
-- **Voice: balanced, sustainable, no shame.** Rest counts as progress. Streak-anxiety copy ("don't break the chain") and moralizing are banned by a ban list the summary gate enforces.
+- **Voice: balanced, sustainable, no shame.** Rest counts as progress. Wins are celebrated on the device; misses are shown plainly, never nagged. Streak-anxiety copy ("don't break the chain") and moralizing are banned by a ban list the summary gate enforces.
 
 ## Working Rules
 - Verify by execution. A claim of "fixed" names the command, fixture, or measurement that proved it.
@@ -69,7 +70,7 @@ Source of truth: `/agent-creation` (roster contract) and `/performance-review` (
 - **Review** every 15 pushes or via `/performance-review`.
 
 ## Iteration Rule
-Every render or summary test cycle uses a NEW fixture combination across: day type (train / rest / race-week / travel) × data completeness (all sources / Strava missing / sleep missing / Health delayed) × streak state (alive / broken yesterday / never started) × season position (base / peak / off). Name the combo in the CHANGELOG entry. See `/rotate-fixture`. Reason: the frame layout and the summary voice fail differently in each cell; a fixture reused twice hides the cells it never touched.
+Every render or summary test cycle uses a NEW fixture combination across: day type (train / rest / race-week / travel) × data completeness (all sources / Strava missing / sleep missing / Health delayed) × streak state (alive / broken last week / never started) × season position (base / peak / off). Name the combo in the CHANGELOG entry. See `/rotate-fixture`. Reason: the frame layout and the summary voice fail differently in each cell; a fixture reused twice hides the cells it never touched.
 
 ## Project-Local Skills (`.claude/skills/`)
 - **ship-dev** — ruff → pytest → CHANGELOG → agent logs → push to `dev` only.
