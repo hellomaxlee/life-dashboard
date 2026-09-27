@@ -3,6 +3,11 @@
 Running log, newest first. The Lead reads this to find root causes and prioritize.
 Entry format: `## YYYY-MM-DD · <Title> (<Author>)` followed by terse bullets. Name the fixture combo on render/summary cycles.
 
+## 2026-09-27 · Strava dropped as a source (Ingrid Halvorsen)
+- Strava's API requires a paid subscription (developers.strava.com, checked 2026-09-27). Max chose to drop it. Apple Health via Health Auto Export is the sole workout source; Strava-app recordings reach HealthKit through the app's Health integration.
+- Dedupe survives with a new referent: same workout from two HealthKit source apps, or a backfill overlapping a live push. `tools.backfill` added to the plan for a one-time bulk-export import.
+- CLAUDE.md (Project, Done 1–2, Non-goals, Stack, Commands, Invariants, Iteration axis), notes.txt, Tendai and Bartek profiles, source-replay skill, `.env.example` updated. Issue #1 item 1 rewritten.
+
 ## 2026-09-26 · Steps are not a target (Ingrid Halvorsen)
 - Steps dropped from daily wins and config at Max's request; the quality workout is the win that matters. Steps stay on the Today screen as a plain number. Daily wins are now sleep ≥ 7 h, quality workout, book finished.
 
