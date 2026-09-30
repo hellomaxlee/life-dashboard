@@ -3,6 +3,9 @@
 Running log, newest first. The Lead reads this to find root causes and prioritize.
 Entry format: `## YYYY-MM-DD · <Title> (<Author>)` followed by terse bullets. Name the fixture combo on render/summary cycles.
 
+## 2026-09-29 · Pull cadence: every 6 hours, two automations (Ingrid Halvorsen)
+- Max set Sync Frequency to every 6 h while configuring the app. One Workouts and one Health Metrics automation replace the 06:30/22:00 pairs. Week closes after the first push following Monday 00:00 local. Raw archive grows ~100 MB/month at 7-day payloads; accepted.
+
 ## 2026-09-29 · Health Auto Export settings decided: JSON v2, four automations (Ingrid Halvorsen)
 - Max began configuring the app ahead of the service. Docs checked: one Data Type per automation, so Workouts + Health Metrics × 06:30/22:00 = four, not two. Export Version 2 chosen for per-workout `id` and per-sample `source` (dedupe keys) and `heartRateData` samples. Date Range Previous 7 Days (no 2-day option; idempotent ingest absorbs overlap). Health Metrics grouped by Days; standalone Heart Rate dropped in favour of the workout series.
 - New ingest requirement from upstream bug #60: flag workouts whose HR trace spans under a quarter of the duration as `hr_incomplete`, no dot. Mac LAN IP 192.168.1.171 recorded in notes step 3. Service not yet built; pushes fail until Phase 1a.

@@ -118,7 +118,7 @@ Build order, with "both in parallel" chosen for ingest and render.
 **Max's to-dos before Phase 1 can go live**
 1. ~~Confirm the Goodreads `read` shelf RSS URL.~~ Done 2026-09-27; in `.env` as `GOODREADS_RSS_URL`, fetched once, 75 items.
 2. ~~Confirm goal numbers.~~ Done 2026-09-27.
-3. Point Health Auto Export at `http://192.168.1.171:8080/ingest/health` (Mac's LAN IP, 2026-09-29; reserve it in the router). The app allows one Data Type per automation, so four automations, not two: Workouts and Health Metrics, each at 06:30 and 22:00. Settings decided 2026-09-29 (source: help.healthyapps.dev REST API and workout-format pages):
+3. Point Health Auto Export at `http://192.168.1.171:8080/ingest/health` (Mac's LAN IP, 2026-09-29; reserve it in the router). The app allows one Data Type per automation, and Max chose a Sync Frequency of every 6 hours (2026-09-29), so two automations: Workouts and Health Metrics, each every 6 h. The 06:30/22:00 pair is superseded; the week closes after the first push following Monday 00:00 local, and the Today panel's "as of" mark shows the last push time. Settings decided 2026-09-29 (source: help.healthyapps.dev REST API and workout-format pages):
    - Export Format JSON, **Export Version 2**. v2 carries a per-workout `id`, `duration`, `source` on every time-series entry, and `heartRateData` as `{date, Min, Avg, Max, source}` per sample. The `id` and `source` are what the one-canonical-activity dedupe keys on; v1 has neither. Ingest parses v2 only.
    - Request Timeout 60 s. Headers empty (LAN-only, no auth).
    - Workouts automation: Include Workout Metrics on (this is the HR series), Include Route Data off.
