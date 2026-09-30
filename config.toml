@@ -1,0 +1,56 @@
+# life-dashboard configuration. Every key here is cited by notes.txt § Goal model.
+home_tz = "America/New_York"
+hr_max = 189
+
+[zones]
+pct = [0.50, 0.60, 0.70, 0.80, 0.90]
+
+[workout]
+load_bar = 100
+recalibrate_months = 3
+calibration_min_runs = 3
+
+[week]
+target = 3
+
+[sleep]
+target_hours = 7.0
+
+[books]
+target_per_year = 12
+fallback_to_date_added = true
+
+[wellness]
+baseline_days = 28
+
+[wellness.bands]
+hrv_pct = -20
+rhr_bpm = 5
+daylight_min = 20
+
+[claude_usage]
+path = "data/claude_usage.json"
+stale_hours = 24
+
+[pull]
+health_interval_hours = 6
+goodreads = "06:30"
+
+[server]
+host = "0.0.0.0"
+port = 8080
+
+[storage]
+db_path = "data/life.db"
+raw_dir = "data/raw"
+
+[ingest]
+hr_incomplete_ratio = 0.25
+
+[ingest.dedupe]
+start_window_min = 5
+duration_tolerance_pct = 10
+
+[summary]
+model = ""
+monthly_cap_usd = 3

@@ -3,6 +3,14 @@
 Running log, newest first. The Lead reads this to find root causes and prioritize.
 Entry format: `## YYYY-MM-DD · <Title> (<Author>)` followed by terse bullets. Name the fixture combo on render/summary cycles.
 
+## 2026-09-30 · Health ingest service: raw archive, SQLite, idempotent replay, dedupe (Bartek Zieliński)
+- Phase 0 + Phase 1a health path built by Tendai: `config.toml` with every goal-model key, WAL SQLite with versioned migrations (`app/migrations/001_initial.sql`), `POST /ingest/health` archiving bytes to `data/raw/health/` before any parse, v2 parser for workouts (heartRateData samples) and day-grouped metrics (sleep, steps, HRV, resting HR, VO2 max, daylight), dedupe by start window 5 min / duration 10 % with every provenance kept, `hr_incomplete` flag when the HR trace spans under 25 % of the workout (upstream bug #60), `GET /` status page, `tools.replay --since/--snapshot/--diff` sharing the endpoint's parser.
+- Callum: LaunchAgent + install/uninstall scripts under `additional/launchd/`, runbook `workflows/run-service.md`, static egress allowlist test with two red mutants.
+- QA (Bartek): ruff clean; 28 passed; `DEDUPE_DISABLED=1` turns 2 dedupe tests red; replay twice → identical checksum `986fa3ca…`; `--diff` against the live db → 0 differences; live run on 192.168.1.171:8080: overlap fixture → 1 activity, 2 provenances (Apple Watch, Nike Run Club), re-post → `duplicate`. macOS firewall is off, so no allow rule needed.
+- Ratified: day-grouped rows keep the phone's own calendar date rather than a UTC→New York re-projection; the phone already summed the day locally. Sleep wake-day and workout times do go through UTC→America/New_York (DST fixture passes).
+- Fixtures are synthetic from the documented v2 shape (`fixtures/health/README.md`); the first real push becomes the canonical fixture. Metric names `heart_rate_variability`, `vo2_max`, `time_in_daylight` are inferred from the docs' snake_case rule; unknown names surface in `ingest_log.unknown_metrics` and on the status page.
+- Not installed: the LaunchAgent (persistent login item; Max runs `bash additional/launchd/install.sh`). Not in scope: Goodreads poller, metrics engine, Claude usage hook.
+
 ## 2026-09-29 · Pull cadence: every 6 hours, two automations (Ingrid Halvorsen)
 - Max set Sync Frequency to every 6 h while configuring the app. One Workouts and one Health Metrics automation replace the 06:30/22:00 pairs. Week closes after the first push following Monday 00:00 local. Raw archive grows ~100 MB/month at 7-day payloads; accepted.
 

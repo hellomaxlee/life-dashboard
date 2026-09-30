@@ -1,0 +1,28 @@
+{
+  "data": {
+    "workouts": [
+      {
+        "id": "A1B2C3D4-0004-4000-8000-000000000004",
+        "name": "Cycling",
+        "start": "2026-09-24 17:30:00 -0400",
+        "end": "2026-09-24 18:25:00 -0400",
+        "duration": 3300,
+        "location": "Outdoor",
+        "isIndoor": false,
+        "activeEnergyBurned": {
+          "qty": 520,
+          "units": "kcal"
+        },
+        "totalEnergy": {
+          "qty": 598.0,
+          "units": "kcal"
+        },
+        "distance": {
+          "qty": 11.2,
+          "units": "mi"
+        }
+      }
+    ],
+    "metrics": []
+  }
+}
