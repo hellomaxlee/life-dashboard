@@ -118,7 +118,13 @@ Build order, with "both in parallel" chosen for ingest and render.
 **Max's to-dos before Phase 1 can go live**
 1. ~~Confirm the Goodreads `read` shelf RSS URL.~~ Done 2026-09-27; in `.env` as `GOODREADS_RSS_URL`, fetched once, 75 items.
 2. ~~Confirm goal numbers.~~ Done 2026-09-27.
-3. Once the service runs on the Mac, point Health Auto Export at `http://<mac-lan-ip>:8080/ingest/health` with two automations (06:30 and 22:00) for workouts with heart-rate samples, sleep, steps, HRV, resting heart rate, VO2 max, and time in daylight.
+3. Point Health Auto Export at `http://192.168.1.171:8080/ingest/health` (Mac's LAN IP, 2026-09-29; reserve it in the router). The app allows one Data Type per automation, so four automations, not two: Workouts and Health Metrics, each at 06:30 and 22:00. Settings decided 2026-09-29 (source: help.healthyapps.dev REST API and workout-format pages):
+   - Export Format JSON, **Export Version 2**. v2 carries a per-workout `id`, `duration`, `source` on every time-series entry, and `heartRateData` as `{date, Min, Avg, Max, source}` per sample. The `id` and `source` are what the one-canonical-activity dedupe keys on; v1 has neither. Ingest parses v2 only.
+   - Request Timeout 60 s. Headers empty (LAN-only, no auth).
+   - Workouts automation: Include Workout Metrics on (this is the HR series), Include Route Data off.
+   - Health Metrics automation: Sleep Analysis, Step Count, Heart Rate Variability, Resting Heart Rate, VO2 Max, Time in Daylight. Standalone Heart Rate omitted; the workout series is the only HR the goal model uses. Summarize Data on, Time Grouping Days (sleep arrives as one row per night, wellness signals as one value per day).
+   - Date Range: Previous 7 Days on all four. The app offers no 2-day window; 7 days refills any push the Mac slept through, and ingest is idempotent so the overlap costs nothing. Batch Requests on.
+   - Known upstream bug (Lybron/health-auto-export issue #60): `heartRateData` occasionally holds the ~2-minute recovery series instead of the session trace. Ingest flags a workout whose HR span is under a quarter of its duration as `hr_incomplete` and gives it no dot rather than a false one.
 
 ## Architecture assumptions
 | Area | Decision | Rationale |
