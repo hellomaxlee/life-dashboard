@@ -20,6 +20,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 
 from app.config import Settings
 from app.ingest.claude_usage import read_usage_file
+from app.jobs.rotation import ROTATION_JOB, ClipAdapter, DeviceRotation, device_adapter
 from app.timeutil import now_utc
 from tools import backup
 
@@ -120,9 +121,15 @@ def run_backup(settings: Settings) -> None:
 
 
 def build_scheduler(
-    settings: Settings, open_conn: OpenConn, now: datetime | None = None
+    settings: Settings,
+    open_conn: OpenConn,
+    now: datetime | None = None,
+    device: ClipAdapter | None = None,
 ) -> BackgroundScheduler:
-    """A configured, not yet started scheduler. `scheduler.job_stats` counts runs and failures."""
+    """A configured, not yet started scheduler. `scheduler.job_stats` counts runs and failures.
+
+    `device` replaces the Pixoo adapter (tests); it is used only while a device is configured.
+    """
     tz = ZoneInfo(settings.home_tz)
     scheduler = BackgroundScheduler(
         timezone=tz, job_defaults={"coalesce": True, "max_instances": 1}
@@ -149,6 +156,21 @@ def build_scheduler(
         misfire_grace_time=BACKUP_MISFIRE_GRACE_S,
         **catch_up,
     )
+
+    if settings.device.pixoo_host:
+        try:
+            adapter = device or device_adapter(settings)
+        except ValueError:
+            log.exception("%s not registered: bad [device] config", ROTATION_JOB)
+        else:
+            rotation = DeviceRotation(settings, open_conn, adapter)
+            scheduler.add_job(
+                guarded(ROTATION_JOB, rotation.tick, stats),
+                IntervalTrigger(seconds=settings.device.screen_seconds, timezone=tz),
+                id=ROTATION_JOB,
+                next_run_time=moment,
+                misfire_grace_time=settings.device.screen_seconds,
+            )
 
     return scheduler
 

@@ -96,6 +96,7 @@ class BackupConfig:
 @dataclass(frozen=True)
 class DeviceConfig:
     pixoo_host: str = ""
+    screen_seconds: int = 20
 
 
 @dataclass(frozen=True)
@@ -211,5 +212,8 @@ def load_settings(config_path: Path | None = None) -> Settings:
             time=str(raw["backup"]["time"]),
             keep=int(raw["backup"]["keep"]),
         ),
-        device=DeviceConfig(pixoo_host=str(raw.get("device", {}).get("pixoo_host", "")).strip()),
+        device=DeviceConfig(
+            pixoo_host=str(raw.get("device", {}).get("pixoo_host", "")).strip(),
+            screen_seconds=int(raw.get("device", {}).get("screen_seconds", 20)),
+        ),
     )

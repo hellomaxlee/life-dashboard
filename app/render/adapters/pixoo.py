@@ -1,8 +1,9 @@
 """Pixoo-64 adapter over the device's local HTTP API. UNVERIFIED ON HARDWARE.
 
 No Pixoo has been bought. Everything here follows the community-documented local API and is
-tested against a fake transport only; Phase 5 verifies it on the real device. Nothing calls
-this adapter by default: `pixoo_from_settings` returns None while `device.pixoo_host` is empty.
+tested against a fake transport only; Phase 5 verifies it on the real device. Its one caller
+is the `device_rotation` job (app/jobs/rotation.py), which exists only while
+`device.pixoo_host` is set; `pixoo_from_settings` returns None while it is empty.
 
 Protocol as understood: every command is a JSON POST to the device's `/post` path on port 80.
 `Draw/GetHttpGifId` returns the next animation id; each frame then goes as one
@@ -24,6 +25,7 @@ from __future__ import annotations
 
 import base64
 import ipaddress
+import time
 from dataclasses import dataclass
 
 import httpx
@@ -59,9 +61,19 @@ def require_lan_host(host: str) -> str:
 
 
 class PixooAdapter:
-    def __init__(self, host: str, client: httpx.Client | None = None) -> None:
+    """`timeout_s` bounds each phase of one command; `send_budget_s`, when set, bounds a whole
+    clip: once it is spent, the remaining frames are not sent and the send raises."""
+
+    def __init__(
+        self,
+        host: str,
+        client: httpx.Client | None = None,
+        timeout_s: float = TIMEOUT_S,
+        send_budget_s: float | None = None,
+    ) -> None:
         self.host = require_lan_host(host)
-        self._client = client or httpx.Client(timeout=TIMEOUT_S)
+        self._client = client or httpx.Client(timeout=timeout_s)
+        self._send_budget_s = send_budget_s
 
     def _command(self, body: dict[str, object]) -> dict[str, object]:
         url = f"http://{self.host}/post"
@@ -80,6 +92,8 @@ class PixooAdapter:
         count = len(clip.frames)
         if count > MAX_CLIP_FRAMES:
             raise PixooError(f"clip has {count} frames; the device limit is {MAX_CLIP_FRAMES}")
+        budget = self._send_budget_s
+        deadline = None if budget is None else time.monotonic() + budget
         reply = self._command({"Command": "Draw/GetHttpGifId"})
         pic_id = reply.get("PicId")
         if isinstance(pic_id, bool) or not isinstance(pic_id, int):
@@ -87,6 +101,8 @@ class PixooAdapter:
         for offset, (frame, duration_ms) in enumerate(
             zip(clip.frames, clip.durations_ms, strict=True)
         ):
+            if deadline is not None and time.monotonic() >= deadline:
+                raise PixooError(f"over the {budget} s send budget at frame {offset} of {count}")
             self._command(
                 {
                     "Command": "Draw/SendHttpGif",

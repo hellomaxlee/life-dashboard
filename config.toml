@@ -68,3 +68,6 @@ keep = 14
 # Pixoo-64 on the LAN. Empty = no device; nothing is ever pushed. Not yet purchased.
 [device]
 pixoo_host = ""
+# Seconds between rotation screens (15 or more). A clip longer than this keeps its screen
+# until it has played once.
+screen_seconds = 20

@@ -74,7 +74,7 @@ Until then `tests/render/test_snapshots.py` fails for that fixture by design; no
 
 ## Device
 
-The Pixoo adapter (`app/render/adapters/pixoo.py`) is unverified on hardware and is called by
-nothing. `[device] pixoo_host` in `config.toml` is empty, which means disabled. The emulator's
+The Pixoo adapter (`app/render/adapters/pixoo.py`) is unverified on hardware and is called only
+by the `device_rotation` job, which is not registered while no host is set (`workflows/run-service.md` section 15). `[device] pixoo_host` in `config.toml` is empty, which means disabled. The emulator's
 curve (linear PWM, no firmware gamma) is an assumption until a photograph of a real panel
 replaces it.

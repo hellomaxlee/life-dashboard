@@ -113,7 +113,17 @@ def test_lan_hosts_pass():
     assert require_lan_host("10.0.0.9") == "10.0.0.9"
 
 
-def test_disabled_by_default_and_never_called_by_the_app(settings):
+def test_send_budget_stops_a_slow_clip_between_frames(settings):
+    view, now = load(STALE, settings)
+    clip = rotation(view, now)["week"]
+    seen: list[httpx.Request] = []
+    with pytest.raises(PixooError, match="send budget at frame 0 of 16"):
+        PixooAdapter(HOST, fake_device(seen), send_budget_s=0).send(clip)
+    assert len(seen) == 1
+    assert PixooAdapter(HOST, fake_device([]), send_budget_s=60).send(clip).frames_sent == 16
+
+
+def test_disabled_by_default_and_only_the_rotation_job_calls_it(settings):
     assert settings.device.pixoo_host == ""
     assert pixoo_from_settings(settings) is None
     users = []
@@ -124,4 +134,4 @@ def test_disabled_by_default_and_never_called_by_the_app(settings):
                 name in text for name in ("PixooAdapter", "pixoo_from_settings", "adapters.pixoo")
             ):
                 users.append(str(path.relative_to(REPO_ROOT)))
-    assert users == []
+    assert users == ["app/jobs/rotation.py"]

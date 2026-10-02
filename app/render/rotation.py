@@ -17,10 +17,17 @@ from app.render.view import DayView
 ROTATION_ORDER = ("week", "today", "books")
 
 
+def render_screen(name: str, view: DayView, now: datetime) -> Clip:
+    """One screen by name, so a renderer that raises costs the rotation only its own slot."""
+    if name == "week":
+        return render_week(view, now)
+    if name == "today":
+        return render_today(view)
+    if name == "books":
+        return render_books(view)
+    raise KeyError(name)
+
+
 def rotation_clips(view: DayView, now: datetime) -> list[tuple[str, Clip]]:
     """Week, Today, Books as (name, clip) pairs in rotation order. `now` is timezone-aware UTC."""
-    return [
-        ("week", render_week(view, now)),
-        ("today", render_today(view)),
-        ("books", render_books(view)),
-    ]
+    return [(name, render_screen(name, view, now)) for name in ROTATION_ORDER]
