@@ -10,6 +10,7 @@ from app.config import Settings, load_settings
 from app.db import open_db
 from app.ingest.health import router as health_router
 from app.jobs.scheduler import start_scheduler
+from app.web.preview import router as preview_router
 from app.web.status import router as status_router
 
 
@@ -39,6 +40,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     open_conn().close()
     app.include_router(health_router)
     app.include_router(status_router)
+    app.include_router(preview_router)
     return app
 
 

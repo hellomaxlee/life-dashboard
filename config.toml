@@ -64,3 +64,7 @@ usage_min_read_seconds = 900
 dir = "data/backups"
 time = "03:15"
 keep = 14
+
+# Pixoo-64 on the LAN. Empty = no device; nothing is ever pushed. Not yet purchased.
+[device]
+pixoo_host = ""

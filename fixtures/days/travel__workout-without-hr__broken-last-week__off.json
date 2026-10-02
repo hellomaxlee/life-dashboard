@@ -1,0 +1,20 @@
+{
+  "combo": "travel / workout without HR / broken last week / off",
+  "day_local": "2026-11-18",
+  "now_utc": "2026-11-19T02:30:00Z",
+  "as_of_utc": "2026-11-19T00:05:00Z",
+  "daily_metrics": {
+    "quality_workout": false,
+    "sleep_hours": 6.96,
+    "steps": 10957,
+    "books_ytd": 10,
+    "summary_device_line": "A hotel-gym session with no heart-rate data, so no dot; 6.9 h of sleep. You control the packing, not the day.",
+    "claude_week_used_pct": 84.9,
+    "claude_week_resets_at": "2026-11-19T20:00:00Z",
+    "claude_week_captured_at": "2026-11-18T22:10:00Z"
+  },
+  "weekly_metrics": {
+    "quality_workouts": 2,
+    "weeks_hit_streak": 0
+  }
+}

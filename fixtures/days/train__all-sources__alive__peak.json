@@ -1,0 +1,20 @@
+{
+  "combo": "train / all sources / alive / peak",
+  "day_local": "2026-06-14",
+  "now_utc": "2026-06-14T21:00:00Z",
+  "as_of_utc": "2026-06-14T20:45:00Z",
+  "daily_metrics": {
+    "quality_workout": true,
+    "sleep_hours": 8.2,
+    "steps": 15230,
+    "books_ytd": 6,
+    "summary_device_line": "Third dot this week, 8.2 h of sleep. Enough has been done; the rest of the day is yours.",
+    "claude_week_used_pct": 72.0,
+    "claude_week_resets_at": null,
+    "claude_week_captured_at": "2026-06-14T19:30:00Z"
+  },
+  "weekly_metrics": {
+    "quality_workouts": 3,
+    "weeks_hit_streak": 9
+  }
+}

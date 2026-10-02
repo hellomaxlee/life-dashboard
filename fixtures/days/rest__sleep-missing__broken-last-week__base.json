@@ -1,0 +1,16 @@
+{
+  "combo": "rest / sleep missing / broken last week / base",
+  "day_local": "2026-10-06",
+  "now_utc": "2026-10-06T16:20:00Z",
+  "as_of_utc": "2026-10-06T16:05:00Z",
+  "daily_metrics": {
+    "quality_workout": false,
+    "steps": 3120,
+    "books_ytd": 3,
+    "summary_device_line": "No workout yet and no sleep record. Last week is over and owes you nothing."
+  },
+  "weekly_metrics": {
+    "quality_workouts": 0,
+    "weeks_hit_streak": 0
+  }
+}

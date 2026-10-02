@@ -1,0 +1,20 @@
+{
+  "combo": "train / all sources / alive / base",
+  "day_local": "2026-09-30",
+  "now_utc": "2026-09-30T22:15:00Z",
+  "as_of_utc": "2026-09-30T22:10:00Z",
+  "daily_metrics": {
+    "quality_workout": true,
+    "sleep_hours": 7.4,
+    "steps": 8412,
+    "books_ytd": 3,
+    "summary_device_line": "Second dot this week, 7.4 h of sleep. What you repeat is what you become.",
+    "claude_week_used_pct": 41.2,
+    "claude_week_resets_at": "2026-10-03T20:00:00Z",
+    "claude_week_captured_at": "2026-09-30T21:40:00Z"
+  },
+  "weekly_metrics": {
+    "quality_workouts": 2,
+    "weeks_hit_streak": 4
+  }
+}

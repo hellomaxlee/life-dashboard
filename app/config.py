@@ -94,6 +94,11 @@ class BackupConfig:
 
 
 @dataclass(frozen=True)
+class DeviceConfig:
+    pixoo_host: str = ""
+
+
+@dataclass(frozen=True)
 class Settings:
     home_tz: str
     hr_max: int
@@ -112,6 +117,7 @@ class Settings:
     health_export_token: str
     scheduler: SchedulerConfig
     backup: BackupConfig
+    device: DeviceConfig = DeviceConfig()
 
 
 def _resolve(path_str: str) -> Path:
@@ -205,4 +211,5 @@ def load_settings(config_path: Path | None = None) -> Settings:
             time=str(raw["backup"]["time"]),
             keep=int(raw["backup"]["keep"]),
         ),
+        device=DeviceConfig(pixoo_host=str(raw.get("device", {}).get("pixoo_host", "")).strip()),
     )

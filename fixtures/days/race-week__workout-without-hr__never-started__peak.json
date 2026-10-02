@@ -1,0 +1,20 @@
+{
+  "combo": "race-week / workout without HR / never started / peak",
+  "day_local": "2026-07-09",
+  "now_utc": "2026-07-10T01:00:00Z",
+  "as_of_utc": "2026-07-10T00:40:00Z",
+  "daily_metrics": {
+    "quality_workout": false,
+    "sleep_hours": 6.1,
+    "steps": 12804,
+    "books_ytd": 0,
+    "summary_device_line": "A 52-minute session with no heart-rate data, so no dot. The work was real; the record did not see it.",
+    "claude_week_used_pct": 91.0,
+    "claude_week_resets_at": "2026-07-10T10:00:00Z",
+    "claude_week_captured_at": "2026-07-10T00:55:00Z"
+  },
+  "weekly_metrics": {
+    "quality_workouts": 1,
+    "weeks_hit_streak": 0
+  }
+}
