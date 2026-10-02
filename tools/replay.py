@@ -1,4 +1,5 @@
-"""Replay archived raw payloads (health, claude_usage) through the product's own parsers.
+"""Replay archived raw payloads (health, claude_usage, goodreads) through the product's own
+parsers.
 
 python -m tools.replay --verify             replay into the scratch db and diff it against LIVE;
                                             exit 1 on any difference (the idempotency proof)
@@ -28,8 +29,8 @@ from pathlib import Path
 
 from app.config import REPO_ROOT, Settings, load_settings
 from app.db import SchemaMismatch, connect_live, open_db
-from app.ingest import claude_usage, health
-from app.ingest.health import archive_raw, received_at_from_filename
+from app.ingest import claude_usage, goodreads, health
+from app.ingest.health import archive_raw, raw_suffix, received_at_from_filename
 from app.timeutil import from_utc_iso
 
 DATA_TABLES = (
@@ -48,6 +49,7 @@ SCRATCH_DB = REPO_ROOT / "data" / "replay" / "scratch.db"
 INGESTERS = {
     health.SOURCE: health.ingest_archived,
     claude_usage.SOURCE: claude_usage.ingest_archived,
+    goodreads.SOURCE: goodreads.ingest_archived,
 }
 
 
@@ -138,7 +140,7 @@ def replay_plan(
     on_disk = {
         f"{source}/{path.name}": path
         for source in INGESTERS
-        for path in sorted((raw_dir / source).glob("*.json"))
+        for path in sorted((raw_dir / source).glob(f"*{raw_suffix(source)}"))
     }
     rows = []
     if recorded is not None:

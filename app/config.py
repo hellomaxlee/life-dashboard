@@ -117,6 +117,7 @@ class Settings:
     ingest: IngestConfig
     summary: SummaryConfig
     health_export_token: str
+    goodreads_rss_url: str
     scheduler: SchedulerConfig
     backup: BackupConfig
     device: DeviceConfig = DeviceConfig()
@@ -193,7 +194,7 @@ def load_settings(config_path: Path | None = None) -> Settings:
 
     Environment overrides: LIFE_CONFIG_PATH (file), LIFE_DB_PATH, LIFE_RAW_DIR (storage),
     LIFE_BACKUP_DIR, LIFE_SCHEDULER_ENABLED (1/true/yes or 0/false/no),
-    HEALTH_EXPORT_TOKEN (secret, from .env or the environment).
+    HEALTH_EXPORT_TOKEN and GOODREADS_RSS_URL (secrets, from .env or the environment).
     """
     load_dotenv(REPO_ROOT / ".env")
     path = config_path or Path(os.environ.get("LIFE_CONFIG_PATH", DEFAULT_CONFIG_PATH))
@@ -256,6 +257,7 @@ def load_settings(config_path: Path | None = None) -> Settings:
             monthly_cap_usd=float(raw["summary"]["monthly_cap_usd"]),
         ),
         health_export_token=os.environ.get("HEALTH_EXPORT_TOKEN", "").strip(),
+        goodreads_rss_url=os.environ.get("GOODREADS_RSS_URL", "").strip(),
         scheduler=SchedulerConfig(
             enabled=_env_switch(
                 "LIFE_SCHEDULER_ENABLED", _flag("scheduler.enabled", raw["scheduler"]["enabled"])

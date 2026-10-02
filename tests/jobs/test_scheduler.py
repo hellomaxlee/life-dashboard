@@ -251,12 +251,16 @@ def test_config_file_ships_with_the_scheduler_on(monkeypatch):
     assert jobs.parse_hh_mm(shipped.backup.time) == (3, 15)
 
 
-def test_a_bad_goodreads_time_does_not_stop_the_scheduler(jobs_settings):
+def test_a_bad_goodreads_time_does_not_stop_the_scheduler(jobs_settings, caplog):
     typo = replace(jobs_settings, pull=replace(jobs_settings.pull, goodreads="6h30"))
     scheduler = jobs.build_scheduler(typo, lambda: open_db(typo.storage.db_path))
     assert {job.id for job in scheduler.get_jobs()} == jobs.CORE_JOBS
-    assert not hasattr(jobs, "GOODREADS_JOB")
-    assert not hasattr(jobs, "register_goodreads_poll")
+    assert jobs.GOODREADS_JOB not in caplog.text
+
+    with_url = replace(typo, goodreads_rss_url="https://www.goodreads.com/review/list_rss/1")
+    scheduler = jobs.build_scheduler(with_url, lambda: open_db(with_url.storage.db_path))
+    assert {job.id for job in scheduler.get_jobs()} == jobs.CORE_JOBS
+    assert f"{jobs.GOODREADS_JOB} not registered" in caplog.text
 
 
 def test_backup_job_logs_raw_files_missing_from_the_archive(client, db, jobs_settings, caplog):
