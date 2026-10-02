@@ -1,0 +1,18 @@
+{
+  "combo": "rest / Health delayed / alive / peak",
+  "note": "Display test data from the 2026-10-02 audit. The summary line cites numbers that are not in these metrics on purpose; never use it as a summary-gate golden.",
+  "day_local": "2026-08-05",
+  "now_utc": "2026-08-05T13:00:00Z",
+  "as_of_utc": "2026-08-03T22:00:00Z",
+  "daily_metrics": {
+    "books_ytd": 3,
+    "summary_device_line": "Finished *Jazz* (3 of 12); 6.2 h of sleep. It's enough - rest is 22% of the work.",
+    "claude_week_used_pct": 24.9,
+    "claude_week_resets_at": "2026-08-06T03:00:00Z",
+    "claude_week_captured_at": "2026-08-03T10:00:00Z"
+  },
+  "weekly_metrics": {
+    "quality_workouts": 3,
+    "weeks_hit_streak": 76
+  }
+}

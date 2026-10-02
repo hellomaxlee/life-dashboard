@@ -35,15 +35,15 @@ def filled_columns(frame: Image.Image, color: tuple[int, int, int]) -> list[int]
     return columns
 
 
-def test_41_2_percent_fills_25_of_60_pixels(settings):
+def test_41_2_percent_fills_24_of_60_pixels(settings):
     view, now = load(WEEK_41, settings)
     assert view.claude.used_pct == 41.2
     clip = render_week(view, now)
     assert len(clip.frames) == 1
     frame = clip.poster
-    # 41.2 % of a 60 px track is 24.72 px, drawn as 25: columns 2 through 26.
-    assert filled_columns(frame, GREEN) == list(range(2, 27))
-    assert filled_columns(frame, TRACK) == list(range(27, 62))
+    # floor(0.412 * 60) = 24 px: columns 2 through 25. The fill never overstates.
+    assert filled_columns(frame, GREEN) == list(range(2, 26))
+    assert filled_columns(frame, TRACK) == list(range(26, 62))
     for y in (26, 32):
         assert all(pixel == (0, 0, 0) for pixel in bar_row(frame, y))
 
@@ -54,8 +54,8 @@ def test_41_2_percent_width_survives_led_gamma(settings):
     green = shown.getpixel((2, 28))
     track = shown.getpixel((61, 28))
     assert green != track
-    assert filled_columns(shown, green) == list(range(2, 27))
-    assert filled_columns(shown, track) == list(range(27, 62))
+    assert filled_columns(shown, green) == list(range(2, 26))
+    assert filled_columns(shown, track) == list(range(26, 62))
 
 
 def test_mutant_draws_a_different_width(settings, monkeypatch):
@@ -154,7 +154,7 @@ def test_only_the_seven_day_keys_feed_the_bar(settings):
     }
     both = view_from_metrics("2026-09-30", record, {}, settings)
     assert both.claude == base.claude
-    assert filled_columns(render_week(both, now).poster, GREEN) == list(range(2, 27))
+    assert filled_columns(render_week(both, now).poster, GREEN) == list(range(2, 26))
 
 
 @pytest.mark.parametrize(

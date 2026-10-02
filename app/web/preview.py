@@ -54,7 +54,7 @@ def _resolve(request: Request, day: str | None, fixture: str | None) -> tuple[Da
     now = now_utc()
     day_local = day or local_day(now, settings.home_tz)
     try:
-        date.fromisoformat(day_local)
+        day_local = date.fromisoformat(day_local).isoformat()
     except ValueError as exc:
         raise HTTPException(status_code=422, detail="date must be YYYY-MM-DD") from exc
     conn = request.app.state.open_conn()

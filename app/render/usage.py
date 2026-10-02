@@ -10,8 +10,14 @@ Stale means the percent is known to be out of date: the reading is older than `s
 or it has no capture time, or its reset time has already passed. A stale reading gets a
 pulsing dot and an amber second line that alternates with its age.
 
-The label is the percent truncated, never rounded up, so it cannot name a level the bar's
-colour has not reached; the last pixel of the track fills only at 100.
+Nothing overstates. The label is the percent truncated and the fill is floored
+(floor(0.412 * 60) = 24 px), with one pixel for any use above zero and the last pixel only
+at 100. So 60.0 and 85.0 are the first values whose fill reaches their tick column, the
+same values at which the colour steps.
+
+Times that cannot be true are not printed: a reset more than seven days away (the window
+is seven days long) is shown as no reset time, and a capture time in the future is an
+unknown age, which is stale.
 
 "Now" is always a parameter. Setting USAGE_BAR_MUTANT_REMAINING=1 fills the bar from the
 percent remaining instead of the percent used; it is the mutant that proves the pixel-width
@@ -40,6 +46,7 @@ LINE_2_Y = 40
 STALE_DOT_X = 59
 AMBER_FROM_PCT = 60.0
 RED_FROM_PCT = 85.0
+MAX_RESET_DAYS = 7
 STALE_FRAMES = 16
 STALE_FRAME_MS = 250
 _PULSE = (1.0, 0.6, 0.25, 0.6)
@@ -62,13 +69,13 @@ def mutant_remaining() -> bool:
 
 
 def fill_width(used_pct: float, track_px: int = BAR_WIDTH) -> int:
-    """Pixels to fill, rounded half up; at least one above zero, the last one only at 100."""
+    """Pixels to fill, floored; at least one above zero, the last one only at 100."""
     clamped = min(max(used_pct, 0.0), 100.0)
     if clamped <= 0:
         return 0
     if clamped >= 100:
         return track_px
-    return max(1, min(track_px - 1, int(clamped / 100 * track_px + 0.5)))
+    return max(1, min(track_px - 1, int(clamped * track_px / 100 + 1e-9)))
 
 
 def level_color(used_pct: float) -> Color:
@@ -80,10 +87,10 @@ def level_color(used_pct: float) -> Color:
 
 
 def tick_columns() -> tuple[int, int]:
-    """The track columns a fill reaches when it turns amber (60) and red (85)."""
+    """The last column filled at exactly 60 and at exactly 85: where amber and red begin."""
     return (
-        BAR_LEFT + int(AMBER_FROM_PCT / 100 * BAR_WIDTH),
-        BAR_LEFT + int(RED_FROM_PCT / 100 * BAR_WIDTH),
+        BAR_LEFT + fill_width(AMBER_FROM_PCT) - 1,
+        BAR_LEFT + fill_width(RED_FROM_PCT) - 1,
     )
 
 
@@ -101,6 +108,8 @@ def reset_label(resets_at_utc: str | None, now: datetime) -> str:
         return "RESETS IN <1H"
     if hours < 24:
         return f"RESETS IN {math.ceil(hours)}H"
+    if hours > MAX_RESET_DAYS * 24:
+        return "NO RESET TIME"
     return f"RESETS IN {int(hours / 24 + 0.5)}D"
 
 
@@ -119,8 +128,9 @@ def usage_state(reading: ClaudeUsage, now: datetime, stale_hours: int) -> UsageS
     stale, age = True, "AGE UNKNOWN"
     if reading.captured_at_utc is not None:
         age_hours = (now - from_utc_iso(reading.captured_at_utc)).total_seconds() / 3600
-        stale = age_hours > stale_hours or reset_passed(reading.resets_at_utc, now)
-        age = age_label(max(age_hours, 0.0)) if stale else ""
+        if age_hours >= 0:
+            stale = age_hours > stale_hours or reset_passed(reading.resets_at_utc, now)
+            age = age_label(age_hours) if stale else ""
     return UsageState(
         has_data=True,
         used_pct=reading.used_pct,

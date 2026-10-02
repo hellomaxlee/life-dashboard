@@ -128,7 +128,7 @@ def test_percent_label_truncates_and_last_pixel_needs_100():
         "0%",
     ]
     assert percent_text(0.4) == "<1%"
-    assert [fill_width(p) for p in (0.0, 0.4, 41.2, 99.6, 99.99, 100.0)] == [0, 1, 25, 59, 59, 60]
+    assert [fill_width(p) for p in (0.0, 0.4, 41.2, 99.6, 99.99, 100.0)] == [0, 1, 24, 59, 59, 60]
 
 
 # 4 and 5a. what counts as stale
@@ -336,9 +336,9 @@ def test_usage_track_has_ticks_at_60_and_85(settings):
         frame = render_week(replace(view, claude=replace(view.claude, used_pct=pct)), now).poster
         for y in (27, 31):
             lit = [x for x in range(64) if frame.getpixel((x, y)) != (0, 0, 0)]
-            assert lit == [38, 53], (pct, y, lit)
+            assert lit == [37, 52], (pct, y, lit)
     amber_starts = render_week(replace(view, claude=replace(view.claude, used_pct=61.0)), now)
-    assert amber_starts.poster.getpixel((38, 28)) == AMBER
+    assert amber_starts.poster.getpixel((37, 28)) == AMBER
 
 
 # the entry point the scheduler calls

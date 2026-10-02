@@ -18,7 +18,8 @@ Assumptions to check on hardware:
 - the device applies no gamma of its own (see app/render/gamma.py).
 
 The host must be a literal address in 10/8, 172.16/12 or 192.168/16, nothing else.
-Health data stays home; so do frames.
+The client is built with trust_env=False, so HTTP_PROXY and friends in the environment are
+ignored and a frame can only go to that address. Health data stays home; so do frames.
 """
 
 from __future__ import annotations
@@ -72,7 +73,7 @@ class PixooAdapter:
         send_budget_s: float | None = None,
     ) -> None:
         self.host = require_lan_host(host)
-        self._client = client or httpx.Client(timeout=timeout_s)
+        self._client = client or httpx.Client(timeout=timeout_s, trust_env=False)
         self._send_budget_s = send_budget_s
 
     def _command(self, body: dict[str, object]) -> dict[str, object]:

@@ -46,6 +46,15 @@ Claude reading is stale (pulsing dot, label alternating with its age); Today nev
 celebrations always. No clip may exceed 59 frames, the most one device animation is assumed
 to hold; a test holds every fixture to it and the Pixoo adapter refuses a longer clip.
 
+What the screens say when data is thin. Today's dot label states the dot, not the day:
+"WORKOUT DONE", "NO DOT YET", or "DOT NO DATA". The as-of line shows the clock for a
+same-day push, weekday and clock up to six days back, and whole days beyond that ("AS OF 8D
+AGO"); a push dated after the day or after "now" is ignored. A day that has numbers but no
+push before it ended (a later push back-filled it) gets no as-of line; "NO PUSH YET" appears
+only when the day has no data at all. The summary is folded to ASCII before paging: accents
+folded, curly quotes and dashes straightened, paired `*`/`_` markers removed, emoji dropped,
+and a number is kept on the same line as its unit or its "of N".
+
 The tool and the preview page always render both celebrations so they can be looked at. One
 the day's data did not earn is labelled `(sample)`; an earned party prints the week's stored
 count and target.
@@ -54,7 +63,9 @@ count and target.
 
 `fixtures/days/<day type>__<completeness>__<streak state>__<season>.json`. `daily_metrics` and
 `weekly_metrics` have the same keys as the database rows (listed in `app/render/view.py`);
-`now_utc` fixes the clock and `as_of_utc` is the last Health push. A key left out is a missing
+`now_utc` fixes the clock and `as_of_utc` is the last Health push. An optional `note` is for
+the reader (two audit fixtures use it to say their summary lines are display data, never
+summary-gate goldens). A key left out is a missing
 value and must render as a stated fallback. Use a new cell each cycle (CLAUDE.md § Iteration Rule).
 Every file in the folder is rendered and snapshot-tested, so a new fixture needs its goldens:
 render it, look at it (next section), then run the `UPDATE_SNAPSHOTS=1` command and commit them.
@@ -68,13 +79,19 @@ Until then `tests/render/test_snapshots.py` fails for that fixture by design; no
 3. `uv run pytest tests/render -q`. A changed snapshot is reviewed pixel by pixel; only then
    `UPDATE_SNAPSHOTS=1 uv run pytest tests/render/test_snapshots.py -q` and commit the PNGs.
 4. Prove the bar gate still bites: `USAGE_BAR_MUTANT_REMAINING=1 uv run pytest tests/render -q`
-   must fail.
+   must fail. The golden case: 41.2 % fills `floor(0.412 * 60) = 24` px of the 60 px track.
 5. With the API running, open `http://127.0.0.1:8080/preview?fixture=<combo>` or
    `/preview?date=YYYY-MM-DD`; it shows every screen as LED gamma 1x, LED gamma 8x, raw 1x, raw 8x.
 
 ## Device
 
 The Pixoo adapter (`app/render/adapters/pixoo.py`) is unverified on hardware and is called only
-by the `device_rotation` job, which is not registered while no host is set (`workflows/run-service.md` section 15). `[device] pixoo_host` in `config.toml` is empty, which means disabled. The emulator's
-curve (linear PWM, no firmware gamma) is an assumption until a photograph of a real panel
-replaces it.
+by the `device_rotation` job, which is not registered while no host is set (`workflows/run-service.md` section 15). `[device] pixoo_host` in `config.toml` is empty, which means disabled.
+Its HTTP client ignores proxy settings in the environment, so frames go to the LAN address only.
+
+To verify on hardware:
+- the emulator's curve (linear PWM, no firmware gamma), against a photograph of the panel;
+- the 3x5 label font: several digits differ by a single LED (0/8, 5/6, 3/9, 6/8). They read
+  in the emulator; whether they read on real LEDs from across the room is undecided until a
+  photo, and the font stays as it is until then;
+- the frame limit, per-frame speed and command names of the device's HTTP API.

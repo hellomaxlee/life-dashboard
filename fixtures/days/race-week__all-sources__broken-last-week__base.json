@@ -1,0 +1,21 @@
+{
+  "combo": "race-week / all sources / broken last week / base",
+  "note": "Display test data from the 2026-10-02 audit. The summary line cites numbers that are not in these metrics on purpose; never use it as a summary-gate golden.",
+  "day_local": "2026-03-08",
+  "now_utc": "2026-03-08T23:30:00Z",
+  "as_of_utc": "2026-03-08T06:30:00Z",
+  "daily_metrics": {
+    "books_ytd": 10,
+    "quality_workout": false,
+    "steps": 20634,
+    "sleep_hours": 9.83,
+    "summary_device_line": "Finished *Jazz* (10 of 12); 9.8 h of sleep. It's enough - rest is 57% of the work.",
+    "claude_week_used_pct": 87.7,
+    "claude_week_resets_at": "2026-03-11T05:00:00Z",
+    "claude_week_captured_at": "2026-03-08T23:00:00Z"
+  },
+  "weekly_metrics": {
+    "quality_workouts": 2,
+    "weeks_hit_streak": 0
+  }
+}

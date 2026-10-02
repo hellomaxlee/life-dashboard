@@ -120,7 +120,7 @@ def test_today_states(settings):
     assert as_of_label(view) == "AS OF 18:10"
     delayed, _ = load(STALE, settings)
     assert as_of_label(delayed) == "AS OF TUE 22:10"
-    assert as_of_label(replace(view, as_of_utc=None)) == "NO PUSH YET"
+    assert as_of_label(replace(view, as_of_utc=None)) is None
     winter = replace(view, day_local="2026-01-15", as_of_utc="2026-01-15T23:10:00Z")
     assert as_of_label(winter) == "AS OF 18:10"
 

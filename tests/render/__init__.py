@@ -26,3 +26,19 @@ def load(combo: str, settings: Settings) -> tuple[DayView, datetime]:
 
 def rotation(view: DayView, now: datetime) -> dict[str, Clip]:
     return dict(rotation_clips(view, now))
+
+
+def record_text(monkeypatch) -> list[tuple[str, int, int, str, int]]:
+    """Record every string a renderer draws as (text, x, y, font name, scale), still drawing it."""
+    from app.render import celebrate, font, screens, usage
+
+    drawn: list[tuple[str, int, int, str, int]] = []
+    original = font.draw_text
+
+    def recording(frame, x, y, text, color, font_=font.SMALL, scale=1):
+        drawn.append((text, x, y, font_.name, scale))
+        return original(frame, x, y, text, color, font_, scale)
+
+    for module in (font, screens, usage, celebrate):
+        monkeypatch.setattr(module, "draw_text", recording)
+    return drawn

@@ -60,16 +60,20 @@ def write_clip(clip: Clip, directory: Path, scale: int) -> list[Path]:
 
 
 def _view_for(args: argparse.Namespace, settings: Settings) -> tuple[DayView, datetime, str]:
+    """ValueError or OSError with a message fit to print if the fixture or the date is bad."""
     if args.fixture:
         view, now = load_fixture(Path(args.fixture), settings)
         return view, now, Path(args.fixture).stem
-    date.fromisoformat(args.date)
+    try:
+        day_local = date.fromisoformat(args.date).isoformat()
+    except ValueError:
+        raise ValueError(f"--date {args.date} is not a valid date (YYYY-MM-DD)") from None
     conn = open_db(settings.storage.db_path)
     try:
-        view = view_from_db(conn, settings, args.date)
+        view = view_from_db(conn, settings, day_local)
     finally:
         conn.close()
-    return view, now_utc(), args.date
+    return view, now_utc(), day_local
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -85,9 +89,12 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--scale must be 2 or more; the 1x files are always written")
 
     settings = load_settings()
-    view, now, label = _view_for(args, settings)
-    if args.now:
-        now = from_utc_iso(args.now)
+    try:
+        view, now, label = _view_for(args, settings)
+        if args.now:
+            now = from_utc_iso(args.now)
+    except (ValueError, OSError) as exc:
+        parser.error(str(exc))
     out = Path(args.out) if args.out else REPO_ROOT / "data" / "preview" / label
     for name, clip, sample in render_all(view, now):
         written = write_clip(clip, out / name, args.scale)

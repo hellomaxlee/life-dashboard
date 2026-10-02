@@ -22,7 +22,7 @@ def render_screen(name: str, view: DayView, now: datetime) -> Clip:
     if name == "week":
         return render_week(view, now)
     if name == "today":
-        return render_today(view)
+        return render_today(view, now)
     if name == "books":
         return render_books(view)
     raise KeyError(name)

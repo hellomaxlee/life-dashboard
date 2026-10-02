@@ -152,8 +152,11 @@ def view_from_metrics(
     stored_steps: int | None = None,
     claude: ClaudeUsage | None = None,
 ) -> DayView:
-    """Build the view. A `daily` value wins over its `stored_*` interim fallback."""
-    date.fromisoformat(day_local)
+    """Build the view. A `daily` value wins over its `stored_*` interim fallback.
+
+    `day_local` is stored in canonical YYYY-MM-DD form; ValueError if it is not a date.
+    """
+    day_local = date.fromisoformat(day_local).isoformat()
     quality = daily.get(QUALITY_WORKOUT)
     summary = daily.get(SUMMARY_LINE)
     sleep = _sleep(daily.get(SLEEP_HOURS))
@@ -178,13 +181,27 @@ def view_from_metrics(
 
 
 def load_fixture(path: Path, settings: Settings) -> tuple[DayView, datetime]:
-    """Read a fixtures/days file. Returns the view and the fixture's own "now" (UTC)."""
+    """Read a fixtures/days file. Returns the view and the fixture's own "now" (UTC).
+
+    ValueError naming the file if its `day_local` or `now_utc` is missing or not a real date.
+    """
     record = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(record, dict):
+        raise ValueError(f"{path.name}: not a JSON object")
+    day_local, now_text = record.get("day_local"), record.get("now_utc")
+    try:
+        day_local = date.fromisoformat(day_local).isoformat()
+    except (TypeError, ValueError):
+        raise ValueError(f"{path.name}: day_local {day_local!r} is not a valid date") from None
+    try:
+        now = from_utc_iso(now_text)
+    except (TypeError, ValueError):
+        raise ValueError(f"{path.name}: now_utc {now_text!r} is not a UTC ISO time") from None
     view = view_from_metrics(
-        record["day_local"],
+        day_local,
         record.get("daily_metrics") or {},
         record.get("weekly_metrics") or {},
         settings,
         as_of_utc=record.get("as_of_utc"),
     )
-    return view, from_utc_iso(record["now_utc"])
+    return view, now

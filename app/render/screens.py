@@ -11,6 +11,8 @@ pixel scroll of a 110-character line needs some 300 frames and the device holds 
 
 from __future__ import annotations
 
+import re
+import unicodedata
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
@@ -130,6 +132,20 @@ def _count(value: int | None) -> int | None:
     return value if valid_count(value) else None
 
 
+def _draw_streak(frame: Frame, streak: int) -> None:
+    """ "N WK STREAK", centred. Steps down in size until the whole line fits the frame."""
+    number = str(streak)
+    for font, tail in ((BODY, "WK STREAK"), (BODY, "WK"), (SMALL, "WK")):
+        total = text_width(number, font) + 3 + text_width(tail, SMALL)
+        if total <= RIGHT - LEFT + 1:
+            x = (SIZE - total) // 2
+            y = 50 if font is BODY else 52
+            after = draw_text(frame, x, y, number, GOLD if streak else TEXT, font)
+            draw_text(frame, after + 2, 52, tail, LABEL, SMALL)
+            return
+    draw_text_centered(frame, 52, "MANY WK STREAK", LABEL, SMALL)
+
+
 def _week_frame(view: DayView, now: datetime, tick: int) -> Frame:
     frame = new_frame()
     draw_text(frame, LEFT, 2, "WEEK", LABEL, SMALL)
@@ -153,12 +169,7 @@ def _week_frame(view: DayView, now: datetime, tick: int) -> Frame:
     if streak is None:
         draw_text_centered(frame, 52, "STREAK NO DATA", TEXT, SMALL)
     else:
-        number = str(streak)
-        tail = "WK STREAK"
-        total = text_width(number, BODY) + 3 + text_width(tail, SMALL)
-        x = (SIZE - total) // 2
-        after = draw_text(frame, x, 50, number, GOLD if streak else TEXT, BODY)
-        draw_text(frame, after + 2, 52, tail, LABEL, SMALL)
+        _draw_streak(frame, streak)
     return frame
 
 
@@ -192,17 +203,42 @@ def _hours_label(hours: float) -> str:
     return f"{int(hours)}H" if hours == int(hours) else f"{hours:.1f}H"
 
 
-def as_of_label(view: DayView) -> str:
+def _has_day_data(view: DayView) -> bool:
+    return (
+        valid_sleep_hours(view.sleep_hours)
+        or _count(view.steps) is not None
+        or view.today_dot is not None
+    )
+
+
+def as_of_label(view: DayView, now: datetime | None = None) -> str | None:
+    """When the day's data is from, or None to leave the line out.
+
+    Same day: the clock. One to six days back: weekday and clock, which is unambiguous within
+    a week. Older: whole days ("AS OF 8D AGO"), so an old push never reads as recent. A push
+    dated after the view's day, or after `now`, cannot have fed this day and counts as none.
+    With no usable push the line says "NO PUSH YET" only when the day has no data either; a day
+    whose numbers a later push back-filled gets no as-of line rather than a false one.
+    """
+    missing = None if _has_day_data(view) else "NO PUSH YET"
     if view.as_of_utc is None:
-        return "NO PUSH YET"
-    local = from_utc_iso(view.as_of_utc).astimezone(ZoneInfo(view.home_tz))
+        return missing
+    moment = from_utc_iso(view.as_of_utc)
+    if now is not None and moment > now:
+        return missing
+    local = moment.astimezone(ZoneInfo(view.home_tz))
+    days_back = (date.fromisoformat(view.day_local) - local.date()).days
+    if days_back < 0:
+        return missing
     clock = local.strftime("%H:%M")
-    if local.date().isoformat() != view.day_local:
+    if days_back == 0:
+        return f"AS OF {clock}"
+    if days_back <= 6:
         return f"AS OF {_WEEKDAYS[local.weekday()]} {clock}"
-    return f"AS OF {clock}"
+    return f"AS OF {days_back}D AGO"
 
 
-def render_today(view: DayView) -> Clip:
+def render_today(view: DayView, now: datetime | None = None) -> Clip:
     """Last night's sleep against the target, today's dot, steps, and when the data is from."""
     frame = new_frame()
     day = date.fromisoformat(view.day_local)
@@ -218,7 +254,10 @@ def render_today(view: DayView) -> Clip:
         draw_text_right(frame, RIGHT, 32, "NO DATA", TEXT, SMALL)
     else:
         color = GREEN if sleep_met(view) else SKY
-        after = draw_text(frame, 16, 9, sleep_text(view.sleep_hours), color, BODY, scale=2)
+        number = sleep_text(view.sleep_hours)
+        unit_room = 3 + text_width("h", BODY)
+        x = min(16, RIGHT + 1 - text_width(number, BODY, 2) - unit_room)
+        after = draw_text(frame, x, 9, number, color, BODY, scale=2)
         draw_text(frame, after + 1, 16, "h", color, BODY)
         filled = sleep_fill(view.sleep_hours)
         if filled:
@@ -231,18 +270,20 @@ def render_today(view: DayView) -> Clip:
 
     if view.today_dot is None:
         draw_ring(frame, 6, 44, 4, RING, dashed=True)
-        draw_text(frame, 14, 42, "DOT NO DATA", TEXT, SMALL)
+        draw_text(frame, 13, 42, "DOT NO DATA", TEXT, SMALL)
     elif view.today_dot:
         draw_disc(frame, 6, 44, 4, GOLD)
-        draw_text(frame, 14, 42, "WORKOUT DONE", GOLD, SMALL)
+        draw_text(frame, 13, 42, "WORKOUT DONE", GOLD, SMALL)
     else:
         draw_ring(frame, 6, 44, 4, RING)
-        draw_text(frame, 14, 42, "REST SO FAR", TEXT, SMALL)
+        draw_text(frame, 13, 42, "NO DOT YET", TEXT, SMALL)
 
     draw_text(frame, LEFT, 51, "STEPS", LABEL, SMALL)
     steps = "NO DATA" if _count(view.steps) is None else str(view.steps)
     draw_text_right(frame, RIGHT, 51, steps, TEXT, SMALL)
-    draw_text(frame, LEFT, 58, as_of_label(view), LABEL, SMALL)
+    as_of = as_of_label(view, now)
+    if as_of is not None:
+        draw_text(frame, LEFT, 58, as_of, LABEL, SMALL)
     return still(frame)
 
 
@@ -292,9 +333,32 @@ def _books_base(view: DayView) -> Frame:
     return frame
 
 
+_MARKDOWN_PAIR = re.compile(r"(?<!\w)(\*\*|__|\*|_)(?=\S)(.+?)(?<=\S)\1(?!\w)")
+_UNITS = frozenset(
+    {"h", "hr", "hrs", "min", "mins", "km", "mi", "m", "bpm", "wk", "wks", "d", "kg", "lb", "%"}
+)
+_TRAILING = ".,;:!?)"
+_GLUE = "\u00a0"
+
+
+def clean_summary(text: str) -> str:
+    """Fold the summary to what the 5x7 face can draw.
+
+    Typographic quotes and dashes become ASCII, accents are folded (NFKD), paired markdown
+    emphasis markers (*x*, _x_, **x**, __x__) are removed, and any character the font has no
+    glyph for, emoji included, is dropped rather than drawn as "?". Whitespace is collapsed.
+    """
+    text = normalize(text)
+    text = normalize(unicodedata.normalize("NFKD", text))
+    text = "".join(ch for ch in text if not unicodedata.combining(ch))
+    text = _MARKDOWN_PAIR.sub(r"\2", text)
+    text = "".join(ch if ch in BODY.glyphs else " " if ch.isspace() else "" for ch in text)
+    return " ".join(text.split())
+
+
 def fit_summary(text: str) -> str:
-    """Collapse whitespace; past 110 characters, cut at a word and end with a visible "..."."""
-    text = " ".join(normalize(text).split())
+    """Clean the text; past 110 characters, cut at a word and end with a visible "..."."""
+    text = clean_summary(text)
     if len(text) <= SUMMARY_MAX_CHARS:
         return text
     room = SUMMARY_MAX_CHARS - 3
@@ -304,11 +368,41 @@ def fit_summary(text: str) -> str:
     return kept.rstrip(" .,;:") + "..."
 
 
+def _is_number(word: str) -> bool:
+    return word.lstrip("(")[:1].isdigit()
+
+
+def _glue_numbers(words: list[str]) -> list[str]:
+    """Join a number to its unit ("9.8 h") or to "of N" ("(10 of 12);") so they wrap as one."""
+    groups: list[str] = []
+    index = 0
+    while index < len(words):
+        take = 1
+        if _is_number(words[index]):
+            following = words[index + 1 : index + 3]
+            if len(following) == 2 and following[0].lower() == "of" and _is_number(following[1]):
+                take = 3
+            elif following and following[0].rstrip(_TRAILING).lower() in _UNITS:
+                take = 2
+        group = words[index : index + take]
+        if text_width(" ".join(group), BODY) <= LINE_WIDTH:
+            groups.append(_GLUE.join(group))
+        else:
+            groups.extend(group)
+        index += take
+    return groups
+
+
 def wrap_lines(text: str) -> list[str]:
-    """Greedy word wrap to LINE_WIDTH pixels. Only a word wider than a line is ever split."""
+    """Greedy word wrap to LINE_WIDTH pixels.
+
+    Only a word wider than a line is ever split, and a number stays on the same line as its
+    unit or its "of N" whenever the group fits a line.
+    """
     lines: list[str] = []
     current = ""
-    for word in text.split():
+    for unit in _glue_numbers(text.split()):
+        word = unit.replace(_GLUE, " ")
         candidate = f"{current} {word}" if current else word
         if text_width(candidate, BODY) <= LINE_WIDTH:
             current = candidate
