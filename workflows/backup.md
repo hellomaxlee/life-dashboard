@@ -72,6 +72,12 @@ every difference, one per line, then `N difference(s)`:
 replayed) and `unparsed` (a recorded payload that never parsed). Backups written
 before `db_sha256` existed get a note that the file-level checks were skipped.
 
+`--verify` never migrates the live db. If the live db is behind the code it stops
+with `refusing: ... tools.migrate` and exit 2 (the restored copy is migrated in its
+temp dir for the boot check, the backup itself is never modified). Taking a
+backup of a db that is behind works and is step 1 of an upgrade (run-service
+section 16).
+
 A push between backup and verify makes check 3 report the new rows. That is the
 gate working; back up again and verify the new one.
 

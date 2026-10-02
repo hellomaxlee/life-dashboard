@@ -134,7 +134,7 @@ def test_copy_with_heart_rate_is_canonical_even_when_it_arrives_second(client, d
     post(client, workouts_payload(phone))
     post(client, workouts_payload(watch, note="second"))
 
-    assert activities(db) == [("P-1", "Running", 2400, 2)]
+    assert activities(db) == [("W-1", "Running", 2400, 2)]
 
 
 def test_two_overlapping_copies_with_unknown_source_merge(client, db):

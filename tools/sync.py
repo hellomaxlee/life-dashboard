@@ -9,7 +9,7 @@ import argparse
 import sys
 
 from app.config import load_settings
-from app.db import open_db
+from app.db import SchemaMismatch, connect_live
 from app.ingest.claude_usage import read_usage_file
 
 
@@ -18,7 +18,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--source", required=True, choices=["claude_usage"])
     parser.parse_args(argv)
     settings = load_settings()
-    conn = open_db(settings.storage.db_path)
+    try:
+        conn = connect_live(settings.storage.db_path)
+    except SchemaMismatch as exc:
+        print(f"refusing: {exc}", file=sys.stderr)
+        return 2
     try:
         result = read_usage_file(conn, settings)
     finally:

@@ -50,6 +50,9 @@ launchctl kickstart -k gui/$(id -u)/com.maxlee.life-dashboard   # kill + immedia
 ```
 
 After `git pull` that touched dependencies: `uv sync` first, then kickstart.
+After a `git pull` that brought a new file under `app/migrations/`, or changed
+anything under `app/ingest/`, follow section 16 (Upgrading) instead of a bare
+kickstart.
 `KeepAlive` is true, so a crash relaunches within `ThrottleInterval` (10 s). A
 crash loop shows as a climbing `runs =` and `last exit code` in `launchctl print`.
 
@@ -248,9 +251,11 @@ What the states mean on the real box:
   later parsed payload of the same source on top, in one transaction, so older
   data fills gaps and newer data still wins; the answer is `ok` with a
   `reapplied` count.
-- A parsed `raw_archive` row whose file is missing is the combination that is a
-  bug: that data can no longer be recomputed. Both `--verify` commands report
-  it and exit 1.
+- A parsed `raw_archive` row whose file is missing, or no longer matches its
+  recorded sha256, is the combination that is a bug: that data can no longer be
+  recomputed from a trusted source. Both `--verify` commands report it
+  (`missing raw file` / `altered raw file`) and exit 1, and a late recovery that
+  would need such a file stops with a 500 and applies nothing.
 
 After a real power cut or a hard reset (untested by the drill; these are the checks to run):
 
@@ -309,3 +314,35 @@ Unverified on hardware (no device is owned; every test uses a fake transport):
 - what the device shows when a send is cut off part-way by the 10 s budget;
 - how long a real 7-page Books send takes, and so whether 2 s / 10 s are the right limits;
 - brightness, gamma and legibility on the panel (Phase 5).
+
+## 16. Upgrading (new code, new migration)
+
+The running service never migrates: it reads its list of migrations once, when it
+starts, and every request and job refuses a db whose schema version is not the
+one it started with (the phone gets 503 `schema_mismatch`, the pushed file is
+kept in `data/raw/health/` and the next push re-sends those days). The tools
+that read the live db (`tools.replay`, `tools.sync`, `tools.render --date`,
+`tools.backup --verify`) do not migrate either; on a db that is behind they
+stop with `refusing: ... run uv run python -m tools.migrate` and exit 2.
+`tools.backup` itself works on a db that is behind, so the backup comes first.
+
+```sh
+cd /Users/maxwelllee12/life-dashboard
+git pull && uv sync
+uv run python -m tools.backup                                   # 1. back up (works before migrating)
+launchctl bootout gui/$(id -u)/com.maxlee.life-dashboard        # 2. stop
+uv run python -m tools.migrate                                  # 3. migrate; prints schema N -> M and "normalised K activity record(s)"
+uv run python -m tools.replay --verify                          # 4. stored data still equals the archive; exit 0
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.maxlee.life-dashboard.plist   # 5. start
+curl -s http://127.0.0.1:8080/healthz
+```
+
+`tools.migrate` is safe to repeat. Besides the schema it rewrites merged
+activities to the current canonical-copy rule (the copy with the most
+heart-rate samples names the activity); run it once after pulling the commit
+that introduced that rule, or `tools.replay --verify` reports those activities
+as differences. If step 3 or 4 fails: do not start the service; restore the
+backup from step 1 (section 12, `--overwrite-live`) and check out the previous
+commit. Starting the service without step 3 also migrates the schema (it does
+so at start), but it does not normalise old activities and gives you no chance
+to look first.

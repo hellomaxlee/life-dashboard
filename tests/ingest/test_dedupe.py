@@ -42,7 +42,7 @@ def test_phone_copy_arriving_first_still_yields_one_activity(client, db):
     client.post("/ingest/health", content=json.dumps({"data": {"workouts": [watch]}}).encode())
     assert count(db, "activities") == 1
     activity = db.execute("SELECT * FROM activities").fetchone()
-    assert activity["id"] == PHONE_ID
+    assert activity["id"] == WATCH_ID
     assert activity["hr_sample_count"] == 20
     assert activity["distance_m"] == pytest.approx(4.21 * 1609.344)
     assert count(db, "activity_sources") == 2

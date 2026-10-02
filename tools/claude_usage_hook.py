@@ -11,7 +11,6 @@ python tools/claude_usage_hook.py [--out PATH] < statusline.json
 
 from __future__ import annotations
 
-import argparse
 import json
 import os
 import sys
@@ -54,16 +53,25 @@ def _reject_constant(name: str) -> float:
     raise ValueError(name)
 
 
+def out_path(argv: list[str]) -> Path:
+    """`--out PATH` or the configured path. `--out` with no value is an error (ValueError),
+    never a write to the configured path."""
+    if "--out" not in argv:
+        return configured_path()
+    index = argv.index("--out")
+    if index + 1 >= len(argv) or argv[index + 1].startswith("--"):
+        raise ValueError("--out needs a path")
+    return Path(argv[index + 1])
+
+
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="tools.claude_usage_hook", add_help=False)
-    parser.add_argument("--out", metavar="PATH")
     try:
-        args, _ = parser.parse_known_args(argv)
+        target = out_path(sys.argv[1:] if argv is None else argv)
         stream = getattr(sys.stdin, "buffer", sys.stdin)
         feed = json.loads(stream.read(), parse_constant=_reject_constant)
         record = usage_record(feed, datetime.now(UTC))
         if record is not None:
-            write_atomic(Path(args.out) if args.out else configured_path(), record)
+            write_atomic(target, record)
     except (Exception, SystemExit):
         pass
     return 0

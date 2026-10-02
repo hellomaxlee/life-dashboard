@@ -56,27 +56,61 @@ def _canonical_id(
     return workout.external_id, False
 
 
+def copy_rank(entry: dict) -> tuple:
+    """Order of the copies of one activity: most HR samples, then earliest start, then
+    lowest external id. The first is the canonical copy."""
+    samples = int(entry.get("hr_sample_count") or 0)
+    return (-samples, entry["start_utc"], entry["external_id"], entry["source_app"])
+
+
 def _merged_entries(conn: sqlite3.Connection, activity_id: str, workout: Workout) -> list[dict]:
+    """Every copy attached to the activity, this one included, in `copy_rank` order.
+
+    The result depends only on which copies are attached, never on the order they arrived.
+    """
     row = conn.execute(
         "SELECT merged_from_json FROM activities WHERE id = ?", (activity_id,)
     ).fetchone()
-    entries: list[dict] = json.loads(row["merged_from_json"]) if row else []
     fresh = _provenance(workout)
-    for index, entry in enumerate(entries):
-        same_app = entry["source_app"] == fresh["source_app"]
-        if same_app and entry["external_id"] == fresh["external_id"]:
-            entries[index] = fresh
-            return entries
+    key = (fresh["source_app"], fresh["external_id"])
+    stored: list[dict] = json.loads(row["merged_from_json"]) if row else []
+    entries = [e for e in stored if (e["source_app"], e["external_id"]) != key]
     entries.append(fresh)
-    return entries
+    return sorted(entries, key=copy_rank)
 
 
 def canonical_entry(entries: list[dict]) -> dict:
-    """The copy that describes the activity: the first seen that carries HR samples, else
-    the first seen. A copy keeps its place when a later push re-sends it, so the choice
-    does not move with which copies a push happens to carry."""
-    with_hr = [e for e in entries if e.get("hr_sample_count")]
-    return (with_hr or entries)[0]
+    """The copy that describes the activity and names it: first in `copy_rank` order."""
+    return min(entries, key=copy_rank)
+
+
+_ACTIVITY_COLUMNS = (
+    "type, start_utc, end_utc, duration_s, distance_m, energy_kcal, avg_hr, max_hr, "
+    "hr_sample_count, hr_span_s, hr_incomplete, merged_from_json"
+)
+
+
+def _rekey(conn: sqlite3.Connection, old_id: str, new_id: str) -> str:
+    """Give an activity the id of its canonical copy, taking its sources and HR samples
+    along. Returns the id the activity has afterwards."""
+    if old_id == new_id:
+        return old_id
+    taken = conn.execute("SELECT 1 FROM activities WHERE id = ?", (new_id,)).fetchone()
+    if taken is not None:
+        return old_id
+    conn.execute(
+        f"INSERT INTO activities (id, {_ACTIVITY_COLUMNS}) "
+        f"SELECT ?, {_ACTIVITY_COLUMNS} FROM activities WHERE id = ?",
+        (new_id, old_id),
+    )
+    conn.execute(
+        "UPDATE activity_sources SET activity_id = ? WHERE activity_id = ?", (new_id, old_id)
+    )
+    conn.execute(
+        "UPDATE workout_hr_samples SET activity_id = ? WHERE activity_id = ?", (new_id, old_id)
+    )
+    conn.execute("DELETE FROM activities WHERE id = ?", (old_id,))
+    return new_id
 
 
 def _hr_fields(
@@ -109,47 +143,11 @@ def _max_or_none(values: list[float | None]) -> float | None:
     return max(present) if present else None
 
 
-def upsert_workout(
-    conn: sqlite3.Connection, workout: Workout, raw_archive_id: int | None, settings: Settings
-) -> bool:
-    """Store one workout under its canonical activity. Returns True when it merged into another."""
-    activity_id, merged = _canonical_id(conn, workout, settings)
-    entries = _merged_entries(conn, activity_id, workout)
+def _write_activity(
+    conn: sqlite3.Connection, activity_id: str, entries: list[dict], settings: Settings
+) -> None:
+    """Derive every stored field of an activity from its attached copies and HR samples."""
     canonical = canonical_entry(entries)
-    conn.execute(
-        "INSERT INTO activities (id, type, start_utc, end_utc, duration_s, merged_from_json) "
-        "VALUES (?, ?, ?, ?, ?, '[]') ON CONFLICT (id) DO NOTHING",
-        (
-            activity_id,
-            canonical["type"],
-            canonical["start_utc"],
-            canonical["end_utc"],
-            canonical["duration_s"],
-        ),
-    )
-    conn.execute(
-        "INSERT INTO activity_sources "
-        "(activity_id, source_app, external_id, start_utc, end_utc, raw_archive_id) "
-        "VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (external_id, source_app) DO UPDATE SET "
-        "activity_id = excluded.activity_id, start_utc = excluded.start_utc, "
-        "end_utc = excluded.end_utc",
-        (
-            activity_id,
-            workout.source_app,
-            workout.external_id,
-            workout.start_utc,
-            workout.end_utc,
-            raw_archive_id,
-        ),
-    )
-    conn.executemany(
-        "INSERT OR REPLACE INTO workout_hr_samples "
-        "(activity_id, ts_utc, bpm_min, bpm_avg, bpm_max, source) VALUES (?, ?, ?, ?, ?, ?)",
-        [
-            (activity_id, s.ts_utc, s.bpm_min, s.bpm_avg, s.bpm_max, s.source)
-            for s in workout.hr_samples
-        ],
-    )
     avg_hr, max_hr, count, span = _hr_fields(conn, activity_id, entries)
     duration_s = int(canonical["duration_s"])
     incomplete = int(count == 0 or span < settings.ingest.hr_incomplete_ratio * duration_s)
@@ -173,7 +171,74 @@ def upsert_workout(
             activity_id,
         ),
     )
+
+
+def upsert_workout(
+    conn: sqlite3.Connection, workout: Workout, raw_archive_id: int | None, settings: Settings
+) -> bool:
+    """Store one workout under its canonical activity. Returns True when it merged into another.
+
+    The activity's id is its canonical copy's external id, so attaching a better copy
+    re-keys the activity; the stored record is a function of the set of copies only.
+    """
+    attached_to, merged = _canonical_id(conn, workout, settings)
+    entries = _merged_entries(conn, attached_to, workout)
+    canonical = canonical_entry(entries)
+    conn.execute(
+        "INSERT INTO activities (id, type, start_utc, end_utc, duration_s, merged_from_json) "
+        "VALUES (?, ?, ?, ?, ?, '[]') ON CONFLICT (id) DO NOTHING",
+        (
+            attached_to,
+            canonical["type"],
+            canonical["start_utc"],
+            canonical["end_utc"],
+            canonical["duration_s"],
+        ),
+    )
+    conn.execute(
+        "INSERT INTO activity_sources "
+        "(activity_id, source_app, external_id, start_utc, end_utc, raw_archive_id) "
+        "VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (external_id, source_app) DO UPDATE SET "
+        "activity_id = excluded.activity_id, start_utc = excluded.start_utc, "
+        "end_utc = excluded.end_utc",
+        (
+            attached_to,
+            workout.source_app,
+            workout.external_id,
+            workout.start_utc,
+            workout.end_utc,
+            raw_archive_id,
+        ),
+    )
+    conn.executemany(
+        "INSERT OR REPLACE INTO workout_hr_samples "
+        "(activity_id, ts_utc, bpm_min, bpm_avg, bpm_max, source) VALUES (?, ?, ?, ?, ?, ?)",
+        [
+            (attached_to, s.ts_utc, s.bpm_min, s.bpm_avg, s.bpm_max, s.source)
+            for s in workout.hr_samples
+        ],
+    )
+    activity_id = _rekey(conn, attached_to, str(canonical["external_id"]))
+    _write_activity(conn, activity_id, entries, settings)
     return merged
+
+
+def recanonicalize(conn: sqlite3.Connection, settings: Settings) -> int:
+    """Bring every stored activity to the current canonical rule; returns how many changed.
+
+    For rows written before the record became a function of the set of copies. Idempotent.
+    """
+    changed = 0
+    for row in conn.execute("SELECT * FROM activities ORDER BY id").fetchall():
+        before = dict(row)
+        entries = sorted(json.loads(row["merged_from_json"]), key=copy_rank)
+        if not entries:
+            continue
+        activity_id = _rekey(conn, row["id"], str(entries[0]["external_id"]))
+        _write_activity(conn, activity_id, entries, settings)
+        after = conn.execute("SELECT * FROM activities WHERE id = ?", (activity_id,)).fetchone()
+        changed += dict(after) != before
+    return changed
 
 
 def sleep_id(session: SleepSession) -> str:

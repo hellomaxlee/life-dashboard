@@ -22,6 +22,7 @@ from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse
 
 from app.config import Settings
+from app.db import SchemaMismatch
 from app.ingest.parse import parse_payload
 from app.ingest.store import IngestStats, store_payload
 from app.timeutil import UTC_ISO, now_utc
@@ -33,8 +34,8 @@ router = APIRouter()
 Apply = Callable[[sqlite3.Connection, bytes, int, Settings, bool], object]
 
 
-class MissingRawError(Exception):
-    pass
+class RecoveryError(Exception):
+    """A late payload could not be applied because a later one could not be re-applied."""
 
 
 @dataclass(frozen=True)
@@ -144,7 +145,7 @@ def archive_raw(
             raise
         if wrote and racing.path != target:
             target.unlink(missing_ok=True)
-        return ArchiveResult(racing.raw_archive_id, racing.path, digest, True)
+        return racing
     return ArchiveResult(int(cursor.lastrowid), target, digest, False)
 
 
@@ -177,18 +178,25 @@ def run_ingest(
             "SELECT source FROM raw_archive WHERE id = ?", (raw_archive_id,)
         ).fetchone()["source"]
         later = conn.execute(
-            "SELECT id, path FROM raw_archive WHERE source = ? AND parsed_ok = 1 AND id > ? "
-            "ORDER BY id",
+            "SELECT id, path, sha256 FROM raw_archive WHERE source = ? AND parsed_ok = 1 "
+            "AND id > ? ORDER BY id",
             (source, raw_archive_id),
         ).fetchall()
         for row in later:
             file = raw_file(archive_dir, source, row["path"])
+            where = f"cannot re-apply raw_archive {row['id']} after {raw_archive_id}"
             if not file.is_file():
-                raise MissingRawError(
-                    f"cannot re-apply raw_archive {row['id']} after {raw_archive_id}: "
-                    f"file missing: {file.name}"
+                raise RecoveryError(f"{where}: file missing: {file.name}")
+            later_body = file.read_bytes()
+            if hashlib.sha256(later_body).hexdigest() != row["sha256"]:
+                raise RecoveryError(
+                    f"{where}: {file.name} no longer matches its recorded sha256 "
+                    "(the file was changed on disk)"
                 )
-            apply(conn, file.read_bytes(), int(row["id"]), settings, False)
+            try:
+                apply(conn, later_body, int(row["id"]), settings, False)
+            except Exception as exc:
+                raise RecoveryError(f"{where}: {type(exc).__name__}: {exc}") from exc
         mark_parsed(conn, raw_archive_id, True, None)
         conn.execute("COMMIT")
     except Exception as exc:
@@ -236,7 +244,7 @@ def authorized(request: Request, token: str) -> bool:
     return request.headers.get("x-api-key", "").strip() == token
 
 
-def _busy(settings: Settings, body: bytes, exc: Exception) -> Response:
+def _busy(settings: Settings, body: bytes, exc: Exception, status: str = "busy") -> Response:
     """The db would not take the row. Keep the bytes on disk and say so; the phone retries."""
     digest = hashlib.sha256(body).hexdigest()
     folder = settings.storage.raw_dir / SOURCE
@@ -246,9 +254,9 @@ def _busy(settings: Settings, body: bytes, exc: Exception) -> Response:
     if kept is None:
         kept = folder / raw_filename(now_utc(), digest)
         _write_durably(kept, body)
-    log.error("db busy, payload kept unrecorded as %s: %s", kept.name, exc)
+    log.error("db %s, payload kept unrecorded as %s: %s", status, kept.name, exc)
     return JSONResponse(
-        {"status": "busy", "file": kept.name, "error": f"{type(exc).__name__}: {exc}"},
+        {"status": status, "file": kept.name, "error": f"{type(exc).__name__}: {exc}"},
         status_code=503,
     )
 
@@ -263,6 +271,8 @@ async def ingest_health(request: Request) -> Response:
         conn: sqlite3.Connection = request.app.state.open_conn()
     except sqlite3.OperationalError as exc:
         return _busy(settings, body, exc)
+    except SchemaMismatch as exc:
+        return _busy(settings, body, exc, status="schema_mismatch")
     try:
         try:
             archived = archive_raw(conn, settings.storage.raw_dir, body)

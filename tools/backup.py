@@ -33,7 +33,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from app.config import Settings, load_settings
-from app.db import connect, open_db
+from app.db import SchemaMismatch, connect_live, open_db
 from app.timeutil import UTC_ISO, now_utc
 from tools import replay
 from tools.replay import checksum, diff, snapshot
@@ -397,6 +397,8 @@ def verify(
     payloads that were never parsed). A backup that cannot be read at all is a BackupError.
     """
     manifest = read_manifest(backup)
+    if settings.storage.db_path.is_file():
+        connect_live(settings.storage.db_path).close()
     notes = notes if notes is not None else []
     problems = _file_level_problems(backup, manifest)
     if "db_sha256" not in manifest:
@@ -427,7 +429,7 @@ def verify(
         if not settings.storage.db_path.is_file():
             problems.append(f"live: no database at {settings.storage.db_path}")
         else:
-            live_conn = connect(settings.storage.db_path)
+            live_conn = connect_live(settings.storage.db_path)
             try:
                 live = snapshot(live_conn)
             finally:
@@ -521,6 +523,9 @@ def main(argv: list[str] | None = None) -> int:
         result = create_backup(settings, Path(args.out)) if args.out else nightly(settings)
     except BackupError as exc:
         print(f"backup error: {exc}", file=sys.stderr)
+        return 2
+    except SchemaMismatch as exc:
+        print(f"refusing: {exc}", file=sys.stderr)
         return 2
     print(
         f"backup {result.path} checksum {result.data_checksum} "

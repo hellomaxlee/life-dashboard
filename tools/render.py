@@ -18,7 +18,7 @@ from datetime import date, datetime
 from pathlib import Path
 
 from app.config import REPO_ROOT, Settings, load_settings
-from app.db import open_db
+from app.db import SchemaMismatch, connect_live, open_db
 from app.render.adapters.file import gif_bytes, png_bytes
 from app.render.celebrate import celebrations_for
 from app.render.frame import Clip
@@ -68,7 +68,11 @@ def _view_for(args: argparse.Namespace, settings: Settings) -> tuple[DayView, da
         day_local = date.fromisoformat(args.date).isoformat()
     except ValueError:
         raise ValueError(f"--date {args.date} is not a valid date (YYYY-MM-DD)") from None
-    conn = open_db(settings.storage.db_path)
+    db_path = settings.storage.db_path
+    try:
+        conn = connect_live(db_path) if db_path.is_file() else open_db(db_path)
+    except SchemaMismatch as exc:
+        raise ValueError(str(exc)) from None
     try:
         view = view_from_db(conn, settings, day_local)
     finally:

@@ -27,7 +27,7 @@ from datetime import datetime
 from pathlib import Path
 
 from app.config import REPO_ROOT, Settings, load_settings
-from app.db import open_db
+from app.db import SchemaMismatch, connect_live, open_db
 from app.ingest import claude_usage, health
 from app.ingest.health import archive_raw, received_at_from_filename
 from app.timeutil import from_utc_iso
@@ -99,6 +99,13 @@ class ReplayPlan:
     unrecorded: list[str] = field(default_factory=list)
     unparsed: list[str] = field(default_factory=list)
     missing: list[str] = field(default_factory=list)
+    altered: list[str] = field(default_factory=list)
+
+    def refused(self) -> list[str]:
+        """Parsed payloads that cannot be replayed; each is a difference."""
+        return [f"missing raw file: {rel}" for rel in self.missing] + [
+            f"altered raw file: {rel} (does not match its recorded sha256)" for rel in self.altered
+        ]
 
     def notes(self) -> list[str]:
         lines: list[str] = []
@@ -124,7 +131,9 @@ def replay_plan(
 ) -> ReplayPlan:
     """The one definition of the replay set, shared by tools.replay and tools.backup.
 
-    With raw_archive rows: parsed rows in id order. Without: every file, filename order.
+    With raw_archive rows: parsed rows in id order, each file checked against its
+    recorded sha256 (a missing or altered file is refused, not replayed). Without:
+    every file, filename order.
     """
     on_disk = {
         f"{source}/{path.name}": path
@@ -134,7 +143,7 @@ def replay_plan(
     rows = []
     if recorded is not None:
         rows = recorded.execute(
-            "SELECT source, path, received_at_utc, parsed_ok FROM raw_archive ORDER BY id"
+            "SELECT source, path, received_at_utc, parsed_ok, sha256 FROM raw_archive ORDER BY id"
         ).fetchall()
     if not rows:
         ordered = sorted(on_disk.items(), key=lambda item: (item[1].name, item[0]))
@@ -145,7 +154,7 @@ def replay_plan(
         return ReplayPlan([e for e in entries if _on_or_after(e[2], since)], "filename")
     plan = ReplayPlan([], "raw_archive.id")
     known: set[str] = set()
-    for source, recorded_path, received_at_utc, parsed_ok in rows:
+    for source, recorded_path, received_at_utc, parsed_ok, sha256 in rows:
         rel = f"{source}/{Path(recorded_path).name}"
         known.add(rel)
         if source not in INGESTERS:
@@ -154,6 +163,8 @@ def replay_plan(
             plan.unparsed.append(rel)
         elif rel not in on_disk:
             plan.missing.append(rel)
+        elif hashlib.sha256(on_disk[rel].read_bytes()).hexdigest() != sha256:
+            plan.altered.append(rel)
         elif _on_or_after(from_utc_iso(received_at_utc), since):
             plan.entries.append((source, on_disk[rel], from_utc_iso(received_at_utc)))
     plan.unrecorded = sorted(set(on_disk) - known)
@@ -202,7 +213,7 @@ def verify(settings: Settings, scratch_db: Path) -> tuple[list[str], list[str]]:
 
     Returns (differences, notes). `+` rows are in live only, `-` rows in the replay only.
     """
-    live = open_db(settings.storage.db_path)
+    live = connect_live(settings.storage.db_path)
     try:
         plan = replay_plan(settings.storage.raw_dir, live)
         scratch = replay(settings.storage.raw_dir, scratch_db, settings, plan=plan)
@@ -212,7 +223,7 @@ def verify(settings: Settings, scratch_db: Path) -> tuple[list[str], list[str]]:
             scratch.close()
     finally:
         live.close()
-    lines.extend(f"missing raw file: {rel}" for rel in plan.missing)
+    lines.extend(plan.refused())
     return lines, plan.notes()
 
 
@@ -235,6 +246,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--scratch", default=str(SCRATCH_DB))
     args = parser.parse_args(argv)
     settings = load_settings()
+    try:
+        return _run(args, settings)
+    except SchemaMismatch as exc:
+        print(f"refusing: {exc}", file=sys.stderr)
+        return 2
+
+
+def _run(args: argparse.Namespace, settings: Settings) -> int:
     live_exists = settings.storage.db_path.is_file()
 
     if args.verify:
@@ -250,20 +269,20 @@ def main(argv: list[str] | None = None) -> int:
         return 1 if lines else 0
 
     if args.since:
-        recorded = open_db(settings.storage.db_path) if live_exists else None
+        recorded = connect_live(settings.storage.db_path) if live_exists else None
         try:
             plan = replay_plan(settings.storage.raw_dir, recorded, args.since)
         finally:
             if recorded is not None:
                 recorded.close()
         conn = replay(settings.storage.raw_dir, Path(args.scratch), settings, plan=plan)
-        for note in [*plan.notes(), *(f"missing raw file: {rel}" for rel in plan.missing)]:
+        for note in [*plan.notes(), *plan.refused()]:
             print(f"note: {note}", file=sys.stderr)
         print(report(conn))
         conn.close()
         return 0
 
-    live = open_db(settings.storage.db_path)
+    live = connect_live(settings.storage.db_path)
     try:
         if args.snapshot:
             target = Path(args.snapshot)
