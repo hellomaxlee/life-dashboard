@@ -488,7 +488,9 @@ def test_sync_cli_polls_with_a_url(db, settings, monkeypatch, capsys):
     assert "goodreads fetch failed: ConnectError" in capsys.readouterr().err
 
 
-def test_sync_cli_still_reads_claude_usage(db, settings, capsys):
+def test_sync_cli_still_reads_claude_usage(db, settings, capsys, tmp_path, monkeypatch):
+    usage = ClaudeUsageConfig(path=tmp_path / "absent.json", stale_hours=24)
+    monkeypatch.setattr(sync, "load_settings", lambda: replace(settings, claude_usage=usage))
     assert sync.main(["--source", "claude_usage"]) == 0
     assert capsys.readouterr().out.strip() == "claude_usage missing"
 
