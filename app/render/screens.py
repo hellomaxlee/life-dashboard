@@ -3,6 +3,10 @@
 Each takes a DayView and returns a Clip. Every None in the view is drawn as a stated
 fallback, so a view with nothing in it still yields three full frames. Rest is drawn plainly
 and never as a miss: an empty dot is a quiet ring, a short night is a blue number, not a red one.
+
+The summary is shown as word-wrapped pages, two lines at a time, about two seconds each. A
+pixel scroll of a 110-character line needs some 300 frames and the device holds fewer than
+60, so pages are the form that reaches the panel as drawn.
 """
 
 from __future__ import annotations
@@ -16,6 +20,7 @@ from app.render.font import (
     draw_text,
     draw_text_centered,
     draw_text_right,
+    normalize,
     text_width,
 )
 from app.render.frame import SIZE, Clip, Color, Frame, new_frame, still
@@ -35,18 +40,18 @@ from app.render.palette import (
     dim,
 )
 from app.render.usage import STALE_FRAME_MS, STALE_FRAMES, draw_usage, usage_state
-from app.render.view import DayView
+from app.render.view import DayView, valid_count, valid_sleep_hours
 from app.timeutil import from_utc_iso
 
 LEFT = 2
 RIGHT = 61
 DOT_ROW_Y = 17
 SLEEP_BAR_HOURS = 10
-SCROLL_STEP_PX = 2
-SCROLL_FRAME_MS = 40
-SCROLL_HOLD_MS = 1200
-SCROLL_GAP_PX = 24
-SUMMARY_Y = 51
+LINE_WIDTH = 60
+PAGE_MS = 2000
+SUMMARY_MAX_CHARS = 110
+SUMMARY_LINE_YS = (45, 54)
+PAGE_PIP_Y = 63
 NO_SUMMARY = "No summary yet."
 _WEEKDAYS = ("MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN")
 _SPINE_HEIGHTS = (13, 11, 14, 12, 13, 10, 14, 12, 11, 13, 12, 14)
@@ -121,32 +126,38 @@ def dot_color(index: int) -> Color:
     return DOTS[index % len(DOTS)]
 
 
+def _count(value: int | None) -> int | None:
+    return value if valid_count(value) else None
+
+
 def _week_frame(view: DayView, now: datetime, tick: int) -> Frame:
     frame = new_frame()
     draw_text(frame, LEFT, 2, "WEEK", LABEL, SMALL)
     centres, radius = dot_layout(view.week_target)
-    if view.week_dots is None:
+    dots = _count(view.week_dots)
+    streak = _count(view.streak_weeks)
+    if dots is None:
         draw_text_right(frame, RIGHT, 2, "NO DATA", TEXT, SMALL)
     else:
-        draw_text_right(frame, RIGHT, 2, f"{view.week_dots} OF {view.week_target}", TEXT, SMALL)
+        draw_text_right(frame, RIGHT, 2, f"{dots} OF {view.week_target}", TEXT, SMALL)
     for index, cx in enumerate(centres):
-        if view.week_dots is None:
+        if dots is None:
             draw_ring(frame, cx, DOT_ROW_Y, radius, RING, dashed=True)
-        elif index < view.week_dots:
+        elif index < dots:
             draw_disc(frame, cx, DOT_ROW_Y, radius, dot_color(index))
         else:
             draw_ring(frame, cx, DOT_ROW_Y, radius, RING)
 
     draw_usage(frame, usage_state(view.claude, now, view.stale_hours), tick)
 
-    if view.streak_weeks is None:
+    if streak is None:
         draw_text_centered(frame, 52, "STREAK NO DATA", TEXT, SMALL)
     else:
-        number = str(view.streak_weeks)
+        number = str(streak)
         tail = "WK STREAK"
         total = text_width(number, BODY) + 3 + text_width(tail, SMALL)
         x = (SIZE - total) // 2
-        after = draw_text(frame, x, 50, number, GOLD if view.streak_weeks else TEXT, BODY)
+        after = draw_text(frame, x, 50, number, GOLD if streak else TEXT, BODY)
         draw_text(frame, after + 2, 52, tail, LABEL, SMALL)
     return frame
 
@@ -163,6 +174,18 @@ def render_week(view: DayView, now: datetime) -> Clip:
 def sleep_text(hours: float) -> str:
     """One decimal, truncated, so the frame never shows 7.0 for a night short of 7."""
     return f"{int(hours * 10 + 1e-6) / 10:.1f}"
+
+
+def sleep_met(view: DayView) -> bool:
+    """The sleep win as the frame shows it: the displayed number against the target."""
+    if not valid_sleep_hours(view.sleep_hours):
+        return False
+    return float(sleep_text(view.sleep_hours)) >= view.sleep_target_hours
+
+
+def sleep_fill(hours: float) -> int:
+    """Bar pixels for a night, floored, so a night short of the goal never touches its tick."""
+    return min(60, int(hours * 60 / SLEEP_BAR_HOURS + 1e-9))
 
 
 def _hours_label(hours: float) -> str:
@@ -189,16 +212,15 @@ def render_today(view: DayView) -> Clip:
     draw_bitmap(frame, LEFT, 11, MOON, VIOLET)
     target_x = LEFT + int(view.sleep_target_hours / SLEEP_BAR_HOURS * 60)
     fill_rect(frame, LEFT, 26, RIGHT, 28, TRACK)
-    if view.sleep_hours is None:
+    if not valid_sleep_hours(view.sleep_hours):
         draw_text(frame, 16, 9, "--", TEXT, BODY, scale=2)
         draw_text(frame, LEFT, 32, "SLEEP", LABEL, SMALL)
         draw_text_right(frame, RIGHT, 32, "NO DATA", TEXT, SMALL)
     else:
-        met = float(sleep_text(view.sleep_hours)) >= view.sleep_target_hours
-        color = GREEN if met else SKY
+        color = GREEN if sleep_met(view) else SKY
         after = draw_text(frame, 16, 9, sleep_text(view.sleep_hours), color, BODY, scale=2)
         draw_text(frame, after + 1, 16, "h", color, BODY)
-        filled = min(60, int(view.sleep_hours / SLEEP_BAR_HOURS * 60 + 0.5))
+        filled = sleep_fill(view.sleep_hours)
         if filled:
             fill_rect(frame, LEFT, 26, LEFT + filled - 1, 28, color)
         draw_text(frame, LEFT, 32, "SLEEP", LABEL, SMALL)
@@ -218,32 +240,49 @@ def render_today(view: DayView) -> Clip:
         draw_text(frame, 14, 42, "REST SO FAR", TEXT, SMALL)
 
     draw_text(frame, LEFT, 51, "STEPS", LABEL, SMALL)
-    steps = "NO DATA" if view.steps is None else str(view.steps)
+    steps = "NO DATA" if _count(view.steps) is None else str(view.steps)
     draw_text_right(frame, RIGHT, 51, steps, TEXT, SMALL)
     draw_text(frame, LEFT, 58, as_of_label(view), LABEL, SMALL)
     return still(frame)
+
+
+def _draw_book_count(frame: Frame, count: int, target: int) -> None:
+    """The big count and "of N". Steps down in size until the whole line fits the frame."""
+    number, tail = str(count), f"of {target}"
+    room = RIGHT - LEFT + 1
+    big = text_width(number, BODY, 2)
+    if big + 4 + text_width(tail, BODY) <= room:
+        after = draw_text(frame, LEFT, 9, number, GOLD, BODY, scale=2)
+        draw_text(frame, after + 2, 16, tail, TEXT, BODY)
+    elif big + 2 + text_width(tail, SMALL) <= room:
+        after = draw_text(frame, LEFT, 9, number, GOLD, BODY, scale=2)
+        draw_text(frame, after, 18, tail, TEXT, SMALL)
+    elif text_width(number, BODY) + 2 + text_width(tail, SMALL) <= room:
+        after = draw_text(frame, LEFT, 16, number, GOLD, BODY)
+        draw_text(frame, after + 1, 18, tail, TEXT, SMALL)
+    else:
+        draw_text(frame, LEFT, 16, "MANY", GOLD, BODY)
 
 
 def _books_base(view: DayView) -> Frame:
     frame = new_frame()
     draw_text(frame, LEFT, 2, "BOOKS", LABEL, SMALL)
     draw_text_right(frame, RIGHT, 2, view.day_local[:4], TEXT, SMALL)
-    if view.books_ytd is None:
+    read = _count(view.books_ytd)
+    if read is None:
         draw_text(frame, LEFT, 9, "--", TEXT, BODY, scale=2)
         draw_text_right(frame, RIGHT, 16, "NO DATA", TEXT, SMALL)
     else:
-        after = draw_text(frame, LEFT, 9, str(view.books_ytd), GOLD, BODY, scale=2)
-        draw_text(frame, after + 2, 16, f"of {view.books_target}", TEXT, BODY)
+        _draw_book_count(frame, read, view.books_target)
 
     slots = max(view.books_target, 1)
     spine = max(1, (60 - (slots - 1)) // slots)
-    read = view.books_ytd or 0
     for index in range(slots):
         x0 = LEFT + index * (spine + 1)
         if x0 + spine - 1 > RIGHT:
             break
         top = 41 - _SPINE_HEIGHTS[index % len(_SPINE_HEIGHTS)]
-        if index < read:
+        if index < (read or 0):
             color = SPINES[index % len(SPINES)]
             fill_rect(frame, x0, top, x0 + spine - 1, 40, color)
             fill_rect(frame, x0, top + 2, x0 + spine - 1, top + 2, dim(color, 0.45))
@@ -253,34 +292,68 @@ def _books_base(view: DayView) -> Frame:
     return frame
 
 
+def fit_summary(text: str) -> str:
+    """Collapse whitespace; past 110 characters, cut at a word and end with a visible "..."."""
+    text = " ".join(normalize(text).split())
+    if len(text) <= SUMMARY_MAX_CHARS:
+        return text
+    room = SUMMARY_MAX_CHARS - 3
+    kept = text[:room]
+    if text[room] != " " and " " in kept:
+        kept = kept[: kept.rindex(" ")]
+    return kept.rstrip(" .,;:") + "..."
+
+
+def wrap_lines(text: str) -> list[str]:
+    """Greedy word wrap to LINE_WIDTH pixels. Only a word wider than a line is ever split."""
+    lines: list[str] = []
+    current = ""
+    for word in text.split():
+        candidate = f"{current} {word}" if current else word
+        if text_width(candidate, BODY) <= LINE_WIDTH:
+            current = candidate
+            continue
+        if current:
+            lines.append(current)
+        while text_width(word, BODY) > LINE_WIDTH:
+            cut = len(word) - 1
+            while cut > 1 and text_width(word[:cut], BODY) > LINE_WIDTH:
+                cut -= 1
+            lines.append(word[:cut])
+            word = word[cut:]
+        current = word
+    if current:
+        lines.append(current)
+    return lines
+
+
+def wrap_pages(text: str) -> list[tuple[str, ...]]:
+    """The summary as pages of at most two lines, truncated first if it is over length."""
+    lines = wrap_lines(fit_summary(text))
+    per_page = len(SUMMARY_LINE_YS)
+    return [tuple(lines[i : i + per_page]) for i in range(0, len(lines), per_page)]
+
+
+def _draw_page_pips(frame: Frame, page: int, pages: int) -> None:
+    width = pages * 3 - 1
+    x0 = (SIZE - width) // 2
+    for index in range(pages):
+        color = TEXT if index == page else RING
+        fill_rect(frame, x0 + index * 3, PAGE_PIP_Y, x0 + index * 3 + 1, PAGE_PIP_Y, color)
+
+
 def render_books(view: DayView) -> Clip:
-    """Books this year on a shelf, and the day's one-line summary scrolling underneath."""
+    """Books this year on a shelf, and the day's one-line summary in pages underneath."""
     base = _books_base(view)
-    line = view.summary_line or NO_SUMMARY
-    width = text_width(line, BODY)
-    if width <= SIZE - 2 * LEFT:
-        frame = base.copy()
-        draw_text_centered(frame, SUMMARY_Y, line, TEXT, BODY)
-        return still(frame)
-
-    period = width + SCROLL_GAP_PX
+    pages = wrap_pages(view.summary_line or NO_SUMMARY) or [(NO_SUMMARY,)]
     frames: list[Frame] = []
-    for offset in range(0, period, SCROLL_STEP_PX):
+    for number, page in enumerate(pages):
         frame = base.copy()
-        draw_text(frame, LEFT - offset, SUMMARY_Y, line, TEXT, BODY)
-        draw_text(frame, LEFT - offset + period, SUMMARY_Y, line, TEXT, BODY)
+        for line, y in zip(page, SUMMARY_LINE_YS, strict=False):
+            draw_text(frame, LEFT, y, line, TEXT, BODY)
+        if len(pages) > 1:
+            _draw_page_pips(frame, number, len(pages))
         frames.append(frame)
-    durations = (SCROLL_HOLD_MS,) + (SCROLL_FRAME_MS,) * (len(frames) - 1)
-    return Clip(tuple(frames), durations)
-
-
-SCREEN_ORDER = ("week", "today", "books")
-
-
-def render_rotation(view: DayView, now: datetime) -> dict[str, Clip]:
-    """Every rotation screen, in rotation order."""
-    return {
-        "week": render_week(view, now),
-        "today": render_today(view),
-        "books": render_books(view),
-    }
+    if len(frames) == 1:
+        return still(frames[0])
+    return Clip(tuple(frames), (PAGE_MS,) * len(frames))

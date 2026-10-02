@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import json
 
-from app.render.screens import render_rotation
-from app.render.view import ClaudeUsage, DayView, view_from_db, view_from_metrics, week_start
+from app.render.view import ClaudeUsage, DayView, view_from_metrics, week_start
+from app.render.view_db import view_from_db
 from app.timeutil import from_utc_iso
-from tests.render import WEEK_41, load
+from tests.render import WEEK_41, load, rotation
 
 
 def put_daily(db, day: str, metrics: dict) -> None:
@@ -61,7 +61,7 @@ def test_week_starts_monday():
 def test_empty_database_gives_an_all_missing_view_that_still_renders(db, settings):
     view = view_from_db(db, settings, "2026-10-02")
     assert view == view_from_metrics("2026-10-02", {}, {}, settings)
-    clips = render_rotation(view, from_utc_iso("2026-10-02T16:00:00Z"))
+    clips = rotation(view, from_utc_iso("2026-10-02T16:00:00Z"))
     assert all(clip.poster.getbbox() is not None for clip in clips.values())
 
 

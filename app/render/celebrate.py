@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import math
 import random
+from dataclasses import dataclass
 from typing import Literal
 
 from app.render.font import BODY, SMALL, draw_text, draw_text_centered, text_width
@@ -26,7 +27,9 @@ from app.render.screens import (
     draw_disc,
     draw_ring,
     fill_rect,
+    sleep_met,
 )
+from app.render.view import DayView, valid_count
 
 Win = Literal["sleep", "workout", "book"]
 
@@ -125,8 +128,11 @@ def _rainbow_wave(frame: Frame, text: str, y: int, tick: int) -> None:
         x = draw_text(frame, x, y + bob, char, hue(index * 0.11 + tick * 0.04), BODY)
 
 
-def party_clip(target: int = 3, seed: int = 7) -> Clip:
-    """The week-complete clip, about 3.4 s: the last dot lands, then confetti."""
+def party_clip(count: int = 3, target: int = 3, seed: int = 7) -> Clip:
+    """The week-complete clip, about 3.4 s: the last dot lands, then confetti.
+
+    `count` and `target` are the week's stored numbers; the clip prints them as given.
+    """
     rng = random.Random(seed)
     centres, radius = dot_layout(target)
     burst_at = _DROP_FRAMES + _FLASH_FRAMES
@@ -197,7 +203,7 @@ def party_clip(target: int = 3, seed: int = 7) -> Clip:
             if wide:
                 _put(frame, x + 1, y, shade)
         if tick >= burst_at:
-            draw_text_centered(frame, 31, f"{target} OF {target}", WHITE, SMALL)
+            draw_text_centered(frame, 31, f"{count} OF {target}", WHITE, SMALL)
             _rainbow_wave(frame, "WEEK DONE", 42, tick)
         frames.append(frame)
     return Clip(tuple(frames), (PARTY_FRAME_MS,) * PARTY_FRAMES, poster_index=burst_at + 14)
@@ -206,5 +212,36 @@ def party_clip(target: int = 3, seed: int = 7) -> Clip:
 CELEBRATION_ORDER = ("sparkle", "party")
 
 
-def render_celebrations(target: int = 3, win: Win = "workout") -> dict[str, Clip]:
-    return {"sparkle": sparkle_clip(win), "party": party_clip(target)}
+@dataclass(frozen=True)
+class Celebration:
+    name: str
+    clip: Clip
+    earned: bool
+
+
+def earned_win(view: DayView) -> Win | None:
+    """The small win the view itself shows: a quality workout, else a night at the sleep target."""
+    if view.today_dot is True:
+        return "workout"
+    if sleep_met(view):
+        return "sleep"
+    return None
+
+
+def week_complete(view: DayView) -> bool:
+    return valid_count(view.week_dots) and view.week_dots >= view.week_target
+
+
+def celebrations_for(view: DayView) -> list[Celebration]:
+    """Both clips for a day, each marked earned or not.
+
+    A preview shows a clip the day did not earn as a labelled sample. An earned party prints
+    the week's stored count and target; a sample prints the target twice.
+    """
+    win = earned_win(view)
+    done = week_complete(view)
+    count = view.week_dots if done else view.week_target
+    return [
+        Celebration("sparkle", sparkle_clip(win or "workout"), win is not None),
+        Celebration("party", party_clip(count, view.week_target), done),
+    ]

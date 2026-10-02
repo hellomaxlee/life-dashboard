@@ -10,15 +10,12 @@ import httpx
 import pytest
 
 from app.render.adapters.pixoo import (
-    MAX_FRAMES,
     PixooAdapter,
     PixooError,
     pixoo_from_settings,
     require_lan_host,
-    thin,
 )
-from app.render.screens import render_rotation
-from tests.render import STALE, WEEK_41, load
+from tests.render import STALE, WEEK_41, load, rotation
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 HOST = "192.168.1.50"
@@ -39,10 +36,10 @@ def fake_device(seen: list[httpx.Request], pic_id: int = 7, fail_on: str | None 
 
 def test_still_frame_goes_as_one_send_http_gif(settings):
     view, now = load(WEEK_41, settings)
-    clip = render_rotation(view, now)["week"]
+    clip = rotation(view, now)["week"]
     seen: list[httpx.Request] = []
     report = PixooAdapter(HOST, fake_device(seen)).send(clip)
-    assert (report.pic_id, report.frames_sent, report.frames_dropped) == (7, 1, 0)
+    assert (report.pic_id, report.frames_sent) == (7, 1)
     assert [str(r.url) for r in seen] == [f"http://{HOST}/post"] * 2
     assert all(r.method == "POST" for r in seen)
     assert json.loads(seen[0].content) == {"Command": "Draw/GetHttpGifId"}
@@ -63,7 +60,7 @@ def test_still_frame_goes_as_one_send_http_gif(settings):
 
 def test_clip_sends_each_frame_with_its_offset_and_duration(settings):
     view, now = load(STALE, settings)
-    clip = render_rotation(view, now)["week"]
+    clip = rotation(view, now)["week"]
     seen: list[httpx.Request] = []
     report = PixooAdapter(HOST, fake_device(seen)).send(clip)
     assert report.frames_sent == 16
@@ -74,24 +71,21 @@ def test_clip_sends_each_frame_with_its_offset_and_duration(settings):
     assert base64.b64decode(bodies[5]["PicData"]) == clip.frames[5].tobytes()
 
 
-def test_long_clip_is_thinned_to_the_frame_limit_keeping_total_time(settings):
+def test_paged_books_clip_goes_whole_with_its_page_durations(settings):
     view, now = load(WEEK_41, settings)
-    books = render_rotation(view, now)["books"]
-    assert len(books.frames) > MAX_FRAMES
-    fitted = thin(books)
-    assert len(fitted.frames) == MAX_FRAMES
-    assert fitted.total_ms == books.total_ms
-    assert fitted.frames[0] is books.frames[0]
+    books = rotation(view, now)["books"]
+    assert 1 < len(books.frames) <= 59
     seen: list[httpx.Request] = []
     report = PixooAdapter(HOST, fake_device(seen)).send(books)
-    assert report.frames_sent == MAX_FRAMES
-    assert report.frames_dropped == len(books.frames) - MAX_FRAMES
-    assert len(seen) == MAX_FRAMES + 1
+    assert report.frames_sent == len(books.frames)
+    bodies = [json.loads(r.content) for r in seen[1:]]
+    assert [b["PicSpeed"] for b in bodies] == [2000] * len(books.frames)
+    assert base64.b64decode(bodies[-1]["PicData"]) == books.frames[-1].tobytes()
 
 
 def test_device_error_raises(settings):
     view, now = load(WEEK_41, settings)
-    clip = render_rotation(view, now)["week"]
+    clip = rotation(view, now)["week"]
     with pytest.raises(PixooError, match="Draw/SendHttpGif"):
         PixooAdapter(HOST, fake_device([], fail_on="Draw/SendHttpGif")).send(clip)
     with pytest.raises(PixooError, match="Draw/GetHttpGifId"):

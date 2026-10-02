@@ -1,9 +1,17 @@
 """The Claude usage bar on the Week screen (issue #2).
 
 A thin bar under the dots: width proportional to the seven-day used percent, colour stepping
-green, amber, red. The window is rolling, so the label says when it resets and never "this
-week". A reading older than `stale_hours` gets a pulsing dot and its age; an absent reading
-is drawn as "NO DATA" on a dashed track. Not a target, not a win.
+green, amber, red at 60 and 85. Two one-pixel ticks above and below the track mark those
+steps by position, so the level does not rest on hue alone. The window is rolling, so the
+label says when it resets and never "this week". An absent reading is drawn as "NO DATA" on a
+dashed track. Not a target, not a win.
+
+Stale means the percent is known to be out of date: the reading is older than `stale_hours`,
+or it has no capture time, or its reset time has already passed. A stale reading gets a
+pulsing dot and an amber second line that alternates with its age.
+
+The label is the percent truncated, never rounded up, so it cannot name a level the bar's
+colour has not reached; the last pixel of the track fills only at 100.
 
 "Now" is always a parameter. Setting USAGE_BAR_MUTANT_REMAINING=1 fills the bar from the
 percent remaining instead of the percent used; it is the mutant that proves the pixel-width
@@ -20,7 +28,7 @@ from datetime import datetime
 from app.render.font import SMALL, draw_text
 from app.render.frame import Color, Frame
 from app.render.palette import AMBER, GREEN, LABEL, RED, TEXT, TRACK, dim
-from app.render.view import ClaudeUsage
+from app.render.view import ClaudeUsage, valid_percent
 from app.timeutil import from_utc_iso
 
 BAR_LEFT = 2
@@ -54,11 +62,13 @@ def mutant_remaining() -> bool:
 
 
 def fill_width(used_pct: float, track_px: int = BAR_WIDTH) -> int:
-    """Pixels to fill, rounded half up. Any use above zero shows at least one pixel."""
+    """Pixels to fill, rounded half up; at least one above zero, the last one only at 100."""
     clamped = min(max(used_pct, 0.0), 100.0)
     if clamped <= 0:
         return 0
-    return max(1, min(track_px, int(clamped / 100 * track_px + 0.5)))
+    if clamped >= 100:
+        return track_px
+    return max(1, min(track_px - 1, int(clamped / 100 * track_px + 0.5)))
 
 
 def level_color(used_pct: float) -> Color:
@@ -67,6 +77,18 @@ def level_color(used_pct: float) -> Color:
     if used_pct >= AMBER_FROM_PCT:
         return AMBER
     return GREEN
+
+
+def tick_columns() -> tuple[int, int]:
+    """The track columns a fill reaches when it turns amber (60) and red (85)."""
+    return (
+        BAR_LEFT + int(AMBER_FROM_PCT / 100 * BAR_WIDTH),
+        BAR_LEFT + int(RED_FROM_PCT / 100 * BAR_WIDTH),
+    )
+
+
+def reset_passed(resets_at_utc: str | None, now: datetime) -> bool:
+    return resets_at_utc is not None and from_utc_iso(resets_at_utc) <= now
 
 
 def reset_label(resets_at_utc: str | None, now: datetime) -> str:
@@ -83,20 +105,22 @@ def reset_label(resets_at_utc: str | None, now: datetime) -> str:
 
 
 def age_label(age_hours: float) -> str:
+    if age_hours < 1:
+        return "SEEN <1H AGO"
     if age_hours < 48:
         return f"SEEN {int(age_hours)}H AGO"
     return f"SEEN {int(age_hours // 24)}D AGO"
 
 
 def usage_state(reading: ClaudeUsage, now: datetime, stale_hours: int) -> UsageState:
-    if reading.used_pct is None:
+    if not valid_percent(reading.used_pct):
         return UsageState(has_data=False)
     shown = 100.0 - reading.used_pct if mutant_remaining() else reading.used_pct
     stale, age = True, "AGE UNKNOWN"
     if reading.captured_at_utc is not None:
         age_hours = (now - from_utc_iso(reading.captured_at_utc)).total_seconds() / 3600
-        stale = age_hours > stale_hours
-        age = age_label(age_hours) if stale else ""
+        stale = age_hours > stale_hours or reset_passed(reading.resets_at_utc, now)
+        age = age_label(max(age_hours, 0.0)) if stale else ""
     return UsageState(
         has_data=True,
         used_pct=reading.used_pct,
@@ -109,7 +133,11 @@ def usage_state(reading: ClaudeUsage, now: datetime, stale_hours: int) -> UsageS
 
 
 def percent_text(used_pct: float) -> str:
-    return f"{int(min(max(used_pct, 0.0), 999.0) + 0.5)}%"
+    """Truncated, so 84.9 reads 84% on an amber bar. A trace of use reads <1%, not 0%."""
+    clamped = min(max(used_pct, 0.0), 100.0)
+    if 0 < clamped < 1:
+        return "<1%"
+    return f"{int(clamped)}%"
 
 
 def draw_usage(frame: Frame, state: UsageState, tick: int = 0) -> None:
@@ -127,6 +155,9 @@ def draw_usage(frame: Frame, state: UsageState, tick: int = 0) -> None:
     if not state.has_data:
         draw_text(frame, after + 2, LINE_1_Y, "NO DATA", TEXT, SMALL)
         return
+    for x in tick_columns():
+        pixels[x, BAR_TOP - 1] = TEXT
+        pixels[x, BAR_TOP + BAR_HEIGHT] = TEXT
     draw_text(frame, after + 2, LINE_1_Y, percent_text(state.used_pct or 0.0), TEXT, SMALL)
 
     line_2 = state.reset_label

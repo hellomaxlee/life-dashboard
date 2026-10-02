@@ -5,8 +5,7 @@ import io
 from PIL import Image, ImageChops
 
 from app.render.gamma import led_gamma
-from app.render.screens import render_rotation
-from tests.render import STALE, WEEK_41, load
+from tests.render import STALE, WEEK_41, load, rotation
 from tools.render import main as render_main
 
 NAMES = ("week", "today", "books", "sparkle", "party")
@@ -27,7 +26,7 @@ def test_preview_page_shows_every_screen_four_ways(client):
 
 def test_preview_images_are_pillow_png_or_gif_bytes(client, settings):
     view, now = load(WEEK_41, settings)
-    week = render_rotation(view, now)["week"].poster
+    week = rotation(view, now)["week"].poster
     for scale in (1, 8):
         for gamma in (0, 1):
             response = client.get(

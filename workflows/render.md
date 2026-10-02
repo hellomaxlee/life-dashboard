@@ -40,9 +40,15 @@ Each folder holds:
 | `frame_gamma_8x.png` | emulator output enlarged |
 | `clip_1x.gif`, `clip_8x.gif`, `clip_gamma_1x.gif`, `clip_gamma_8x.gif` | only when the clip has more than one frame, with each frame's own duration |
 
-Which screens animate: Books always (the summary scrolls) unless the line fits the width;
-Week only when the Claude reading is stale (pulsing dot, label alternating with its age);
-Today never; both celebrations always.
+Which screens animate: Books when the summary needs more than one page (two word-wrapped
+lines per page, 2 s each; a 110-character line is about seven pages); Week only when the
+Claude reading is stale (pulsing dot, label alternating with its age); Today never; both
+celebrations always. No clip may exceed 59 frames, the most one device animation is assumed
+to hold; a test holds every fixture to it and the Pixoo adapter refuses a longer clip.
+
+The tool and the preview page always render both celebrations so they can be looked at. One
+the day's data did not earn is labelled `(sample)`; an earned party prints the week's stored
+count and target.
 
 ## Fixtures
 
@@ -50,6 +56,9 @@ Today never; both celebrations always.
 `weekly_metrics` have the same keys as the database rows (listed in `app/render/view.py`);
 `now_utc` fixes the clock and `as_of_utc` is the last Health push. A key left out is a missing
 value and must render as a stated fallback. Use a new cell each cycle (CLAUDE.md § Iteration Rule).
+Every file in the folder is rendered and snapshot-tested, so a new fixture needs its goldens:
+render it, look at it (next section), then run the `UPDATE_SNAPSHOTS=1` command and commit them.
+Until then `tests/render/test_snapshots.py` fails for that fixture by design; nothing else does.
 
 ## The eye test
 

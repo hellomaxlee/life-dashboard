@@ -6,6 +6,7 @@ python -m tools.render --date YYYY-MM-DD --scale 8
 One folder per screen under --out (week, today, books, sparkle, party), each holding
 frame_1x.png, frame_<scale>x.png, frame_gamma_1x.png, frame_gamma_<scale>x.png and, for an
 animated clip, clip_1x.gif, clip_<scale>x.gif, clip_gamma_1x.gif, clip_gamma_<scale>x.gif.
+A celebration the day's data did not earn is printed as "(sample)".
 See workflows/render.md.
 """
 
@@ -19,17 +20,22 @@ from pathlib import Path
 from app.config import REPO_ROOT, Settings, load_settings
 from app.db import open_db
 from app.render.adapters.file import gif_bytes, png_bytes
-from app.render.celebrate import render_celebrations
+from app.render.celebrate import celebrations_for
 from app.render.frame import Clip
 from app.render.gamma import led_gamma
-from app.render.screens import render_rotation
-from app.render.view import DayView, load_fixture, view_from_db
+from app.render.rotation import rotation_clips
+from app.render.view import DayView, load_fixture
+from app.render.view_db import view_from_db
 from app.timeutil import from_utc_iso, now_utc
 
 
-def render_all(view: DayView, now: datetime) -> dict[str, Clip]:
-    """Rotation screens in rotation order, then the two celebrations."""
-    return {**render_rotation(view, now), **render_celebrations(view.week_target)}
+def render_all(view: DayView, now: datetime) -> list[tuple[str, Clip, bool]]:
+    """(name, clip, sample) for the rotation in order, then the two celebrations.
+
+    `sample` is True for a celebration the day's data did not earn.
+    """
+    rotation = [(name, clip, False) for name, clip in rotation_clips(view, now)]
+    return rotation + [(c.name, c.clip, not c.earned) for c in celebrations_for(view)]
 
 
 def write_clip(clip: Clip, directory: Path, scale: int) -> list[Path]:
@@ -83,10 +89,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.now:
         now = from_utc_iso(args.now)
     out = Path(args.out) if args.out else REPO_ROOT / "data" / "preview" / label
-    for name, clip in render_all(view, now).items():
+    for name, clip, sample in render_all(view, now):
         written = write_clip(clip, out / name, args.scale)
         frames = len(clip.frames)
-        print(f"{name}: {frames} frame{'s' if frames != 1 else ''}, {clip.total_ms} ms")
+        shown = f"{name} (sample)" if sample else name
+        print(f"{shown}: {frames} frame{'s' if frames != 1 else ''}, {clip.total_ms} ms")
         for path in written:
             print(f"  {path}")
     return 0

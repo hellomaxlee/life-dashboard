@@ -3,6 +3,10 @@
 A Frame is a 64x64 RGB Pillow image. A Clip is one or more frames, each with its own
 duration in milliseconds; a still screen is a one-frame clip. Renderers return clips and
 adapters only transport them, so nothing in this package knows which device is attached.
+
+MAX_CLIP_FRAMES is the most frames one device animation is assumed to hold (Pixoo: fewer
+than 60). Every screen and celebration is designed to stay within it; an adapter refuses a
+longer clip instead of thinning it.
 """
 
 from __future__ import annotations
@@ -14,6 +18,7 @@ from PIL import Image
 
 SIZE = 64
 STILL_MS = 8000
+MAX_CLIP_FRAMES = 59
 
 Frame = Image.Image
 Color = tuple[int, int, int]

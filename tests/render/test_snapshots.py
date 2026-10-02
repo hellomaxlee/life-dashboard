@@ -17,10 +17,10 @@ from PIL import Image, ImageChops
 
 from app.render.celebrate import party_clip, sparkle_clip
 from app.render.frame import Clip
-from app.render.screens import SCREEN_ORDER, render_rotation
+from app.render.rotation import ROTATION_ORDER
 from app.render.view import DayView
 from app.timeutil import from_utc_iso
-from tests.render import COMBOS, SNAPSHOTS, load
+from tests.render import COMBOS, SNAPSHOTS, load, rotation
 
 UPDATE = os.environ.get("UPDATE_SNAPSHOTS", "") == "1"
 DIGESTS = SNAPSHOTS / "digests.json"
@@ -52,15 +52,15 @@ def check(clip: Clip, key: str) -> None:
 
 
 @pytest.mark.parametrize("combo", COMBOS)
-@pytest.mark.parametrize("screen", SCREEN_ORDER)
+@pytest.mark.parametrize("screen", ROTATION_ORDER)
 def test_screen_matches_snapshot(combo, screen, settings):
     view, now = load(combo, settings)
-    check(render_rotation(view, now)[screen], f"{combo}/{screen}")
+    check(rotation(view, now)[screen], f"{combo}/{screen}")
 
 
-@pytest.mark.parametrize("screen", SCREEN_ORDER)
+@pytest.mark.parametrize("screen", ROTATION_ORDER)
 def test_empty_view_matches_snapshot(screen):
-    clips = render_rotation(DayView(day_local="2026-10-02"), from_utc_iso(EMPTY_NOW))
+    clips = rotation(DayView(day_local="2026-10-02"), from_utc_iso(EMPTY_NOW))
     check(clips[screen], f"empty/{screen}")
 
 
@@ -70,12 +70,12 @@ def test_sparkle_matches_snapshot(win):
 
 
 def test_party_matches_snapshot():
-    check(party_clip(3), "celebrations/party")
+    check(party_clip(3, 3), "celebrations/party")
 
 
 def test_no_orphan_snapshots():
-    expected = {f"{c}/{s}" for c in COMBOS for s in SCREEN_ORDER}
-    expected |= {f"empty/{s}" for s in SCREEN_ORDER}
+    expected = {f"{c}/{s}" for c in COMBOS for s in ROTATION_ORDER}
+    expected |= {f"empty/{s}" for s in ROTATION_ORDER}
     expected |= {f"celebrations/sparkle_{w}" for w in ("sleep", "workout", "book")}
     expected |= {"celebrations/party"}
     on_disk = {

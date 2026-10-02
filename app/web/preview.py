@@ -18,17 +18,18 @@ from fastapi.responses import HTMLResponse, Response
 
 from app.config import REPO_ROOT
 from app.render.adapters.file import gif_bytes, png_bytes
-from app.render.celebrate import CELEBRATION_ORDER, render_celebrations
+from app.render.celebrate import CELEBRATION_ORDER, celebrations_for
 from app.render.frame import Clip
 from app.render.gamma import led_gamma
-from app.render.screens import SCREEN_ORDER, render_rotation
-from app.render.view import DayView, load_fixture, view_from_db
+from app.render.rotation import ROTATION_ORDER, rotation_clips
+from app.render.view import DayView, load_fixture
+from app.render.view_db import view_from_db
 from app.timeutil import local_day, now_utc
 
 router = APIRouter()
 
 FIXTURES_DIR = REPO_ROOT / "fixtures" / "days"
-NAMES = SCREEN_ORDER + CELEBRATION_ORDER
+NAMES = ROTATION_ORDER + CELEBRATION_ORDER
 SCALES = (1, 8)
 
 _STYLE = (
@@ -63,8 +64,11 @@ def _resolve(request: Request, day: str | None, fixture: str | None) -> tuple[Da
         conn.close()
 
 
-def _clips(view: DayView, now: datetime) -> dict[str, Clip]:
-    return {**render_rotation(view, now), **render_celebrations(view.week_target)}
+def _clips(view: DayView, now: datetime) -> dict[str, tuple[Clip, bool]]:
+    """name -> (clip, sample). A sample is a celebration the day's data did not earn."""
+    clips = {name: (clip, False) for name, clip in rotation_clips(view, now)}
+    clips.update({c.name: (c.clip, not c.earned) for c in celebrations_for(view)})
+    return clips
 
 
 @router.get("/preview/image/{name}")
@@ -81,7 +85,7 @@ def preview_image(
     if scale not in SCALES:
         raise HTTPException(status_code=422, detail="scale must be 1 or 8")
     view, now = _resolve(request, day, fixture)
-    clip = _clips(view, now)[name]
+    clip, _ = _clips(view, now)[name]
     transform = led_gamma if gamma else None
     if clip.animated:
         return Response(gif_bytes(clip, scale, transform), media_type="image/gif")
@@ -100,9 +104,10 @@ def preview_page(
     clips = _clips(view, now)
     rows = []
     for name in NAMES:
-        clip = clips[name]
+        clip, sample = clips[name]
+        shown = f"{name} (sample)" if sample else name
         cells = [
-            f"<th>{escape(name)}<br><small>{len(clip.frames)} frame"
+            f"<th>{escape(shown)}<br><small>{len(clip.frames)} frame"
             f"{'' if len(clip.frames) == 1 else 's'}, {clip.total_ms} ms</small></th>"
         ]
         for gamma in (1, 0):
@@ -124,7 +129,8 @@ def preview_page(
         f"<title>life-dashboard preview</title><style>{_STYLE}</style></head><body>"
         f"<h1>Preview: {escape(title)}</h1>"
         "<p>Judge legibility on the <b>1x LED gamma</b> column at native size. "
-        "The 8x columns are for inspecting pixels only.</p>"
+        "The 8x columns are for inspecting pixels only. A celebration marked (sample) was not "
+        "earned by this day's data and is shown only so it can be looked at.</p>"
         "<table><thead><tr><th>screen</th><th>LED gamma 1x</th><th>LED gamma 8x</th>"
         "<th>raw 1x</th><th>raw 8x</th></tr></thead><tbody>" + "".join(rows) + "</tbody></table>"
         f"<p><a href='/preview'>today</a> · fixtures: {links}</p>"

@@ -44,7 +44,7 @@ def test_41_2_percent_fills_25_of_60_pixels(settings):
     # 41.2 % of a 60 px track is 24.72 px, drawn as 25: columns 2 through 26.
     assert filled_columns(frame, GREEN) == list(range(2, 27))
     assert filled_columns(frame, TRACK) == list(range(27, 62))
-    for y in (27, 31):
+    for y in (26, 32):
         assert all(pixel == (0, 0, 0) for pixel in bar_row(frame, y))
 
 
@@ -101,7 +101,7 @@ def test_colour_steps_green_amber_red(settings):
 
 def test_extremes_never_overflow_the_track(settings):
     view, now = load(WEEK_41, settings)
-    for pct, width in ((0.0, 0), (0.2, 1), (100.0, 60), (140.0, 60)):
+    for pct, width in ((0.0, 0), (0.2, 1), (99.6, 59), (100.0, 60)):
         frame = render_week(replace(view, claude=replace(view.claude, used_pct=pct)), now).poster
         lit = [x for x in range(64) if frame.getpixel((x, 28)) not in (TRACK, (0, 0, 0))]
         assert lit == list(range(2, 2 + width)), pct

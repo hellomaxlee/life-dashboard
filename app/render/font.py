@@ -1,7 +1,7 @@
 """Two bitmap fonts drawn in code. No font files, no network.
 
 BODY is the classic public-domain 5x7 LCD face (upper and lower case), used for the numbers
-that matter and for the scrolling summary; at scale 2 it is the hero-number face. SMALL is a
+that matter and for the paged summary; at scale 2 it is the hero-number face. SMALL is a
 3x5 capitals-only face for labels; lower case is drawn as capitals. Both have one pixel
 between glyphs. A character neither font knows is drawn as '?', never skipped, so a missing
 glyph is visible in the frame instead of silently changing a number.

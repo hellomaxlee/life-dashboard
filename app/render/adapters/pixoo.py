@@ -10,14 +10,14 @@ Protocol as understood: every command is a JSON POST to the device's `/post` pat
 (ms) and PicData (base64 of 64*64*3 raw RGB bytes). A reply's `error_code` is 0 on success.
 
 Assumptions to check on hardware:
-- an animation holds fewer than 60 frames; longer clips are thinned here to fit (frames are
-  dropped evenly and their time is given to the frame kept before them), which keeps total
-  duration but makes the summary scroll coarse. A scroll that long needs a better transport
-  plan in Phase 5;
+- an animation holds fewer than 60 frames. A clip over frame.MAX_CLIP_FRAMES is refused
+  with PixooError before anything is sent; it is never thinned, because dropped frames are
+  not what the renderer drew. Every screen and celebration is built to fit;
 - PicSpeed is honoured per frame; some firmware may apply the first frame's speed to all;
 - the device applies no gamma of its own (see app/render/gamma.py).
 
-The host must be a private LAN address. Health data stays home; so do frames.
+The host must be a literal address in 10/8, 172.16/12 or 192.168/16, nothing else.
+Health data stays home; so do frames.
 """
 
 from __future__ import annotations
@@ -29,10 +29,12 @@ from dataclasses import dataclass
 import httpx
 
 from app.config import Settings
-from app.render.frame import SIZE, Clip
+from app.render.frame import MAX_CLIP_FRAMES, SIZE, Clip
 
-MAX_FRAMES = 59
 TIMEOUT_S = 5.0
+LAN_NETWORKS = tuple(
+    ipaddress.IPv4Network(net) for net in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16")
+)
 
 
 class PixooError(RuntimeError):
@@ -43,31 +45,17 @@ class PixooError(RuntimeError):
 class SendReport:
     pic_id: int
     frames_sent: int
-    frames_dropped: int
 
 
 def require_lan_host(host: str) -> str:
-    """Accept only a literal private IPv4 address; anything else is refused before any I/O."""
+    """Accept only a literal home-LAN IPv4 address; anything else is refused before any I/O."""
     try:
         address = ipaddress.IPv4Address(host)
     except ValueError as exc:
         raise ValueError(f"pixoo host must be a LAN IPv4 address, got {host!r}") from exc
-    if not address.is_private or address.is_loopback:
-        raise ValueError(f"pixoo host must be a private LAN address, got {host!r}")
+    if not any(address in network for network in LAN_NETWORKS):
+        raise ValueError(f"pixoo host must be in 10/8, 172.16/12 or 192.168/16, got {host!r}")
     return str(address)
-
-
-def thin(clip: Clip, max_frames: int = MAX_FRAMES) -> Clip:
-    """Fit a clip to the device's frame limit without changing its total duration."""
-    count = len(clip.frames)
-    if count <= max_frames:
-        return clip
-    keep = sorted({int(i * count / max_frames) for i in range(max_frames)})
-    durations = []
-    for position, index in enumerate(keep):
-        until = keep[position + 1] if position + 1 < len(keep) else count
-        durations.append(sum(clip.durations_ms[index:until]))
-    return Clip(tuple(clip.frames[i] for i in keep), tuple(durations))
 
 
 class PixooAdapter:
@@ -88,19 +76,21 @@ class PixooAdapter:
         return reply
 
     def send(self, clip: Clip) -> SendReport:
-        """Push a clip as one animation. Raises PixooError on any failed command."""
-        fitted = thin(clip)
+        """Push a clip as one animation. Raises PixooError if it is too long or a command fails."""
+        count = len(clip.frames)
+        if count > MAX_CLIP_FRAMES:
+            raise PixooError(f"clip has {count} frames; the device limit is {MAX_CLIP_FRAMES}")
         reply = self._command({"Command": "Draw/GetHttpGifId"})
         pic_id = reply.get("PicId")
         if isinstance(pic_id, bool) or not isinstance(pic_id, int):
             raise PixooError(f"Draw/GetHttpGifId: no PicId in {reply!r}")
         for offset, (frame, duration_ms) in enumerate(
-            zip(fitted.frames, fitted.durations_ms, strict=True)
+            zip(clip.frames, clip.durations_ms, strict=True)
         ):
             self._command(
                 {
                     "Command": "Draw/SendHttpGif",
-                    "PicNum": len(fitted.frames),
+                    "PicNum": count,
                     "PicWidth": SIZE,
                     "PicOffset": offset,
                     "PicID": pic_id,
@@ -108,7 +98,7 @@ class PixooAdapter:
                     "PicData": base64.b64encode(frame.tobytes()).decode("ascii"),
                 }
             )
-        return SendReport(pic_id, len(fitted.frames), len(clip.frames) - len(fitted.frames))
+        return SendReport(pic_id, count)
 
 
 def pixoo_from_settings(settings: Settings) -> PixooAdapter | None:
