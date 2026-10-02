@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from app.config import Settings, load_settings
 from app.db import open_db
 from app.ingest.health import router as health_router
-from app.jobs.scheduler import start_scheduler
+from app.jobs.scheduler import start_scheduler, stop_scheduler
 from app.web.preview import router as preview_router
 from app.web.status import router as status_router
 
@@ -28,7 +28,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             yield
         finally:
             if app.state.scheduler is not None:
-                app.state.scheduler.shutdown(wait=True)
+                stop_scheduler(app.state.scheduler)
                 app.state.scheduler = None
 
     app = FastAPI(

@@ -90,7 +90,9 @@ def test_raw_file_archived_verbatim_and_reread_is_noop(db, usage_settings):
     row = db.execute("SELECT * FROM raw_archive").fetchone()
     assert row["source"] == "claude_usage"
     assert row["parsed_ok"] == 1
-    assert Path(row["path"]).read_bytes() == path.read_bytes()
+    assert row["path"].startswith("claude_usage/")
+    archived = usage_settings.storage.raw_dir / row["path"]
+    assert archived.read_bytes() == path.read_bytes()
     before = checksum(snapshot(db))
     second = read_usage_file(db, usage_settings)
     assert (first.status, second.status) == ("ok", "duplicate")

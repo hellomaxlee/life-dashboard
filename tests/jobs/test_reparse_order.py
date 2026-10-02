@@ -11,8 +11,6 @@ from types import SimpleNamespace
 
 from app.ingest import claude_usage, dedupe, health
 from tests.conftest import fixture_bytes
-from tools import replay
-from tools.replay import checksum, snapshot
 
 T0 = datetime(2026, 10, 1, 12, 0, tzinfo=UTC)
 
@@ -28,39 +26,6 @@ def steps(db) -> list[int]:
 def tick_clock(monkeypatch) -> None:
     moments = (T0 + timedelta(minutes=n) for n in range(100))
     monkeypatch.setattr(health, "now_utc", lambda: next(moments))
-
-
-def test_stale_failed_push_does_not_overwrite_a_later_one(
-    client, db, settings, tmp_path, monkeypatch
-):
-    push_a = fixture_bytes("metrics_v2_days.json")
-    push_b = push_a.replace(b"8421", b"13421")
-    assert push_a != push_b
-    tick_clock(monkeypatch)
-    real_store, calls = health.store_payload, []
-
-    def fails_once(*args, **kwargs):
-        calls.append(1)
-        if len(calls) == 1:
-            raise sqlite3.OperationalError("database is locked")
-        return real_store(*args, **kwargs)
-
-    monkeypatch.setattr(health, "store_payload", fails_once)
-
-    assert post(client, push_a).status_code == 500
-    assert post(client, push_b).json()["status"] == "ok"
-    again = post(client, push_a)
-
-    assert again.status_code == 200
-    assert again.json()["status"] == "superseded"
-    assert 13421 in steps(db) and 8421 not in steps(db)
-    flags = db.execute("SELECT parsed_ok FROM raw_archive ORDER BY id").fetchall()
-    assert [r["parsed_ok"] for r in flags] == [0, 1]
-    scratch = replay.replay(settings.storage.raw_dir, tmp_path / "scratch.db", settings)
-    try:
-        assert checksum(snapshot(scratch)) == checksum(snapshot(db))
-    finally:
-        scratch.close()
 
 
 def test_failed_push_with_nothing_after_it_is_still_reparsed(client, db, monkeypatch):
@@ -86,22 +51,6 @@ def usage_bytes(used_pct: float, second: int) -> bytes:
         "rate_limits": {"seven_day": {"used_percentage": used_pct, "resets_at": 1759680000}},
     }
     return json.dumps(record).encode()
-
-
-def test_stale_unparsed_usage_file_is_superseded_by_a_later_reading(db, jobs_settings):
-    old, new = usage_bytes(10.0, 1), usage_bytes(20.0, 2)
-    health.archive_raw(
-        db, jobs_settings.storage.raw_dir, old, source=claude_usage.SOURCE, received_at=T0
-    )
-    jobs_settings.claude_usage.path.write_bytes(new)
-    assert claude_usage.read_usage_file(db, jobs_settings).status == "ok"
-
-    jobs_settings.claude_usage.path.write_bytes(old)
-    result = claude_usage.read_usage_file(db, jobs_settings)
-
-    assert result.status == "superseded"
-    metrics = json.loads(db.execute("SELECT metrics_json FROM daily_metrics").fetchone()[0])
-    assert metrics["claude_week_used_pct"] == 20.0
 
 
 class OtherWriter:

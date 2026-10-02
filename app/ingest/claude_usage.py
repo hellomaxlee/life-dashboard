@@ -9,19 +9,24 @@ that proves the golden case is a real gate.
 from __future__ import annotations
 
 import json
+import logging
+import math
 import os
 import sqlite3
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 
 from app.config import Settings
-from app.ingest.health import archive_raw, mark_parsed
+from app.ingest.health import archive_raw, run_ingest
 from app.timeutil import from_utc_iso, local_day, to_utc_iso
 
 SOURCE = "claude_usage"
 USED_PCT = "claude_week_used_pct"
 RESETS_AT = "claude_week_resets_at"
 CAPTURED_AT = "claude_week_captured_at"
+MAX_BYTES = 64 * 1024
+log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -46,12 +51,21 @@ def window_name() -> str:
 def _number(value: object) -> float | None:
     if isinstance(value, bool) or not isinstance(value, int | float):
         return None
+    if not math.isfinite(value):
+        raise ValueError(f"non-finite number {value!r}")
     return float(value)
+
+
+def _reject_constant(name: str) -> float:
+    raise ValueError(f"{name} is not a number this reader accepts")
 
 
 def parse_usage(body: bytes) -> UsageReading | None:
     """Read the hook's file. None when it carries no seven-day reading; ValueError when broken."""
-    record = json.loads(body)
+    try:
+        record = json.loads(body, parse_constant=_reject_constant)
+    except RecursionError as exc:
+        raise ValueError(f"nested too deeply: {exc}") from exc
     if not isinstance(record, dict):
         raise ValueError("claude usage file is not a JSON object")
     captured = record.get("captured_at_utc")
@@ -64,7 +78,12 @@ def parse_usage(body: bytes) -> UsageReading | None:
     if used_pct is None:
         return None
     resets = _number(window.get("resets_at"))
-    resets_at_utc = to_utc_iso(datetime.fromtimestamp(resets, UTC)) if resets is not None else None
+    try:
+        resets_at_utc = (
+            to_utc_iso(datetime.fromtimestamp(resets, UTC)) if resets is not None else None
+        )
+    except (OverflowError, OSError) as exc:
+        raise ValueError(f"resets_at {resets!r} is not a timestamp: {exc}") from exc
     return UsageReading(captured_at_utc, used_pct, resets_at_utc)
 
 
@@ -88,38 +107,53 @@ def store_reading(conn: sqlite3.Connection, reading: UsageReading, home_tz: str)
     return True
 
 
-def ingest_archived(
-    conn: sqlite3.Connection, body: bytes, raw_archive_id: int, settings: Settings
+def apply_reading(
+    conn: sqlite3.Connection, body: bytes, raw_archive_id: int, settings: Settings, first: bool
 ) -> UsageReading | None:
-    """Parse and store an already-archived usage file inside one transaction."""
+    """Parse and store one usage file inside the caller's transaction."""
     try:
         reading = parse_usage(body)
     except ValueError as exc:
-        mark_parsed(conn, raw_archive_id, False, f"malformed claude usage: {exc}")
-        raise
-    conn.execute("BEGIN IMMEDIATE")
-    try:
-        if reading is not None:
-            store_reading(conn, reading, settings.home_tz)
-        mark_parsed(conn, raw_archive_id, True, None)
-        conn.execute("COMMIT")
-    except Exception as exc:
-        conn.execute("ROLLBACK")
-        mark_parsed(conn, raw_archive_id, False, f"{type(exc).__name__}: {exc}")
-        raise
+        raise ValueError(f"malformed claude usage: {exc}") from exc
+    if reading is not None:
+        store_reading(conn, reading, settings.home_tz)
+    return reading
+
+
+def ingest_archived(
+    conn: sqlite3.Connection,
+    body: bytes,
+    raw_archive_id: int,
+    settings: Settings,
+    raw_dir: Path | None = None,
+) -> UsageReading | None:
+    """Parse and store an already-archived usage file, keeping raw_archive.id order."""
+    reading, _ = run_ingest(conn, body, raw_archive_id, settings, apply_reading, raw_dir)
+    assert reading is None or isinstance(reading, UsageReading)
     return reading
 
 
 def read_usage_file(conn: sqlite3.Connection, settings: Settings) -> ReadResult:
-    """Archive the hook's file and store its reading. Unchanged bytes are a no-op."""
+    """Archive the hook's file and store its reading. Unchanged bytes are a no-op.
+
+    A file larger than MAX_BYTES is not the hook's output (a real one is about 250 bytes);
+    it is reported as malformed and deliberately not archived.
+    """
     path = settings.claude_usage.path
     if not path.is_file():
         return ReadResult("missing")
+    size = path.stat().st_size
+    if size > MAX_BYTES:
+        log.warning(
+            "claude usage file is %d bytes, larger than the %d byte cap; not archived",
+            size,
+            MAX_BYTES,
+        )
+        return ReadResult("malformed")
     body = path.read_bytes()
     archived = archive_raw(conn, settings.storage.raw_dir, body, source=SOURCE)
     if archived.duplicate:
-        status = "superseded" if archived.superseded else "duplicate"
-        return ReadResult(status, archived.raw_archive_id)
+        return ReadResult("duplicate", archived.raw_archive_id)
     try:
         reading = ingest_archived(conn, body, archived.raw_archive_id, settings)
     except ValueError:

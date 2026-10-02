@@ -4,6 +4,7 @@ import os
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
 
@@ -140,6 +141,53 @@ def _env_switch(name: str, default: bool) -> bool:
     return word in _ON
 
 
+def _fail(key: str, value: object, want: str) -> ValueError:
+    return ValueError(f"config {key} must be {want}, not {value!r}")
+
+
+def _whole(key: str, value: object, minimum: int) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
+        raise _fail(key, value, f"a whole number of at least {minimum}")
+    return value
+
+
+def _number(key: str, value: object, minimum: float, maximum: float | None = None) -> float:
+    ok = isinstance(value, int | float) and not isinstance(value, bool) and value >= minimum
+    if not ok or (maximum is not None and value > maximum):
+        top = "" if maximum is None else f" and at most {maximum}"
+        raise _fail(key, value, f"a number of at least {minimum}{top}")
+    return float(value)
+
+
+def _flag(key: str, value: object) -> bool:
+    if not isinstance(value, bool):
+        raise _fail(key, value, "true or false (no quotes)")
+    return value
+
+
+def _clock(key: str, value: object) -> str:
+    parts = value.split(":") if isinstance(value, str) else []
+    if len(parts) != 2 or not all(part.isdigit() for part in parts):
+        raise _fail(key, value, "a time written HH:MM")
+    if int(parts[0]) > 23 or int(parts[1]) > 59:
+        raise _fail(key, value, "a time written HH:MM")
+    return value
+
+
+def _timezone(key: str, value: object) -> str:
+    try:
+        ZoneInfo(str(value))
+    except Exception as exc:
+        raise _fail(key, value, "an IANA timezone name") from exc
+    return str(value)
+
+
+def _folder(key: str, value: object) -> Path:
+    if not isinstance(value, str) or not value.strip():
+        raise _fail(key, value, "a directory path")
+    return _resolve(value)
+
+
 def load_settings(config_path: Path | None = None) -> Settings:
     """Load config.toml into a frozen Settings.
 
@@ -155,7 +203,7 @@ def load_settings(config_path: Path | None = None) -> Settings:
     dedupe = raw["ingest"]["dedupe"]
     bands = raw["wellness"]["bands"]
     return Settings(
-        home_tz=raw["home_tz"],
+        home_tz=_timezone("home_tz", raw["home_tz"]),
         hr_max=int(raw["hr_max"]),
         zones_pct=tuple(float(p) for p in raw["zones"]["pct"]),
         workout=WorkoutConfig(
@@ -191,10 +239,16 @@ def load_settings(config_path: Path | None = None) -> Settings:
             raw_dir=_resolve(os.environ.get("LIFE_RAW_DIR", raw["storage"]["raw_dir"])),
         ),
         ingest=IngestConfig(
-            hr_incomplete_ratio=float(raw["ingest"]["hr_incomplete_ratio"]),
+            hr_incomplete_ratio=_number(
+                "ingest.hr_incomplete_ratio", raw["ingest"]["hr_incomplete_ratio"], 0, 1
+            ),
             dedupe=DedupeConfig(
-                start_window_min=float(dedupe["start_window_min"]),
-                duration_tolerance_pct=float(dedupe["duration_tolerance_pct"]),
+                start_window_min=_number(
+                    "ingest.dedupe.start_window_min", dedupe["start_window_min"], 0
+                ),
+                duration_tolerance_pct=_number(
+                    "ingest.dedupe.duration_tolerance_pct", dedupe["duration_tolerance_pct"], 0
+                ),
             ),
         ),
         summary=SummaryConfig(
@@ -203,14 +257,20 @@ def load_settings(config_path: Path | None = None) -> Settings:
         ),
         health_export_token=os.environ.get("HEALTH_EXPORT_TOKEN", "").strip(),
         scheduler=SchedulerConfig(
-            enabled=_env_switch("LIFE_SCHEDULER_ENABLED", bool(raw["scheduler"]["enabled"])),
-            usage_poll_seconds=int(raw["scheduler"]["usage_poll_seconds"]),
-            usage_min_read_seconds=int(raw["scheduler"]["usage_min_read_seconds"]),
+            enabled=_env_switch(
+                "LIFE_SCHEDULER_ENABLED", _flag("scheduler.enabled", raw["scheduler"]["enabled"])
+            ),
+            usage_poll_seconds=_whole(
+                "scheduler.usage_poll_seconds", raw["scheduler"]["usage_poll_seconds"], 1
+            ),
+            usage_min_read_seconds=_whole(
+                "scheduler.usage_min_read_seconds", raw["scheduler"]["usage_min_read_seconds"], 0
+            ),
         ),
         backup=BackupConfig(
-            dir=_resolve(os.environ.get("LIFE_BACKUP_DIR", raw["backup"]["dir"])),
-            time=str(raw["backup"]["time"]),
-            keep=int(raw["backup"]["keep"]),
+            dir=_folder("backup.dir", os.environ.get("LIFE_BACKUP_DIR", raw["backup"]["dir"])),
+            time=_clock("backup.time", raw["backup"]["time"]),
+            keep=_whole("backup.keep", raw["backup"]["keep"], 1),
         ),
         device=DeviceConfig(
             pixoo_host=str(raw.get("device", {}).get("pixoo_host", "")).strip(),

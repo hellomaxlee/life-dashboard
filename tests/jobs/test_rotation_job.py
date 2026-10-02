@@ -17,7 +17,6 @@ from app.db import open_db
 from app.jobs import rotation as rotation_job
 from app.jobs import scheduler as jobs
 from app.jobs.rotation import HOLDING, ROTATION_JOB, DeviceRotation, device_adapter
-from app.jobs.scheduler import BACKUP_JOB, USAGE_JOB
 from app.main import create_app
 from app.render.adapters.pixoo import PixooAdapter, PixooError
 from app.render.frame import Clip
@@ -221,7 +220,7 @@ def test_without_a_host_nothing_is_registered_built_or_sent(db, jobs_settings, m
 
     spy = FakeAdapter()
     scheduler = jobs.build_scheduler(jobs_settings, opener(jobs_settings), device=spy)
-    assert {job.id for job in scheduler.get_jobs()} == {USAGE_JOB, BACKUP_JOB}
+    assert {job.id for job in scheduler.get_jobs()} == jobs.CORE_JOBS
     assert ROTATION_JOB not in scheduler.job_stats
     for job in scheduler.get_jobs():
         job.func()
@@ -272,7 +271,7 @@ def test_a_bad_device_config_registers_no_job_and_stops_nothing(
 ):
     settings = with_device(jobs_settings, seconds, host)
     scheduler = jobs.build_scheduler(settings, opener(settings))
-    assert {job.id for job in scheduler.get_jobs()} == {USAGE_JOB, BACKUP_JOB}
+    assert {job.id for job in scheduler.get_jobs()} == jobs.CORE_JOBS
     assert f"{ROTATION_JOB} not registered" in caplog.text
 
 
@@ -303,7 +302,7 @@ def test_the_job_comes_back_after_a_restart_and_starts_from_the_first_screen(
         app = create_app(settings)
         with TestClient(app):
             running = app.state.scheduler
-            assert {job.id for job in running.get_jobs()} == {USAGE_JOB, BACKUP_JOB, ROTATION_JOB}
+            assert {job.id for job in running.get_jobs()} == jobs.CORE_JOBS | {ROTATION_JOB}
             assert sent_whole.wait(timeout=5)
         schedulers.append(running)
         assert running.job_stats[ROTATION_JOB] == jobs.JobStats(runs=1)

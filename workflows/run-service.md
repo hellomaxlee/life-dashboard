@@ -124,6 +124,7 @@ is no separate process to supervise. Config: `[scheduler]` and `[backup]` in
 |---|---|---|
 | `claude_usage_watch` | every `scheduler.usage_poll_seconds` (30 s) | stats `data/claude_usage.json`; reads it only if mtime or size changed, and at most once per `scheduler.usage_min_read_seconds` (900 s) |
 | `nightly_backup` | `backup.time` (03:15 America/New_York) | `tools.backup` nightly: `data/backups/life-<utc stamp>/`, keeps the newest `backup.keep` (14) |
+| `backup_overdue_check` | two minutes after start, then every hour | takes a backup if none is newer than 26 hours; otherwise does nothing |
 | `device_rotation` | every `device.screen_seconds` (20 s), **only while `device.pixoo_host` is set** | sends the next screen (Week, Today, Books, wrapping) to the Pixoo; section 15 |
 
 The Goodreads 06:30 job is not here; it is added to `build_scheduler` together with the poller.
@@ -135,18 +136,26 @@ exception is logged (`job <id> failed` plus traceback in the err log), not fatal
 grep -n "job .* failed" data/logs/life-dashboard.err.log | tail     # any job failure
 ls -lt data/backups | head                                          # did last night's backup land
 ls data/raw/claude_usage | wc -l                                    # usage readings archived
-LIFE_SCHEDULER_ENABLED=0 uv run fastapi dev app/main.py --port 8080 # run with no jobs (debugging)
+LIFE_SCHEDULER_ENABLED=0 uv run uvicorn app.main:app --host 127.0.0.1 --port 8080   # run by hand with no jobs (stop the LaunchAgent first)
 ```
 
 `LIFE_SCHEDULER_ENABLED` takes `1/true/yes` or `0/false/no`; anything else stops the
-service at boot with a message naming the variable. A backup that found raw files
+service at boot with a message naming the variable. So does a `config.toml` value
+that cannot work (`usage_poll_seconds` below 1, `keep` below 1 or not whole,
+`enabled` in quotes, an empty `backup.dir`, an unknown `home_tz`): the error names
+the key. Under launchd that shows as a crash loop (section 4) with the message in
+the err log. A backup that found raw files
 missing from the live archive still lands, and logs
 `backup life-... is missing N raw file(s): ...` to the err log.
 
 Mac asleep at 03:15: the backup runs within 30 s of the next wake if that is
-inside 18 hours; otherwise that night is skipped. Service started with no
-backup newer than 26 hours (first boot, long power-off): one backup runs two
-minutes after start. Reading the usage file by hand still works:
+inside 18 hours. Past that, or after a failed run, the hourly
+`backup_overdue_check` takes one as soon as the newest backup is older than
+26 hours; on a first boot that is two minutes after start. At shutdown the
+service waits up to 10 s for a running job, logs `a job is still running` and
+goes on without it; a job stuck beyond that is ended by launchd's kill.
+A usage file over 64 KB, or one that is not the hook's JSON, is logged and
+skipped. Reading the usage file by hand still works:
 `uv run python -m tools.sync --source claude_usage`.
 
 ## 11. Backup
@@ -156,21 +165,31 @@ Full detail: `workflows/backup.md`. Safe while the service is running.
 ```sh
 cd /Users/maxwelllee12/life-dashboard
 uv run python -m tools.backup                                  # what the 03:15 job does, now
-uv run python -m tools.backup --verify "$(ls -d data/backups/life-* | tail -1)"   # exit 0 = identical
+uv run python -m tools.backup --verify latest                 # newest complete backup; exit 0 = identical
 uv run python -m tools.backup --out /Volumes/SomeDrive/life-backup-2026-10-02     # extra copy, local path
 ```
 
-`--verify` restores to a temp dir, diffs every data table against the live db,
-and replays the backup's raw archive from scratch; `0 difference(s)` and exit 0
-is the pass. A push that lands between the backup and the verify shows up as
-`live vs backup: ... +` lines; take a new backup and verify that one.
+`latest` is the newest complete backup under `backup.dir`; it never names a
+`.partial`. `--verify` checks the backup's files against its manifest, restores
+to a temp dir, opens the copy the way the service would, diffs every data table
+and the `raw_archive` state against the live db, and replays the backup's raw
+archive from scratch; `0 difference(s)` and exit 0 is the pass (`note:` lines
+are information, not differences). A push that lands between the backup and
+the verify shows up as `live vs backup: ... +` lines; take a new backup and
+verify that one. Exit 2 means the backup could not be read at all.
+
+Is what is stored what the archive says? (the idempotency proof, any time):
+
+```sh
+uv run python -m tools.replay --verify      # replays data/raw into data/replay/scratch.db, diffs against live
+```
 
 ## 12. Restore
 
 Look first, into a scratch directory (never touches the live db):
 
 ```sh
-uv run python -m tools.backup --restore data/backups/life-20261002T071500Z --to /tmp/life-restore
+uv run python -m tools.backup --restore latest --to /tmp/life-restore
 sqlite3 /tmp/life-restore/life.db "PRAGMA integrity_check; SELECT COUNT(*) FROM activities;"
 ```
 
@@ -179,13 +198,17 @@ hold the old file open:
 
 ```sh
 launchctl bootout gui/$(id -u)/com.maxlee.life-dashboard
-uv run python -m tools.backup --restore data/backups/life-20261002T071500Z --to data --overwrite-live
+uv run python -m tools.backup --restore latest --to data --overwrite-live
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.maxlee.life-dashboard.plist
 curl -s http://127.0.0.1:8080/healthz
 ```
 
-Without `--overwrite-live` the command refuses and exits 2. Anything pushed
-after the backup is refilled by the phone's next push (each carries 7 days).
+Without `--overwrite-live` the command refuses and exits 2, however the path to
+`data` is spelled. `/tmp/life-restore` must not already hold a different copy:
+an existing `life.db`, or a raw file whose content differs, is refused unless
+`--overwrite` is given. Anything pushed after the backup is refilled by the
+phone's next push (each carries 7 days). A restored copy is self-contained: the
+service started on it reads and writes raw files under its own `raw/` only.
 
 ## 13. Kill-mid-sync drill (`kill -9`, automated)
 
@@ -210,29 +233,44 @@ WAL not checkpointed: a `kill -9` right after a push). Pass, per stage:
 rows survived, re-posting the same payload answers `ok` (`duplicate` for
 `after_commit`), and the data-table checksum equals a clean run's.
 
-What the states mean on the real box: a raw file with no `raw_archive` row is a
-push that died before it was recorded; it is harmless and the phone's next push
-re-sends those days. A row with `parsed_ok = 0` and no error is a push that died
-mid-parse or failed; re-posting the same bytes parses it, unless a later push
-of the same source has already been parsed, in which case the re-post answers
-`superseded` and stores nothing (older data must not land on top of newer). A `raw_archive` row whose file is missing is the only
-combination that is a bug; `tools.backup --verify` reports it.
+What the states mean on the real box:
+
+- A raw file with no `raw_archive` row ("unrecorded") is a push whose bytes
+  reached the disk but whose row did not: the process died in between, or the
+  db was locked past the 5 s busy timeout (the phone got a 503 `busy`). Its
+  data is **not** in the db. It is never applied silently and never ignored
+  silently: `tools.replay --verify` and `tools.backup --verify` print it as a
+  `note: unrecorded: ...` line with the file name. When the same bytes arrive
+  again the retry adopts that file and records it. If they never do, the
+  phone's later pushes carry the same days (7-day window).
+- A row with `parsed_ok = 0` is a push that died mid-parse or failed. Its data
+  is not in the db. Re-posting the same bytes parses it, then re-applies every
+  later parsed payload of the same source on top, in one transaction, so older
+  data fills gaps and newer data still wins; the answer is `ok` with a
+  `reapplied` count.
+- A parsed `raw_archive` row whose file is missing is the combination that is a
+  bug: that data can no longer be recomputed. Both `--verify` commands report
+  it and exit 1.
 
 After a real power cut or a hard reset (untested by the drill; these are the checks to run):
 
 ```sh
 sqlite3 data/life.db "PRAGMA integrity_check;"            # must print ok
 sqlite3 data/life.db "SELECT id, source, received_at_utc, error FROM raw_archive WHERE parsed_ok = 0;"
-uv run python -m tools.backup && uv run python -m tools.backup --verify "$(ls -d data/backups/life-* | tail -1)"
+uv run python -m tools.replay --verify
+uv run python -m tools.backup && uv run python -m tools.backup --verify latest
 ```
 
 ## 14. Egress
 
 `uv run pytest tests/test_egress.py -q` proves, statically, that nothing under
 `app/` or `tools/` names a host outside `{www.goodreads.com, goodreads.com,
-api.anthropic.com}` plus loopback and `192.168.x.x`, and that nothing imports
-`requests` or `urllib.request`. The gate carries its own mutants
-(`test_gate_catches_*`) so a scanner regression turns red, not green.
+api.anthropic.com}` plus loopback and `192.168.x.x`, that nothing imports
+`requests`, `urllib.request`, `socket`, `http.client`, `ftplib`, `smtplib` or
+`telnetlib`, and that nothing starts `curl`, `wget` or `nc`. The gate carries
+its own mutants (`test_gate_catches_*`) so a scanner regression turns red, not
+green. It is a static scan: a host assembled at runtime is outside what it can
+see.
 
 ## 15. Display (Pixoo-64, not yet purchased)
 

@@ -182,7 +182,7 @@ def test_registered_jobs_and_their_guards(jobs_settings):
     scheduler.start(paused=True)
     try:
         by_id = {job.id: job for job in scheduler.get_jobs()}
-        assert set(by_id) == {USAGE_JOB, BACKUP_JOB}
+        assert set(by_id) == jobs.CORE_JOBS
         assert all(job.max_instances == 1 and job.coalesce for job in by_id.values())
         assert by_id[USAGE_JOB].trigger.interval == timedelta(
             seconds=jobs_settings.scheduler.usage_poll_seconds
@@ -214,7 +214,8 @@ def test_overdue_backup_is_caught_up_soon_after_start(client, jobs_settings):
     assert jobs.backup_overdue(jobs_settings, now)
     late = jobs.build_scheduler(jobs_settings, lambda: None, now)
     late.start(paused=True)
-    assert late.get_job(BACKUP_JOB).next_run_time == now + jobs.BACKUP_CATCHUP_DELAY
+    check = late.get_job(jobs.BACKUP_CHECK_JOB)
+    assert check.next_run_time == now + jobs.BACKUP_CATCHUP_DELAY
     late.shutdown(wait=False)
 
     backup.nightly(jobs_settings, now - timedelta(hours=9))
@@ -235,7 +236,7 @@ def test_scheduler_is_off_unless_settings_enable_it(client, jobs_settings):
     with TestClient(app):
         running = app.state.scheduler
         assert running.running
-        assert {job.id for job in running.get_jobs()} == {USAGE_JOB, BACKUP_JOB}
+        assert {job.id for job in running.get_jobs()} == jobs.CORE_JOBS
     assert not running.running
     assert app.state.scheduler is None
 
@@ -253,7 +254,7 @@ def test_config_file_ships_with_the_scheduler_on(monkeypatch):
 def test_a_bad_goodreads_time_does_not_stop_the_scheduler(jobs_settings):
     typo = replace(jobs_settings, pull=replace(jobs_settings.pull, goodreads="6h30"))
     scheduler = jobs.build_scheduler(typo, lambda: open_db(typo.storage.db_path))
-    assert {job.id for job in scheduler.get_jobs()} == {USAGE_JOB, BACKUP_JOB}
+    assert {job.id for job in scheduler.get_jobs()} == jobs.CORE_JOBS
     assert not hasattr(jobs, "GOODREADS_JOB")
     assert not hasattr(jobs, "register_goodreads_poll")
 

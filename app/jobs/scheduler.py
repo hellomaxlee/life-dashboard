@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import sqlite3
+import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -26,9 +27,13 @@ from tools import backup
 
 USAGE_JOB = "claude_usage_watch"
 BACKUP_JOB = "nightly_backup"
+BACKUP_CHECK_JOB = "backup_overdue_check"
+CORE_JOBS = frozenset({USAGE_JOB, BACKUP_JOB, BACKUP_CHECK_JOB})
 BACKUP_MISFIRE_GRACE_S = 18 * 3600
 BACKUP_OVERDUE = timedelta(hours=26)
 BACKUP_CATCHUP_DELAY = timedelta(minutes=2)
+BACKUP_CHECK_EVERY = timedelta(hours=1)
+SHUTDOWN_WAIT_S = 10.0
 
 log = logging.getLogger(__name__)
 OpenConn = Callable[[], sqlite3.Connection]
@@ -109,8 +114,8 @@ def backup_overdue(settings: Settings, now: datetime) -> bool:
     return not backups or now - backup.backup_created_at(backups[-1]) > BACKUP_OVERDUE
 
 
-def run_backup(settings: Settings) -> None:
-    result = backup.nightly(settings)
+def run_backup(settings: Settings, now: datetime | None = None) -> None:
+    result = backup.nightly(settings) if now is None else backup.nightly(settings, now)
     if result.raw_missing:
         log.error(
             "backup %s is missing %d raw file(s): %s",
@@ -118,6 +123,36 @@ def run_backup(settings: Settings) -> None:
             len(result.raw_missing),
             ", ".join(result.raw_missing),
         )
+
+
+def backup_if_overdue(settings: Settings, now: datetime) -> bool:
+    """The hourly check: take a backup when none is newer than BACKUP_OVERDUE.
+
+    It covers a first boot, a failed 03:15 run, and a Mac that slept through 03:15 for
+    longer than the misfire grace."""
+    if not backup_overdue(settings, now):
+        return False
+    run_backup(settings, now)
+    return True
+
+
+def stop_scheduler(scheduler: BackgroundScheduler) -> bool:
+    """Shut the scheduler down, letting running jobs finish for at most SHUTDOWN_WAIT_S.
+
+    Returns False when a job was still running at the deadline; shutdown then proceeds
+    without it rather than waiting forever."""
+    waiter = threading.Thread(
+        target=lambda: scheduler.shutdown(wait=True), name="scheduler-shutdown", daemon=True
+    )
+    waiter.start()
+    waiter.join(SHUTDOWN_WAIT_S)
+    if waiter.is_alive():
+        log.error(
+            "scheduler shutdown: a job is still running after %.1f s; not waiting for it",
+            SHUTDOWN_WAIT_S,
+        )
+        return False
+    return True
 
 
 def build_scheduler(
@@ -130,6 +165,11 @@ def build_scheduler(
 
     `device` replaces the Pixoo adapter (tests); it is used only while a device is configured.
     """
+    if settings.scheduler.usage_poll_seconds < 1:
+        raise ValueError(
+            f"scheduler.usage_poll_seconds must be at least 1, not "
+            f"{settings.scheduler.usage_poll_seconds}"
+        )
     tz = ZoneInfo(settings.home_tz)
     scheduler = BackgroundScheduler(
         timezone=tz, job_defaults={"coalesce": True, "max_instances": 1}
@@ -146,15 +186,17 @@ def build_scheduler(
 
     hour, minute = parse_hh_mm(settings.backup.time)
     moment = now or now_utc()
-    catch_up = {}
-    if backup_overdue(settings, moment):
-        catch_up = {"next_run_time": moment + BACKUP_CATCHUP_DELAY}
     scheduler.add_job(
         guarded(BACKUP_JOB, lambda: run_backup(settings), stats),
         CronTrigger(hour=hour, minute=minute, timezone=tz),
         id=BACKUP_JOB,
         misfire_grace_time=BACKUP_MISFIRE_GRACE_S,
-        **catch_up,
+    )
+    scheduler.add_job(
+        guarded(BACKUP_CHECK_JOB, lambda: backup_if_overdue(settings, now_utc()), stats),
+        IntervalTrigger(seconds=int(BACKUP_CHECK_EVERY.total_seconds()), timezone=tz),
+        id=BACKUP_CHECK_JOB,
+        next_run_time=moment + BACKUP_CATCHUP_DELAY,
     )
 
     if settings.device.pixoo_host:

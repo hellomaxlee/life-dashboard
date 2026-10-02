@@ -40,21 +40,31 @@ def usage_record(feed: object, captured_at: datetime) -> dict[str, object] | Non
 
 
 def write_atomic(target: Path, record: dict[str, object]) -> None:
+    """Readers see the old file or the new one, never part of either."""
     target.parent.mkdir(parents=True, exist_ok=True)
     scratch = target.with_name(f"{target.name}.{os.getpid()}.tmp")
-    scratch.write_text(json.dumps(record, indent=1) + "\n")
-    os.replace(scratch, target)
+    try:
+        scratch.write_text(json.dumps(record, indent=1, allow_nan=False) + "\n")
+        os.replace(scratch, target)
+    finally:
+        scratch.unlink(missing_ok=True)
+
+
+def _reject_constant(name: str) -> float:
+    raise ValueError(name)
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="tools.claude_usage_hook")
+    parser = argparse.ArgumentParser(prog="tools.claude_usage_hook", add_help=False)
     parser.add_argument("--out", metavar="PATH")
-    args = parser.parse_args(argv)
     try:
-        record = usage_record(json.loads(sys.stdin.read()), datetime.now(UTC))
+        args, _ = parser.parse_known_args(argv)
+        stream = getattr(sys.stdin, "buffer", sys.stdin)
+        feed = json.loads(stream.read(), parse_constant=_reject_constant)
+        record = usage_record(feed, datetime.now(UTC))
         if record is not None:
             write_atomic(Path(args.out) if args.out else configured_path(), record)
-    except Exception:
+    except (Exception, SystemExit):
         pass
     return 0
 

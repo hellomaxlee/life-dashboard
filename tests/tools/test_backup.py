@@ -12,6 +12,7 @@ import pytest
 
 from app.config import BackupConfig
 from tests.conftest import post_fixture
+from tests.payloads import post, steps_payload
 from tools import backup, replay
 from tools.replay import checksum, snapshot
 
@@ -85,9 +86,9 @@ def test_verify_goes_red_when_one_backup_row_is_altered(live, settings, tmp_path
 
 def test_verify_goes_red_when_live_moves_on(live, client, settings, tmp_path, capsys):
     backup.create_backup(settings, tmp_path / "b1")
-    post_fixture(client, "workouts_v2_run.json")
+    post(client, steps_payload({"2026-08-01": 4321}))
     assert backup.main(["--verify", str(tmp_path / "b1"), "--no-replay"]) == 1
-    assert "live vs backup: activities: +" in capsys.readouterr().out
+    assert "live vs backup: steps_daily: +" in capsys.readouterr().out
 
 
 def test_verify_goes_red_when_a_raw_file_is_altered_or_missing(live, settings, tmp_path):

@@ -2,6 +2,7 @@
 
 Rule (notes.txt § Goal model, Dedupe): starts within `start_window_min` minutes and durations
 within `duration_tolerance_pct` percent, from a source app not already attached to the candidate.
+A copy whose source is `unknown` (no time series to name it) never blocks a merge.
 Setting DEDUPE_DISABLED=1 in the environment bypasses the rule; it is the mutant the
 source-replay skill runs to prove the dedupe test is a real gate.
 """
@@ -13,6 +14,7 @@ import sqlite3
 from datetime import timedelta
 
 from app.config import DedupeConfig
+from app.ingest.parse import UNKNOWN_SOURCE
 from app.timeutil import from_utc_iso, to_utc_iso
 
 
@@ -46,6 +48,8 @@ def find_matching_activity(
     for row in rows:
         if not durations_match(int(row["duration_s"]), duration_s, cfg.duration_tolerance_pct):
             continue
+        if source_app == UNKNOWN_SOURCE:
+            return str(row["id"])
         already = conn.execute(
             "SELECT 1 FROM activity_sources WHERE activity_id = ? AND source_app = ?",
             (row["id"], source_app),

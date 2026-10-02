@@ -28,11 +28,11 @@ def _schema(conn) -> list[str]:
 def test_apply_twice_is_noop(tmp_path: Path):
     conn = connect(tmp_path / "m.db")
     first = migrate(conn)
-    assert first == [1]
+    assert first == [1, 2]
     after_first = _schema(conn)
     assert migrate(conn) == []
     assert _schema(conn) == after_first
-    assert schema_version(conn) == 1
+    assert schema_version(conn) == 2
     assert set(table_names(conn)) == EXPECTED_TABLES
     assert conn.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
     assert conn.execute("PRAGMA foreign_keys").fetchone()[0] == 1

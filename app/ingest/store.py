@@ -20,6 +20,7 @@ class IngestStats:
     workouts_merged: int = 0
     metrics_rows: int = 0
     unknown_metrics: list[str] | None = None
+    reapplied: int = 0
 
 
 def _provenance(workout: Workout) -> dict[str, object]:
@@ -60,13 +61,22 @@ def _merged_entries(conn: sqlite3.Connection, activity_id: str, workout: Workout
         "SELECT merged_from_json FROM activities WHERE id = ?", (activity_id,)
     ).fetchone()
     entries: list[dict] = json.loads(row["merged_from_json"]) if row else []
-    entries = [
-        e
-        for e in entries
-        if not (e["source_app"] == workout.source_app and e["external_id"] == workout.external_id)
-    ]
-    entries.append(_provenance(workout))
+    fresh = _provenance(workout)
+    for index, entry in enumerate(entries):
+        same_app = entry["source_app"] == fresh["source_app"]
+        if same_app and entry["external_id"] == fresh["external_id"]:
+            entries[index] = fresh
+            return entries
+    entries.append(fresh)
     return entries
+
+
+def canonical_entry(entries: list[dict]) -> dict:
+    """The copy that describes the activity: the first seen that carries HR samples, else
+    the first seen. A copy keeps its place when a later push re-sends it, so the choice
+    does not move with which copies a push happens to carry."""
+    with_hr = [e for e in entries if e.get("hr_sample_count")]
+    return (with_hr or entries)[0]
 
 
 def _hr_fields(
@@ -105,7 +115,7 @@ def upsert_workout(
     """Store one workout under its canonical activity. Returns True when it merged into another."""
     activity_id, merged = _canonical_id(conn, workout, settings)
     entries = _merged_entries(conn, activity_id, workout)
-    canonical = entries[0]
+    canonical = canonical_entry(entries)
     conn.execute(
         "INSERT INTO activities (id, type, start_utc, end_utc, duration_s, merged_from_json) "
         "VALUES (?, ?, ?, ?, ?, '[]') ON CONFLICT (id) DO NOTHING",
@@ -171,6 +181,18 @@ def sleep_id(session: SleepSession) -> str:
     return "sleep_" + hashlib.sha256(key).hexdigest()[:16]
 
 
+def replace_sleep(conn: sqlite3.Connection, sessions: list[SleepSession]) -> None:
+    """A payload is authoritative for each (wake day, source) it carries: that day's sessions
+    from that source are replaced by the payload's, so a corrected night leaves one row."""
+    for wake_day, source in sorted({(s.wake_day_local, s.source) for s in sessions}):
+        conn.execute(
+            "DELETE FROM sleep_sessions WHERE wake_day_local = ? AND source = ?",
+            (wake_day, source),
+        )
+    for session in sessions:
+        upsert_sleep(conn, session)
+
+
 def upsert_sleep(conn: sqlite3.Connection, session: SleepSession) -> None:
     conn.execute(
         "INSERT OR REPLACE INTO sleep_sessions (id, wake_day_local, start_utc, end_utc, "
@@ -208,21 +230,24 @@ def upsert_wellness(conn: sqlite3.Connection, value: DailyValue) -> None:
 
 
 def store_payload(
-    conn: sqlite3.Connection, parsed: ParsedPayload, raw_archive_id: int | None, settings: Settings
+    conn: sqlite3.Connection,
+    parsed: ParsedPayload,
+    raw_archive_id: int | None,
+    settings: Settings,
+    record_log: bool = True,
 ) -> IngestStats:
     stats = IngestStats(unknown_metrics=list(parsed.unknown_metrics))
     for workout in sorted(parsed.workouts, key=lambda w: (w.start_utc, w.external_id)):
         stats.workouts_seen += 1
         if upsert_workout(conn, workout, raw_archive_id, settings):
             stats.workouts_merged += 1
-    for session in parsed.sleep:
-        upsert_sleep(conn, session)
+    replace_sleep(conn, parsed.sleep)
     for value in parsed.steps:
         upsert_steps(conn, value)
     for value in parsed.wellness:
         upsert_wellness(conn, value)
     stats.metrics_rows = len(parsed.sleep) + len(parsed.steps) + len(parsed.wellness)
-    if raw_archive_id is not None:
+    if raw_archive_id is not None and record_log:
         conn.execute(
             "INSERT INTO ingest_log "
             "(raw_archive_id, workouts_seen, workouts_merged, metrics_rows, unknown_metrics) "

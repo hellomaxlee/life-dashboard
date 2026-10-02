@@ -5,7 +5,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from app.jobs.scheduler import BACKUP_JOB, USAGE_JOB
+from app.jobs.scheduler import CORE_JOBS
 from app.main import create_app
 from tests.conftest import fixture_bytes, post_fixture
 from tools import drill
@@ -19,7 +19,7 @@ def with_scheduler(settings):
 
 def assert_scheduler_is_back(app) -> None:
     assert app.state.scheduler.running
-    assert {job.id for job in app.state.scheduler.get_jobs()} == {USAGE_JOB, BACKUP_JOB}
+    assert {job.id for job in app.state.scheduler.get_jobs()} == CORE_JOBS
 
 
 def test_clean_restart_keeps_data_and_brings_jobs_back(jobs_settings):
