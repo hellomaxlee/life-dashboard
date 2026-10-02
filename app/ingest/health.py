@@ -41,6 +41,14 @@ def received_at_from_filename(name: str) -> str:
     return datetime.strptime(stamp, "%Y%m%dT%H%M%SZ").strftime(UTC_ISO)
 
 
+def _write_durably(target: Path, body: bytes) -> None:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with target.open("wb") as fh:
+        fh.write(body)
+        fh.flush()
+        os.fsync(fh.fileno())
+
+
 def archive_raw(
     conn: sqlite3.Connection,
     raw_dir: Path,
@@ -50,21 +58,25 @@ def archive_raw(
     write_file: bool = True,
     path: Path | None = None,
 ) -> ArchiveResult:
-    """Write the exact request bytes to disk and record them before anything reads them."""
+    """Write the exact request bytes to disk and record them before anything reads them.
+
+    `duplicate` is True only when these bytes were archived and parsed before. Bytes whose
+    earlier parse never finished (a kill or an error left parsed_ok = 0) come back under
+    their existing row with duplicate False, so the caller parses them again.
+    """
     digest = hashlib.sha256(body).hexdigest()
     existing = conn.execute(
-        "SELECT id, path FROM raw_archive WHERE sha256 = ?", (digest,)
+        "SELECT id, path, parsed_ok FROM raw_archive WHERE sha256 = ?", (digest,)
     ).fetchone()
     if existing is not None:
-        return ArchiveResult(int(existing["id"]), Path(existing["path"]), digest, True)
+        recorded = Path(existing["path"])
+        if write_file and not existing["parsed_ok"] and not recorded.is_file():
+            _write_durably(recorded, body)
+        return ArchiveResult(int(existing["id"]), recorded, digest, bool(existing["parsed_ok"]))
     moment = received_at or now_utc()
     target = path or raw_dir / source / raw_filename(moment, digest)
     if write_file:
-        target.parent.mkdir(parents=True, exist_ok=True)
-        with target.open("wb") as fh:
-            fh.write(body)
-            fh.flush()
-            os.fsync(fh.fileno())
+        _write_durably(target, body)
     cursor = conn.execute(
         "INSERT INTO raw_archive (source, received_at_utc, sha256, path, byte_len, parsed_ok) "
         "VALUES (?, ?, ?, ?, ?, 0)",
