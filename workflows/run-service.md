@@ -129,6 +129,8 @@ is no separate process to supervise. Config: `[scheduler]` and `[backup]` in
 | `nightly_backup` | `backup.time` (03:15 America/New_York) | `tools.backup` nightly: `data/backups/life-<utc stamp>/`, keeps the newest `backup.keep` (14) |
 | `backup_overdue_check` | two minutes after start, then every hour | takes a backup if none is newer than 26 hours; otherwise does nothing |
 | `device_rotation` | every `device.screen_seconds` (20 s), **only while `device.pixoo_host` is set** | sends the next screen (Week, Today, Books, wrapping) to the Pixoo; section 15 |
+| `metrics_recompute` | 60 s after start, then every `metrics.recompute_minutes` (15 min) | recomputes every `daily_metrics` / `weekly_metrics` row from the stored tables; picks up whatever the last push brought; section 17 |
+| `metrics_rollover` | `metrics.rollover_time` (00:05 America/New_York) | the same recompute, so the new day's and (on Monday) the new week's rows exist when the renderer looks them up |
 
 The Goodreads 06:30 job is not here; it is added to `build_scheduler` together with the poller.
 
@@ -346,3 +348,34 @@ backup from step 1 (section 12, `--overwrite-live`) and check out the previous
 commit. Starting the service without step 3 also migrates the schema (it does
 so at start), but it does not normalise old activities and gives you no chance
 to look first.
+
+## 17. Metrics (the engine behind the dots, streak, wins and load)
+
+`app/metrics/` turns the stored tables into `daily_metrics` and `weekly_metrics`
+rows; every rule is in `notes.txt § Goal model` and the row "Metrics engine" under
+§ Architecture assumptions. It runs on the schedule above and never on a push,
+so a number on the frame is at most `metrics.recompute_minutes` behind the data.
+
+```sh
+uv run python -m tools.metrics --recompute                 # recompute everything through today, now
+uv run python -m tools.metrics --recompute --today 2026-10-05   # as of the end of that day (for a look back)
+uv run python -m tools.metrics --show 2026-10-05           # the day's row and its week's row as JSON
+uv run python -m tools.metrics --history                   # every load-bar change, then the placeholder
+grep -n "metrics recomputed" data/logs/life-dashboard.out.log | tail   # the job logs only when it wrote something
+```
+
+What to expect:
+- A week's `week_hit` stays `null` from Monday 00:00 until the first push after it
+  (or 12 h with no push, `metrics.week_close_grace_hours`), so a Sunday-night
+  workout in Monday's 06:00 push still counts and the streak does not flicker to 0
+  overnight. The device shows the streak as it stood until then.
+- The load bar is the placeholder 100 until three runs of 4 miles or more with
+  heart-rate samples exist; `--history` then shows the decision with the three run
+  ids and the Monday it applies from. Past weeks keep the bar they were scored
+  under; nothing before that Monday changes.
+- `tools.replay --verify` also checks these rows: it recomputes the replay under
+  the clock of the last recompute and compares. If a push landed after that
+  recompute it prints `note: metrics: derived rows not compared ...` and compares
+  the ingested tables only; run `tools.metrics --recompute` and verify again.
+- A recompute that fails writes nothing (one transaction) and the job logs
+  `job metrics_recompute failed`; the previous rows stay on the frame.

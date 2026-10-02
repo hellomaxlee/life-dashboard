@@ -9,6 +9,12 @@ python -m tools.replay --diff PATH          compare live tables to a snapshot; e
 --snapshot and --diff compare live with live across a code change; they never look at the
 scratch db. --verify is the one that tests the parsers against what is stored.
 
+The metrics engine's keys in daily_metrics / weekly_metrics and the load_bar_history table
+are derived, not ingested. --verify recomputes them in the scratch db under the clock of
+live's last recompute (`metrics_state`) and compares them too; when live holds a payload
+newer than that recompute, or the engine never ran, they are left out and a note says so.
+--snapshot and --diff always include them.
+
 Replay order is raw_archive.id order (the order payloads were applied) whenever a db with
 raw_archive rows is available. Only payloads that were parsed are replayed. Files on disk
 with no row are reported as unrecorded and never applied. With no db at all (rebuilding from
@@ -30,6 +36,8 @@ from app.config import REPO_ROOT, Settings, load_settings
 from app.db import SchemaMismatch, connect_live, open_db
 from app.ingest import claude_usage, health
 from app.ingest.health import archive_raw, received_at_from_filename
+from app.metrics.engine import last_run, recompute
+from app.metrics.keys import DAILY_KEYS, WEEKLY_KEYS
 from app.timeutil import from_utc_iso
 
 DATA_TABLES = (
@@ -43,6 +51,8 @@ DATA_TABLES = (
     "weekly_metrics",
     "books",
 )
+DERIVED_TABLES = ("load_bar_history",)
+DERIVED_KEYS = {"daily_metrics": DAILY_KEYS, "weekly_metrics": WEEKLY_KEYS}
 PROVENANCE_COLUMNS = {"activity_sources": {"raw_archive_id"}}
 SCRATCH_DB = REPO_ROOT / "data" / "replay" / "scratch.db"
 INGESTERS = {
@@ -57,15 +67,34 @@ def _primary_key(conn: sqlite3.Connection, table: str) -> list[str]:
     return [name for _, name in keyed] or [c["name"] for c in cols]
 
 
-def dump_table(conn: sqlite3.Connection, table: str) -> list[dict[str, object]]:
+def _without_derived(row: dict[str, object], keys: frozenset[str]) -> dict[str, object] | None:
+    """The row with the engine's keys removed; None when nothing else is in it."""
+    loaded = json.loads(str(row["metrics_json"]))
+    kept = (
+        {k: v for k, v in loaded.items() if k not in keys} if isinstance(loaded, dict) else loaded
+    )
+    if not kept:
+        return None
+    return {**row, "metrics_json": json.dumps(kept, sort_keys=True)}
+
+
+def dump_table(
+    conn: sqlite3.Connection, table: str, derived: bool = True
+) -> list[dict[str, object]]:
     order = ", ".join(f'"{c}"' for c in _primary_key(conn, table))
     rows = conn.execute(f'SELECT * FROM "{table}" ORDER BY {order}').fetchall()
     skip = PROVENANCE_COLUMNS.get(table, set())
-    return [{k: v for k, v in dict(r).items() if k not in skip} for r in rows]
+    dumped = [{k: v for k, v in dict(r).items() if k not in skip} for r in rows]
+    if derived or table not in DERIVED_KEYS:
+        return dumped
+    stripped = (_without_derived(row, DERIVED_KEYS[table]) for row in dumped)
+    return [row for row in stripped if row is not None]
 
 
-def snapshot(conn: sqlite3.Connection) -> dict[str, list[dict[str, object]]]:
-    return {table: dump_table(conn, table) for table in DATA_TABLES}
+def snapshot(conn: sqlite3.Connection, derived: bool = False) -> dict[str, list[dict[str, object]]]:
+    """The data tables. With `derived` the metrics engine's keys and tables are included."""
+    tables = DATA_TABLES + DERIVED_TABLES if derived else DATA_TABLES
+    return {table: dump_table(conn, table, derived) for table in tables}
 
 
 def checksum(snap: dict[str, list[dict[str, object]]]) -> str:
@@ -216,15 +245,41 @@ def verify(settings: Settings, scratch_db: Path) -> tuple[list[str], list[str]]:
     live = connect_live(settings.storage.db_path)
     try:
         plan = replay_plan(settings.storage.raw_dir, live)
+        clock, why_not = metrics_clock(live)
         scratch = replay(settings.storage.raw_dir, scratch_db, settings, plan=plan)
         try:
-            lines = diff(snapshot(live), snapshot(scratch))
+            if clock is not None:
+                recompute(scratch, settings, clock[0], from_utc_iso(clock[1]))
+            lines = diff(
+                snapshot(live, derived=clock is not None),
+                snapshot(scratch, derived=clock is not None),
+            )
         finally:
             scratch.close()
     finally:
         live.close()
     lines.extend(plan.refused())
-    return lines, plan.notes()
+    notes = plan.notes()
+    if why_not:
+        notes.append(f"metrics: derived rows not compared: {why_not}")
+    return lines, notes
+
+
+def metrics_clock(live: sqlite3.Connection) -> tuple[tuple[str, str] | None, str | None]:
+    """The (today, now) to recompute the replay under, or why the derived rows cannot be
+    compared: the engine never ran, or live holds a payload newer than its last run."""
+    clock = last_run(live)
+    if clock is None:
+        return None, "the metrics engine has not run on the live db"
+    newest = live.execute(
+        "SELECT MAX(received_at_utc) FROM raw_archive WHERE parsed_ok = 1"
+    ).fetchone()[0]
+    if newest is not None and newest > clock[1]:
+        return None, (
+            f"live holds a payload received {newest}, after its last recompute at {clock[1]}; "
+            "run `uv run python -m tools.metrics --recompute` and verify again"
+        )
+    return clock, None
 
 
 def report(conn: sqlite3.Connection) -> str:
@@ -287,12 +342,12 @@ def _run(args: argparse.Namespace, settings: Settings) -> int:
         if args.snapshot:
             target = Path(args.snapshot)
             target.parent.mkdir(parents=True, exist_ok=True)
-            snap = snapshot(live)
+            snap = snapshot(live, derived=True)
             target.write_text(json.dumps(snap, indent=1, sort_keys=True))
             print(f"snapshot {target} checksum {checksum(snap)}")
             return 0
         saved = json.loads(Path(args.diff).read_text())
-        lines = diff(snapshot(live), saved)
+        lines = diff(snapshot(live, derived=True), saved)
         for line in lines:
             print(line)
         print(f"{len(lines)} difference(s)")

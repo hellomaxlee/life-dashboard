@@ -22,13 +22,15 @@ from apscheduler.triggers.interval import IntervalTrigger
 from app.config import Settings
 from app.ingest.claude_usage import read_usage_file
 from app.jobs.rotation import ROTATION_JOB, ClipAdapter, DeviceRotation, device_adapter
+from app.metrics.job import RECOMPUTE_JOB, ROLLOVER_JOB, run_recompute
 from app.timeutil import now_utc
 from tools import backup
 
 USAGE_JOB = "claude_usage_watch"
 BACKUP_JOB = "nightly_backup"
 BACKUP_CHECK_JOB = "backup_overdue_check"
-CORE_JOBS = frozenset({USAGE_JOB, BACKUP_JOB, BACKUP_CHECK_JOB})
+CORE_JOBS = frozenset({USAGE_JOB, BACKUP_JOB, BACKUP_CHECK_JOB, RECOMPUTE_JOB, ROLLOVER_JOB})
+RECOMPUTE_FIRST_DELAY = timedelta(seconds=60)
 BACKUP_MISFIRE_GRACE_S = 18 * 3600
 BACKUP_OVERDUE = timedelta(hours=26)
 BACKUP_CATCHUP_DELAY = timedelta(minutes=2)
@@ -197,6 +199,20 @@ def build_scheduler(
         IntervalTrigger(seconds=int(BACKUP_CHECK_EVERY.total_seconds()), timezone=tz),
         id=BACKUP_CHECK_JOB,
         next_run_time=moment + BACKUP_CATCHUP_DELAY,
+    )
+
+    scheduler.add_job(
+        guarded(RECOMPUTE_JOB, lambda: run_recompute(settings, open_conn), stats),
+        IntervalTrigger(minutes=settings.metrics.recompute_minutes, timezone=tz),
+        id=RECOMPUTE_JOB,
+        next_run_time=moment + RECOMPUTE_FIRST_DELAY,
+    )
+    roll_hour, roll_minute = parse_hh_mm(settings.metrics.rollover_time)
+    scheduler.add_job(
+        guarded(ROLLOVER_JOB, lambda: run_recompute(settings, open_conn), stats),
+        CronTrigger(hour=roll_hour, minute=roll_minute, timezone=tz),
+        id=ROLLOVER_JOB,
+        misfire_grace_time=int(timedelta(hours=23).total_seconds()),
     )
 
     if settings.device.pixoo_host:

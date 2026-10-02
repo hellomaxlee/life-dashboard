@@ -65,6 +65,19 @@ dir = "data/backups"
 time = "03:15"
 keep = 14
 
+# Metrics engine (notes.txt § Goal model). Recomputes every day's and week's rows from the
+# stored tables on an interval and at the day rollover; a late push is picked up by the next run.
+[metrics]
+recompute_minutes = 15
+rollover_time = "00:05"
+# A week closes after the first health push following Monday 00:00 local, or after this many
+# hours with no push at all.
+week_close_grace_hours = 12
+# Seconds one HR sample may stand for before the rest of the gap is unscored.
+max_sample_gap_s = 300
+# Which band crossing becomes the day's one wellness fact when several cross.
+wellness_priority = ["hrv_ms", "resting_hr", "daylight_min"]
+
 # Pixoo-64 on the LAN. Empty = no device; nothing is ever pushed. Not yet purchased.
 [device]
 pixoo_host = ""
