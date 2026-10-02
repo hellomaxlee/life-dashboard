@@ -124,7 +124,8 @@ is no separate process to supervise. Config: `[scheduler]` and `[backup]` in
 |---|---|---|
 | `claude_usage_watch` | every `scheduler.usage_poll_seconds` (30 s) | stats `data/claude_usage.json`; reads it only if mtime or size changed, and at most once per `scheduler.usage_min_read_seconds` (900 s) |
 | `nightly_backup` | `backup.time` (03:15 America/New_York) | `tools.backup` nightly: `data/backups/life-<utc stamp>/`, keeps the newest `backup.keep` (14) |
-| `goodreads_poll` | not registered | the poller is not built; its slot is `register_goodreads_poll` in `app/jobs/scheduler.py` |
+
+The Goodreads 06:30 job is not here; it is added to `build_scheduler` together with the poller.
 
 A job never overlaps itself, opens its own db connection per run, and an
 exception is logged (`job <id> failed` plus traceback in the err log), not fatal.
@@ -135,6 +136,11 @@ ls -lt data/backups | head                                          # did last n
 ls data/raw/claude_usage | wc -l                                    # usage readings archived
 LIFE_SCHEDULER_ENABLED=0 uv run fastapi dev app/main.py --port 8080 # run with no jobs (debugging)
 ```
+
+`LIFE_SCHEDULER_ENABLED` takes `1/true/yes` or `0/false/no`; anything else stops the
+service at boot with a message naming the variable. A backup that found raw files
+missing from the live archive still lands, and logs
+`backup life-... is missing N raw file(s): ...` to the err log.
 
 Mac asleep at 03:15: the backup runs within 30 s of the next wake if that is
 inside 18 hours; otherwise that night is skipped. Service started with no
@@ -180,10 +186,13 @@ curl -s http://127.0.0.1:8080/healthz
 Without `--overwrite-live` the command refuses and exits 2. Anything pushed
 after the backup is refilled by the phone's next push (each carries 7 days).
 
-## 13. Kill-mid-sync and power-cut drill (automated)
+## 13. Kill-mid-sync drill (`kill -9`, automated)
 
 Claim: a `kill -9` at any point of an ingest loses nothing. The drill runs in
-its own temp directory; it never opens `data/`.
+its own temp directory; it never opens `data/`. It is a process kill, **not a
+power cut**: the OS survives and flushes its cache. Power-cut durability rests
+on SQLite WAL mode and the fsync of each raw file before its row is written;
+no test here cuts power.
 
 ```sh
 uv run python -m tools.drill                     # all four stages, exit 1 on any failure
@@ -195,7 +204,7 @@ A child process posts a payload to the real `/ingest/health` route, stops at
 the named stage, and is SIGKILLed there. Stages: `before_row` (raw file on
 disk, no `raw_archive` row), `after_archive` (row with `parsed_ok = 0`),
 `mid_transaction` (rows written, not committed), `after_commit` (committed,
-WAL not checkpointed: the power cut right after a push). Pass, per stage:
+WAL not checkpointed: a `kill -9` right after a push). Pass, per stage:
 `integrity_check` is `ok`, the raw file is on disk byte-for-byte, no partial
 rows survived, re-posting the same payload answers `ok` (`duplicate` for
 `after_commit`), and the data-table checksum equals a clean run's.
@@ -203,15 +212,16 @@ rows survived, re-posting the same payload answers `ok` (`duplicate` for
 What the states mean on the real box: a raw file with no `raw_archive` row is a
 push that died before it was recorded; it is harmless and the phone's next push
 re-sends those days. A row with `parsed_ok = 0` and no error is a push that died
-mid-parse; re-posting the same bytes parses it (it used to answer `duplicate`
-and stay unparsed). A `raw_archive` row whose file is missing is the only
+mid-parse or failed; re-posting the same bytes parses it, unless a later push
+of the same source has already been parsed, in which case the re-post answers
+`superseded` and stores nothing (older data must not land on top of newer). A `raw_archive` row whose file is missing is the only
 combination that is a bug; `tools.backup --verify` reports it.
 
-After a real power cut:
+After a real power cut or a hard reset (untested by the drill; these are the checks to run):
 
 ```sh
 sqlite3 data/life.db "PRAGMA integrity_check;"            # must print ok
-sqlite3 data/life.db "SELECT id, source, received_at_utc FROM raw_archive WHERE parsed_ok = 0 AND error IS NULL;"
+sqlite3 data/life.db "SELECT id, source, received_at_utc, error FROM raw_archive WHERE parsed_ok = 0;"
 uv run python -m tools.backup && uv run python -m tools.backup --verify "$(ls -d data/backups/life-* | tail -1)"
 ```
 

@@ -5,6 +5,7 @@ import sqlite3
 import threading
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -13,7 +14,7 @@ from fastapi.testclient import TestClient
 
 from app.db import open_db
 from app.jobs import scheduler as jobs
-from app.jobs.scheduler import BACKUP_JOB, GOODREADS_JOB, USAGE_JOB, JobStats, UsageWatcher
+from app.jobs.scheduler import BACKUP_JOB, USAGE_JOB, JobStats, UsageWatcher
 from app.main import create_app
 from tests.conftest import count, post_fixture
 from tools import backup
@@ -129,6 +130,7 @@ def test_a_failing_run_does_not_stop_later_runs_of_the_real_scheduler(jobs_setti
         calls.append(len(calls))
         if len(calls) == 1:
             raise OSError("backup volume not mounted")
+        return SimpleNamespace(raw_missing=[])
 
     monkeypatch.setattr(backup, "nightly", nightly)
     scheduler = jobs.build_scheduler(jobs_settings, lambda: open_db(jobs_settings.storage.db_path))
@@ -156,6 +158,7 @@ def test_a_job_never_overlaps_itself(jobs_settings, monkeypatch):
         calls.append(len(calls))
         started.set()
         release.wait(timeout=5)
+        return SimpleNamespace(raw_missing=[])
 
     monkeypatch.setattr(backup, "nightly", slow_nightly)
     scheduler = jobs.build_scheduler(jobs_settings, lambda: open_db(jobs_settings.storage.db_path))
@@ -180,7 +183,6 @@ def test_registered_jobs_and_their_guards(jobs_settings):
     try:
         by_id = {job.id: job for job in scheduler.get_jobs()}
         assert set(by_id) == {USAGE_JOB, BACKUP_JOB}
-        assert GOODREADS_JOB not in by_id
         assert all(job.max_instances == 1 and job.coalesce for job in by_id.values())
         assert by_id[USAGE_JOB].trigger.interval == timedelta(
             seconds=jobs_settings.scheduler.usage_poll_seconds
@@ -246,4 +248,76 @@ def test_config_file_ships_with_the_scheduler_on(monkeypatch):
     assert shipped.scheduler.enabled is True
     assert shipped.scheduler.usage_min_read_seconds >= shipped.scheduler.usage_poll_seconds
     assert jobs.parse_hh_mm(shipped.backup.time) == (3, 15)
-    assert jobs.parse_hh_mm(shipped.pull.goodreads) == (6, 30)
+
+
+def test_a_bad_goodreads_time_does_not_stop_the_scheduler(jobs_settings):
+    typo = replace(jobs_settings, pull=replace(jobs_settings.pull, goodreads="6h30"))
+    scheduler = jobs.build_scheduler(typo, lambda: open_db(typo.storage.db_path))
+    assert {job.id for job in scheduler.get_jobs()} == {USAGE_JOB, BACKUP_JOB}
+    assert not hasattr(jobs, "GOODREADS_JOB")
+    assert not hasattr(jobs, "register_goodreads_poll")
+
+
+def test_backup_job_logs_raw_files_missing_from_the_archive(client, db, jobs_settings, caplog):
+    post_fixture(client, "workouts_v2_overlap.json")
+    post_fixture(client, "metrics_v2_days.json")
+    gone = sorted((jobs_settings.storage.raw_dir / "health").iterdir())[0]
+    gone.unlink()
+    scheduler = jobs.build_scheduler(jobs_settings, lambda: open_db(jobs_settings.storage.db_path))
+
+    scheduler.get_job(BACKUP_JOB).func()
+
+    assert len(backup.list_backups(jobs_settings.backup.dir)) == 1
+    assert scheduler.job_stats[BACKUP_JOB] == JobStats(runs=1)
+    assert f"is missing 1 raw file(s): health/{gone.name}" in caplog.text
+
+
+def test_malformed_usage_read_does_not_use_up_the_throttle_window(db, jobs_settings):
+    clock, opened = Clock(), CountingOpen(jobs_settings)
+    watcher = UsageWatcher(jobs_settings, opened, clock)
+
+    jobs_settings.claude_usage.path.write_text("{not json")
+    assert watcher.tick() == "malformed"
+    clock.now += 30
+    assert watcher.tick() == "unchanged"
+    write_usage(jobs_settings, 41.2, 1)
+    clock.now += 30
+    assert watcher.tick() == "ok"
+    assert count(db, "daily_metrics") == 1
+
+
+def test_failed_usage_read_is_retried_on_the_next_tick(db, jobs_settings):
+    clock = Clock()
+    attempts: list[int] = []
+
+    def flaky_open() -> sqlite3.Connection:
+        attempts.append(1)
+        if len(attempts) == 1:
+            raise sqlite3.OperationalError("database is locked")
+        return open_db(jobs_settings.storage.db_path)
+
+    watcher = UsageWatcher(jobs_settings, flaky_open, clock)
+    write_usage(jobs_settings, 41.2, 1)
+    with pytest.raises(sqlite3.OperationalError):
+        watcher.tick()
+    clock.now += 30
+    assert watcher.tick() == "ok"
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [("1", True), ("true", True), ("YES", True), ("0", False), ("false", False), ("No", False)],
+)
+def test_scheduler_env_switch_accepts_words(monkeypatch, value, expected):
+    from app.config import load_settings
+
+    monkeypatch.setenv("LIFE_SCHEDULER_ENABLED", value)
+    assert load_settings().scheduler.enabled is expected
+
+
+def test_scheduler_env_switch_rejects_anything_else(monkeypatch):
+    from app.config import load_settings
+
+    monkeypatch.setenv("LIFE_SCHEDULER_ENABLED", "maybe")
+    with pytest.raises(ValueError, match="LIFE_SCHEDULER_ENABLED"):
+        load_settings()

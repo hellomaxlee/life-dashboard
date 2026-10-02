@@ -25,7 +25,6 @@ from tools import backup
 
 USAGE_JOB = "claude_usage_watch"
 BACKUP_JOB = "nightly_backup"
-GOODREADS_JOB = "goodreads_poll"
 BACKUP_MISFIRE_GRACE_S = 18 * 3600
 BACKUP_OVERDUE = timedelta(hours=26)
 BACKUP_CATCHUP_DELAY = timedelta(minutes=2)
@@ -60,7 +59,9 @@ def guarded(name: str, fn: Callable[[], object], stats: dict[str, JobStats]) -> 
 
 class UsageWatcher:
     """Reads the Claude usage file only when its mtime or size changed, at most once per
-    `usage_min_read_seconds`. An unchanged or throttled tick never opens the db."""
+    `usage_min_read_seconds`. An unchanged or throttled tick never opens the db. A read
+    that raised or found the file malformed does not start the wait, so the next change is
+    read on the next tick."""
 
     def __init__(
         self, settings: Settings, open_conn: OpenConn, clock: Callable[[], float] = time.monotonic
@@ -89,7 +90,8 @@ class UsageWatcher:
         finally:
             conn.close()
         self._seen = signature
-        self._last_read = now
+        if result.status != "malformed":
+            self._last_read = now
         return result.status
 
 
@@ -106,14 +108,15 @@ def backup_overdue(settings: Settings, now: datetime) -> bool:
     return not backups or now - backup.backup_created_at(backups[-1]) > BACKUP_OVERDUE
 
 
-def register_goodreads_poll(scheduler: BackgroundScheduler, settings: Settings) -> None:
-    """Reserved for the Goodreads poll at `pull.goodreads` (06:30 home time).
-
-    The poller is not built (Phase 1a remainder), so nothing is registered. When it exists,
-    add it here as GOODREADS_JOB with CronTrigger(hour, minute, timezone=home_tz) through
-    `guarded`, with a fresh connection per run, like the backup job below.
-    """
-    parse_hh_mm(settings.pull.goodreads)
+def run_backup(settings: Settings) -> None:
+    result = backup.nightly(settings)
+    if result.raw_missing:
+        log.error(
+            "backup %s is missing %d raw file(s): %s",
+            result.path.name,
+            len(result.raw_missing),
+            ", ".join(result.raw_missing),
+        )
 
 
 def build_scheduler(
@@ -140,14 +143,13 @@ def build_scheduler(
     if backup_overdue(settings, moment):
         catch_up = {"next_run_time": moment + BACKUP_CATCHUP_DELAY}
     scheduler.add_job(
-        guarded(BACKUP_JOB, lambda: backup.nightly(settings), stats),
+        guarded(BACKUP_JOB, lambda: run_backup(settings), stats),
         CronTrigger(hour=hour, minute=minute, timezone=tz),
         id=BACKUP_JOB,
         misfire_grace_time=BACKUP_MISFIRE_GRACE_S,
         **catch_up,
     )
 
-    register_goodreads_poll(scheduler, settings)
     return scheduler
 
 

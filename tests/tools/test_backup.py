@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
+import time
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
 
+from app.config import BackupConfig
 from tests.conftest import post_fixture
 from tools import backup, replay
 from tools.replay import checksum, snapshot
@@ -140,12 +144,10 @@ def test_overwrite_live_replaces_db_and_drops_stale_wal(live, db, settings, tmp_
 
 
 def test_nightly_keeps_the_newest_n_and_clears_partials(live, settings, tmp_path):
-    from dataclasses import replace
-
-    from app.config import BackupConfig
-
     nightly = replace(settings, backup=BackupConfig(tmp_path / "backups", "03:15", 3))
-    (nightly.backup.dir / "life-20260101T000000Z.partial").mkdir(parents=True)
+    abandoned = nightly.backup.dir / "life-20260101T000000Z.partial"
+    abandoned.mkdir(parents=True)
+    os.utime(abandoned, (time.time() - 7200, time.time() - 7200))
     (nightly.backup.dir / "keep-me").mkdir()
     for day in range(5):
         backup.nightly(nightly, NIGHT + timedelta(days=day))
@@ -179,3 +181,82 @@ def test_backup_errors_are_reported_not_raised(settings, tmp_path, capsys):
     assert "no database" in capsys.readouterr().err
     assert not (tmp_path / "b1").exists()
     assert backup.main(["--verify", str(tmp_path / "nothing-here")]) == 2
+
+
+def test_a_missing_raw_file_does_not_stop_backups(live, settings, tmp_path, capsys):
+    nightly = replace(settings, backup=BackupConfig(tmp_path / "backups", "03:15", 3))
+    gone = sorted((settings.storage.raw_dir / "health").iterdir())[0]
+    gone.unlink()
+
+    for day in range(3):
+        result = backup.nightly(nightly, NIGHT + timedelta(days=day))
+
+    names = sorted(p.name for p in nightly.backup.dir.iterdir())
+    assert names == ["life-20261002T071500Z", "life-20261003T071500Z", "life-20261004T071500Z"]
+    assert result.raw_missing == [f"health/{gone.name}"]
+    manifest = json.loads((result.path / backup.MANIFEST_NAME).read_text())
+    assert manifest["raw_missing"] == [f"health/{gone.name}"]
+    assert result.data_checksum == live
+    assert backup.main(["--verify", str(result.path)]) == 1
+    out = capsys.readouterr().out
+    assert f"file missing: {gone.name}" in out
+    assert f"manifest: raw file was already missing at backup time: health/{gone.name}" in out
+
+
+def test_a_failed_backup_leaves_no_partial_behind(live, settings, tmp_path, monkeypatch):
+    def disk_full(*args, **kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(backup, "_copy_raw", disk_full)
+    with pytest.raises(OSError):
+        backup.create_backup(settings, tmp_path / "backups" / "b1")
+    assert list((tmp_path / "backups").iterdir()) == []
+
+
+def test_a_corrupt_file_in_the_previous_backup_is_not_linked_forward(live, settings, tmp_path):
+    first = backup.create_backup(settings, tmp_path / "life-20261002T071500Z")
+    victim = sorted((first.path / "raw" / "health").iterdir())[0]
+    good = victim.read_bytes()
+    victim.write_bytes(b"x" * len(good))
+
+    second = backup.create_backup(settings, tmp_path / "life-20261003T071500Z")
+
+    assert (second.path / "raw" / "health" / victim.name).read_bytes() == good
+    assert second.raw_linked == len(FIXTURES) - 1
+    assert backup.verify(second.path, settings) == []
+
+
+def test_prune_spares_a_partial_that_may_still_be_written(tmp_path):
+    fresh = tmp_path / "life-20261002T071500Z.partial"
+    stale = tmp_path / "life-20261001T071500Z.partial"
+    (fresh / "raw" / "health").mkdir(parents=True)
+    (stale / "raw" / "health").mkdir(parents=True)
+    two_hours_ago = time.time() - 7200
+    for path in (stale, stale / "raw", stale / "raw" / "health"):
+        os.utime(path, (two_hours_ago, two_hours_ago))
+
+    removed = backup.prune(tmp_path, 3)
+
+    assert removed == [stale]
+    assert fresh.is_dir() and not stale.exists()
+
+
+def test_reading_a_missing_db_raises_and_creates_nothing(tmp_path):
+    with pytest.raises(backup.BackupError):
+        backup.integrity(tmp_path / "nope.db")
+    with pytest.raises(backup.BackupError):
+        backup.data_checksum(tmp_path / "nope.db")
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_verify_goes_red_when_raw_archive_state_differs(live, settings, tmp_path, capsys):
+    backup.create_backup(settings, tmp_path / "b1")
+    conn = sqlite3.connect(tmp_path / "b1" / backup.DB_NAME)
+    conn.execute("UPDATE raw_archive SET parsed_ok = 0 WHERE id = 1")
+    conn.commit()
+    conn.close()
+
+    assert backup.main(["--verify", str(tmp_path / "b1"), "--no-replay"]) == 1
+    out = capsys.readouterr().out
+    assert 'live vs backup: raw_archive: - {"id": 1, "parsed_ok": 0' in out
+    assert 'live vs backup: raw_archive: + {"id": 1, "parsed_ok": 1' in out

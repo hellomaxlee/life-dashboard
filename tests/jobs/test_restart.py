@@ -42,7 +42,7 @@ def test_clean_restart_keeps_data_and_brings_jobs_back(jobs_settings):
     assert drill.data_checksum(settings) == before
 
 
-def test_power_cut_after_a_push_restarts_onto_the_wal_with_nothing_lost(tmp_path):
+def test_kill_9_after_a_push_restarts_onto_the_wal_with_nothing_lost(tmp_path):
     payload = drill.DEFAULT_PAYLOAD
     clean = drill.clean_run_checksum(payload.read_bytes(), tmp_path / "clean")
     drill.kill_at_stage("after_commit", payload, tmp_path / "killed")
@@ -59,6 +59,4 @@ def test_power_cut_after_a_push_restarts_onto_the_wal_with_nothing_lost(tmp_path
         assert resp.json()["status"] == "duplicate"
         more = client.post("/ingest/health", content=fixture_bytes("metrics_v2_days.json"))
         assert more.json()["status"] == "ok"
-    conn = settings.storage.db_path
     assert drill._parsed_flags(settings) == ("ok", [1, 1])
-    assert conn.is_file()

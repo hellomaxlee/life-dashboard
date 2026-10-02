@@ -119,12 +119,26 @@ def _resolve(path_str: str) -> Path:
     return path if path.is_absolute() else REPO_ROOT / path
 
 
+_ON = {"1", "true", "yes"}
+_OFF = {"0", "false", "no"}
+
+
+def _env_switch(name: str, default: bool) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    word = value.strip().lower()
+    if word not in _ON | _OFF:
+        raise ValueError(f"{name} must be one of 1/true/yes or 0/false/no, not {value!r}")
+    return word in _ON
+
+
 def load_settings(config_path: Path | None = None) -> Settings:
     """Load config.toml into a frozen Settings.
 
     Environment overrides: LIFE_CONFIG_PATH (file), LIFE_DB_PATH, LIFE_RAW_DIR (storage),
-    LIFE_BACKUP_DIR, LIFE_SCHEDULER_ENABLED (0 or 1), HEALTH_EXPORT_TOKEN (secret, from .env
-    or the environment).
+    LIFE_BACKUP_DIR, LIFE_SCHEDULER_ENABLED (1/true/yes or 0/false/no),
+    HEALTH_EXPORT_TOKEN (secret, from .env or the environment).
     """
     load_dotenv(REPO_ROOT / ".env")
     path = config_path or Path(os.environ.get("LIFE_CONFIG_PATH", DEFAULT_CONFIG_PATH))
@@ -132,7 +146,6 @@ def load_settings(config_path: Path | None = None) -> Settings:
         raw = tomllib.load(fh)
 
     dedupe = raw["ingest"]["dedupe"]
-    scheduler_on = os.environ.get("LIFE_SCHEDULER_ENABLED")
     bands = raw["wellness"]["bands"]
     return Settings(
         home_tz=raw["home_tz"],
@@ -183,9 +196,7 @@ def load_settings(config_path: Path | None = None) -> Settings:
         ),
         health_export_token=os.environ.get("HEALTH_EXPORT_TOKEN", "").strip(),
         scheduler=SchedulerConfig(
-            enabled=bool(raw["scheduler"]["enabled"])
-            if scheduler_on is None
-            else scheduler_on.strip() == "1",
+            enabled=_env_switch("LIFE_SCHEDULER_ENABLED", bool(raw["scheduler"]["enabled"])),
             usage_poll_seconds=int(raw["scheduler"]["usage_poll_seconds"]),
             usage_min_read_seconds=int(raw["scheduler"]["usage_min_read_seconds"]),
         ),

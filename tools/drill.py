@@ -1,4 +1,4 @@
-"""Kill-mid-sync drill: SIGKILL an ingest at a known point, then prove nothing was lost.
+"""Kill-mid-sync drill: kill -9 an ingest at a known point, then prove nothing was lost.
 
 python -m tools.drill                  every stage, in a throwaway temp dir; exit 1 on a failure
 python -m tools.drill --stage mid_transaction --payload fixtures/health/batch_part1.json
@@ -9,10 +9,14 @@ the named stage and writes a marker file; the parent kills it only after the mar
 so the kill point is exact and not a timing race.
 
 Stages:
-  before_row       raw file fsynced, no raw_archive row yet
+  before_row       raw file written, no raw_archive row yet
   after_archive    raw_archive row written (parsed_ok = 0), nothing parsed
   mid_transaction  parsed rows written inside the open transaction, not committed
-  after_commit     everything committed, WAL not checkpointed (the power cut after a push)
+  after_commit     everything committed, WAL not checkpointed (kill -9 right after a push)
+
+This is a process kill, not a power cut: the OS keeps running and its page cache reaches
+the disk. Surviving a power cut rests on WAL mode plus fsync of the raw file and is not
+exercised here.
 """
 
 from __future__ import annotations
@@ -116,13 +120,13 @@ def _child(stage: str, payload: Path, marker: Path) -> int:
         threading.Event().wait()
 
     if stage == "before_row":
-        real_fsync = os.fsync
+        real_write = health._write_durably
 
-        def fsync_then_pause(fd: int) -> None:
-            real_fsync(fd)
+        def write_then_pause(*args: object, **kwargs: object) -> None:
+            real_write(*args, **kwargs)
             pause()
 
-        health.os.fsync = fsync_then_pause
+        health._write_durably = write_then_pause
     elif stage == "after_archive":
         health.parse_payload = lambda *args, **kwargs: pause()
     elif stage == "mid_transaction":
@@ -159,6 +163,8 @@ def kill_at_stage(stage: str, payload: Path, workdir: Path) -> None:
     proc = subprocess.Popen(
         [
             sys.executable,
+            "-W",
+            "ignore",
             "-m",
             "tools.drill",
             "--child",

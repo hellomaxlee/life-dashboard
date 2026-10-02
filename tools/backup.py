@@ -22,7 +22,8 @@ import shutil
 import sqlite3
 import sys
 import tempfile
-from dataclasses import dataclass
+import time
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -38,6 +39,7 @@ MANIFEST_NAME = "manifest.json"
 PARTIAL_SUFFIX = ".partial"
 STAMP = "%Y%m%dT%H%M%SZ"
 _BACKUP_NAME = re.compile(r"^life-\d{8}T\d{6}Z$")
+PARTIAL_STALE_S = 3600
 
 
 class BackupError(Exception):
@@ -51,6 +53,7 @@ class BackupResult:
     raw_files: int
     raw_bytes: int
     raw_linked: int
+    raw_missing: list[str] = field(default_factory=list)
 
 
 def backup_name(moment: datetime) -> str:
@@ -73,6 +76,8 @@ def list_backups(backup_dir: Path) -> list[Path]:
 
 
 def _open_plain(db_path: Path) -> sqlite3.Connection:
+    if not db_path.is_file():
+        raise BackupError(f"no database at {db_path}")
     conn = sqlite3.connect(db_path, isolation_level=None)
     conn.row_factory = sqlite3.Row
     return conn
@@ -113,7 +118,38 @@ def _copy_db(db_path: Path, target: Path) -> None:
     _fsync_file(target)
 
 
-def _copy_raw(raw_dir: Path, target: Path, link_from: Path | None) -> tuple[int, int, int]:
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def raw_rel_path(source: str, recorded_path: str) -> Path:
+    return Path(source) / Path(recorded_path).name
+
+
+def _raw_rows(db_path: Path) -> list[sqlite3.Row]:
+    conn = _open_plain(db_path)
+    try:
+        return conn.execute(
+            "SELECT id, source, path, sha256, parsed_ok FROM raw_archive ORDER BY id"
+        ).fetchall()
+    finally:
+        conn.close()
+
+
+def recorded_raw(db_path: Path) -> dict[Path, str]:
+    """Archive-relative path to recorded sha256, for every raw_archive row."""
+    return {raw_rel_path(r["source"], r["path"]): r["sha256"] for r in _raw_rows(db_path)}
+
+
+def _copy_raw(
+    raw_dir: Path, target: Path, link_from: Path | None, recorded: dict[Path, str]
+) -> tuple[int, int, int]:
+    """Copy the archive. A file is hard-linked to the previous backup's copy only when that
+    copy's sha256 is the one raw_archive recorded; anything else is copied from live."""
     target.mkdir(parents=True, exist_ok=True)
     files = total = linked = 0
     if not raw_dir.is_dir():
@@ -122,10 +158,9 @@ def _copy_raw(raw_dir: Path, target: Path, link_from: Path | None) -> tuple[int,
         rel = src.relative_to(raw_dir)
         dest = target / rel
         dest.parent.mkdir(parents=True, exist_ok=True)
-        size = src.stat().st_size
         earlier = link_from / RAW_NAME / rel if link_from is not None else None
         done = False
-        if earlier is not None and earlier.is_file() and earlier.stat().st_size == size:
+        if earlier is not None and earlier.is_file() and _sha256(earlier) == recorded.get(rel):
             try:
                 os.link(earlier, dest)
                 done = True
@@ -135,29 +170,18 @@ def _copy_raw(raw_dir: Path, target: Path, link_from: Path | None) -> tuple[int,
         if not done:
             shutil.copy2(src, dest)
         files += 1
-        total += size
+        total += src.stat().st_size
     return files, total, linked
-
-
-def raw_rel_path(source: str, recorded_path: str) -> Path:
-    return Path(source) / Path(recorded_path).name
 
 
 def missing_raw_files(db_path: Path, raw_dir: Path, check_sha: bool = False) -> list[str]:
     """raw_archive rows whose file is absent (or, with check_sha, altered) under raw_dir."""
-    conn = _open_plain(db_path)
-    try:
-        rows = conn.execute(
-            "SELECT id, source, path, sha256 FROM raw_archive ORDER BY id"
-        ).fetchall()
-    finally:
-        conn.close()
     problems: list[str] = []
-    for row in rows:
+    for row in _raw_rows(db_path):
         path = raw_dir / raw_rel_path(row["source"], row["path"])
         if not path.is_file():
             problems.append(f"raw_archive {row['id']}: file missing: {path.name}")
-        elif check_sha and hashlib.sha256(path.read_bytes()).hexdigest() != row["sha256"]:
+        elif check_sha and _sha256(path) != row["sha256"]:
             problems.append(f"raw_archive {row['id']}: sha256 mismatch: {path.name}")
     return problems
 
@@ -165,7 +189,11 @@ def missing_raw_files(db_path: Path, raw_dir: Path, check_sha: bool = False) -> 
 def create_backup(
     settings: Settings, out: Path, now: datetime | None = None, link_from: Path | None = None
 ) -> BackupResult:
-    """Write one complete backup directory at `out`. It appears only when it is whole."""
+    """Write one complete backup directory at `out`. It appears only when it is whole.
+
+    A raw file that raw_archive records but the live archive no longer has does not stop the
+    backup: the db copy still lands and the gap is listed in the manifest as `raw_missing`.
+    """
     if out.exists():
         raise BackupError(f"backup target already exists: {out}")
     moment = now or now_utc()
@@ -176,42 +204,58 @@ def create_backup(
     if scratch.exists():
         shutil.rmtree(scratch)
     scratch.mkdir(parents=True)
-    db_copy = scratch / DB_NAME
-    _copy_db(settings.storage.db_path, db_copy)
-    state = integrity(db_copy)
-    if state != "ok":
-        raise BackupError(f"backup copy failed integrity_check: {state}")
-    files, total, linked = _copy_raw(settings.storage.raw_dir, scratch / RAW_NAME, link_from)
-    missing = missing_raw_files(db_copy, scratch / RAW_NAME)
-    if missing:
-        raise BackupError("raw archive incomplete: " + "; ".join(missing))
-    digest = data_checksum(db_copy)
-    manifest = {
-        "created_at_utc": moment.strftime(UTC_ISO),
-        "db_file": DB_NAME,
-        "db_bytes": db_copy.stat().st_size,
-        "data_checksum": digest,
-        "raw_files": files,
-        "raw_bytes": total,
-        "raw_linked": linked,
-    }
-    (scratch / MANIFEST_NAME).write_text(json.dumps(manifest, indent=1, sort_keys=True) + "\n")
-    _fsync_file(scratch / MANIFEST_NAME)
-    os.replace(scratch, out)
-    return BackupResult(out, digest, files, total, linked)
+    try:
+        db_copy = scratch / DB_NAME
+        _copy_db(settings.storage.db_path, db_copy)
+        state = integrity(db_copy)
+        if state != "ok":
+            raise BackupError(f"backup copy failed integrity_check: {state}")
+        recorded = recorded_raw(db_copy)
+        files, total, linked = _copy_raw(
+            settings.storage.raw_dir, scratch / RAW_NAME, link_from, recorded
+        )
+        missing = sorted(
+            rel.as_posix() for rel in recorded if not (scratch / RAW_NAME / rel).is_file()
+        )
+        digest = data_checksum(db_copy)
+        manifest = {
+            "created_at_utc": moment.strftime(UTC_ISO),
+            "db_file": DB_NAME,
+            "db_bytes": db_copy.stat().st_size,
+            "data_checksum": digest,
+            "raw_files": files,
+            "raw_bytes": total,
+            "raw_linked": linked,
+            "raw_missing": missing,
+        }
+        (scratch / MANIFEST_NAME).write_text(json.dumps(manifest, indent=1, sort_keys=True) + "\n")
+        _fsync_file(scratch / MANIFEST_NAME)
+        os.replace(scratch, out)
+    except BaseException:
+        shutil.rmtree(scratch, ignore_errors=True)
+        raise
+    return BackupResult(out, digest, files, total, linked, missing)
+
+
+def _last_touched(partial: Path) -> float:
+    watched = (partial, *partial.glob(RAW_NAME), *partial.glob(f"{RAW_NAME}/*"))
+    return max(p.stat().st_mtime for p in watched)
 
 
 def prune(backup_dir: Path, keep: int) -> list[Path]:
-    """Delete all but the newest `keep` nightly backups, and any abandoned partial ones."""
+    """Delete all but the newest `keep` nightly backups, and partial ones nobody has written
+    to for an hour. A younger partial may be another process's backup in progress."""
     removed: list[Path] = []
     backups = list_backups(backup_dir)
     for path in backups[: max(len(backups) - max(keep, 1), 0)]:
         shutil.rmtree(path)
         removed.append(path)
     if backup_dir.is_dir():
-        for path in backup_dir.iterdir():
+        for path in sorted(backup_dir.iterdir()):
             stem = path.name.removesuffix(PARTIAL_SUFFIX)
-            if path.name.endswith(PARTIAL_SUFFIX) and _BACKUP_NAME.match(stem):
+            if not (path.name.endswith(PARTIAL_SUFFIX) and _BACKUP_NAME.match(stem)):
+                continue
+            if time.time() - _last_touched(path) > PARTIAL_STALE_S:
                 shutil.rmtree(path)
                 removed.append(path)
     return removed
@@ -279,6 +323,13 @@ def _replay_checksum(
         scratch.close()
 
 
+def _raw_archive_state(db_path: Path) -> list[dict[str, object]]:
+    return [
+        {"id": r["id"], "sha256": r["sha256"], "parsed_ok": r["parsed_ok"]}
+        for r in _raw_rows(db_path)
+    ]
+
+
 def verify(backup: Path, settings: Settings, replay_check: bool = True) -> list[str]:
     """Every way the backup fails to reproduce the live data tables. Empty means identical."""
     manifest = read_manifest(backup)
@@ -297,7 +348,12 @@ def verify(backup: Path, settings: Settings, replay_check: bool = True) -> list[
                 f"manifest: backup db checksum {checksum(restored)} is not the recorded "
                 f"{manifest.get('data_checksum')}"
             )
+        problems.extend(
+            f"manifest: raw file was already missing at backup time: {rel}"
+            for rel in manifest.get("raw_missing", [])
+        )
         problems.extend(missing_raw_files(restored_db, restored_raw, check_sha=True))
+        restored_rows = {"raw_archive": _raw_archive_state(restored_db)}
 
         if not settings.storage.db_path.is_file():
             problems.append(f"live: no database at {settings.storage.db_path}")
@@ -307,7 +363,9 @@ def verify(backup: Path, settings: Settings, replay_check: bool = True) -> list[
                 live = snapshot(live_conn)
             finally:
                 live_conn.close()
+            live_rows = {"raw_archive": _raw_archive_state(settings.storage.db_path)}
             problems.extend(f"live vs backup: {line}" for line in diff(live, restored))
+            problems.extend(f"live vs backup: {line}" for line in diff(live_rows, restored_rows))
 
         if replay_check:
             replayed = _replay_checksum(restored_db, restored_raw, workdir, settings)
@@ -365,8 +423,11 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     print(
         f"backup {result.path} checksum {result.data_checksum} "
-        f"raw_files={result.raw_files} raw_bytes={result.raw_bytes} linked={result.raw_linked}"
+        f"raw_files={result.raw_files} raw_bytes={result.raw_bytes} linked={result.raw_linked} "
+        f"raw_missing={len(result.raw_missing)}"
     )
+    for rel in result.raw_missing:
+        print(f"missing from the live archive, not in this backup: {rel}", file=sys.stderr)
     return 0
 
 
