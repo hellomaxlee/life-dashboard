@@ -71,6 +71,7 @@ class DedupeConfig:
 @dataclass(frozen=True)
 class IngestConfig:
     hr_incomplete_ratio: float
+    sleep_gap_min: float
     dedupe: DedupeConfig
 
 
@@ -242,6 +243,9 @@ def load_settings(config_path: Path | None = None) -> Settings:
         ingest=IngestConfig(
             hr_incomplete_ratio=_number(
                 "ingest.hr_incomplete_ratio", raw["ingest"]["hr_incomplete_ratio"], 0, 1
+            ),
+            sleep_gap_min=_number(
+                "ingest.sleep_gap_min", raw["ingest"].get("sleep_gap_min", 60), 0
             ),
             dedupe=DedupeConfig(
                 start_window_min=_number(

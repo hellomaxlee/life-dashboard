@@ -221,7 +221,7 @@ def apply_payload(
         payload = json.loads(body)
     except (ValueError, RecursionError) as exc:
         raise ValueError(f"malformed json: {exc}") from exc
-    parsed = parse_payload(payload, settings.home_tz)
+    parsed = parse_payload(payload, settings.home_tz, settings.ingest.sleep_gap_min)
     return store_payload(conn, parsed, raw_archive_id, settings, record_log=first)
 
 

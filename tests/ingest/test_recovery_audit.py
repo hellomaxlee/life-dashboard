@@ -281,11 +281,11 @@ def test_later_payload_that_no_longer_applies_is_a_recovery_error_not_a_malforme
     late, _ = stranded_then_two_later(client, monkeypatch)
     real_parse, calls = health.parse_payload, []
 
-    def parses_only_the_late_payload(payload, tz):
+    def parses_only_the_late_payload(payload, tz, *args):
         calls.append(1)
         if len(calls) > 1:
             raise ValueError("payload has no 'data' object")
-        return real_parse(payload, tz)
+        return real_parse(payload, tz, *args)
 
     monkeypatch.setattr(health, "parse_payload", parses_only_the_late_payload)
 
