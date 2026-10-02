@@ -80,6 +80,11 @@ class SummaryConfig:
 
 
 @dataclass(frozen=True)
+class DeviceConfig:
+    pixoo_host: str = ""
+
+
+@dataclass(frozen=True)
 class Settings:
     home_tz: str
     hr_max: int
@@ -96,6 +101,7 @@ class Settings:
     ingest: IngestConfig
     summary: SummaryConfig
     health_export_token: str
+    device: DeviceConfig = DeviceConfig()
 
 
 def _resolve(path_str: str) -> Path:
@@ -164,4 +170,5 @@ def load_settings(config_path: Path | None = None) -> Settings:
             monthly_cap_usd=float(raw["summary"]["monthly_cap_usd"]),
         ),
         health_export_token=os.environ.get("HEALTH_EXPORT_TOKEN", "").strip(),
+        device=DeviceConfig(pixoo_host=str(raw.get("device", {}).get("pixoo_host", "")).strip()),
     )

@@ -54,3 +54,7 @@ duration_tolerance_pct = 10
 [summary]
 model = ""
 monthly_cap_usd = 3
+
+# Pixoo-64 on the LAN. Empty = no device; nothing is ever pushed. Not yet purchased.
+[device]
+pixoo_host = ""

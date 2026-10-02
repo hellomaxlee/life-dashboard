@@ -1,0 +1,17 @@
+{
+  "combo": "travel / Health delayed / alive / off",
+  "day_local": "2026-12-17",
+  "now_utc": "2026-12-17T23:30:00Z",
+  "as_of_utc": "2026-12-16T03:10:00Z",
+  "daily_metrics": {
+    "books_ytd": 11,
+    "summary_device_line": "Health data has not arrived; last night's sleep is unknown. Not knowing is fine.",
+    "claude_week_used_pct": 67.5,
+    "claude_week_resets_at": "2026-12-19T12:00:00Z",
+    "claude_week_captured_at": "2026-12-15T20:00:00Z"
+  },
+  "weekly_metrics": {
+    "quality_workouts": 1,
+    "weeks_hit_streak": 7
+  }
+}
