@@ -54,3 +54,13 @@ duration_tolerance_pct = 10
 [summary]
 model = ""
 monthly_cap_usd = 3
+
+[scheduler]
+enabled = true
+usage_poll_seconds = 30
+usage_min_read_seconds = 900
+
+[backup]
+dir = "data/backups"
+time = "03:15"
+keep = 14

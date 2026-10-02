@@ -80,6 +80,20 @@ class SummaryConfig:
 
 
 @dataclass(frozen=True)
+class SchedulerConfig:
+    enabled: bool
+    usage_poll_seconds: int
+    usage_min_read_seconds: int
+
+
+@dataclass(frozen=True)
+class BackupConfig:
+    dir: Path
+    time: str
+    keep: int
+
+
+@dataclass(frozen=True)
 class Settings:
     home_tz: str
     hr_max: int
@@ -96,6 +110,8 @@ class Settings:
     ingest: IngestConfig
     summary: SummaryConfig
     health_export_token: str
+    scheduler: SchedulerConfig
+    backup: BackupConfig
 
 
 def _resolve(path_str: str) -> Path:
@@ -107,7 +123,8 @@ def load_settings(config_path: Path | None = None) -> Settings:
     """Load config.toml into a frozen Settings.
 
     Environment overrides: LIFE_CONFIG_PATH (file), LIFE_DB_PATH, LIFE_RAW_DIR (storage),
-    HEALTH_EXPORT_TOKEN (secret, from .env or the environment).
+    LIFE_BACKUP_DIR, LIFE_SCHEDULER_ENABLED (0 or 1), HEALTH_EXPORT_TOKEN (secret, from .env
+    or the environment).
     """
     load_dotenv(REPO_ROOT / ".env")
     path = config_path or Path(os.environ.get("LIFE_CONFIG_PATH", DEFAULT_CONFIG_PATH))
@@ -115,6 +132,7 @@ def load_settings(config_path: Path | None = None) -> Settings:
         raw = tomllib.load(fh)
 
     dedupe = raw["ingest"]["dedupe"]
+    scheduler_on = os.environ.get("LIFE_SCHEDULER_ENABLED")
     bands = raw["wellness"]["bands"]
     return Settings(
         home_tz=raw["home_tz"],
@@ -164,4 +182,16 @@ def load_settings(config_path: Path | None = None) -> Settings:
             monthly_cap_usd=float(raw["summary"]["monthly_cap_usd"]),
         ),
         health_export_token=os.environ.get("HEALTH_EXPORT_TOKEN", "").strip(),
+        scheduler=SchedulerConfig(
+            enabled=bool(raw["scheduler"]["enabled"])
+            if scheduler_on is None
+            else scheduler_on.strip() == "1",
+            usage_poll_seconds=int(raw["scheduler"]["usage_poll_seconds"]),
+            usage_min_read_seconds=int(raw["scheduler"]["usage_min_read_seconds"]),
+        ),
+        backup=BackupConfig(
+            dir=_resolve(os.environ.get("LIFE_BACKUP_DIR", raw["backup"]["dir"])),
+            time=str(raw["backup"]["time"]),
+            keep=int(raw["backup"]["keep"]),
+        ),
     )
