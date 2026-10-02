@@ -130,6 +130,7 @@ is no separate process to supervise. Config: `[scheduler]` and `[backup]` in
 | `backup_overdue_check` | two minutes after start, then every hour | takes a backup if none is newer than 26 hours; otherwise does nothing |
 | `device_rotation` | every `device.screen_seconds` (20 s), **only while `device.pixoo_host` is set** | sends the next screen (Week, Today, Books, wrapping) to the Pixoo; section 15 |
 | `goodreads_poll` | `pull.goodreads` (06:30 America/New_York), **only while `GOODREADS_RSS_URL` is set in `.env`**; plus once, three minutes after start, when no parsed feed arrived in the last 24 h | fetches the `read` shelf RSS, archives it, upserts `books`; section 17 |
+| `daily_summary` | `summary.time` (06:50 America/New_York), misfire grace 12 h | writes today's one-line summary into `daily_metrics` (model if a key is set and the cap allows, rule-based copy otherwise); a day that already has a line is not regenerated; section 17 |
 
 A job never overlaps itself, opens its own db connection per run, and an
 exception is logged (`job <id> failed` plus traceback in the err log), not fatal.
@@ -391,3 +392,33 @@ Catch-up: when the service starts and no parsed feed arrived in the last 24 h
 grace) the job runs once three minutes after start, then settles on 06:30.
 Because an unchanged shelf adds no raw row, a restart more than a day after the
 last shelf change also triggers that one poll; it costs one 300 KB fetch.
+## 18. Summary (the daily line)
+
+The `daily_summary` job runs at `summary.time` (06:50 home time) and writes one
+sentence for the day into `daily_metrics.summary_device_line` (plus an optional
+`summary_web_line` and `summary_source`: `model` or `fallback`). Health data
+stays home: the model receives daily aggregates only (the payload is the exact
+set of numbers it may use), never raw samples or sub-day timestamps, and a test
+greps the serialized request for both.
+
+```sh
+uv run python -m tools.summary --date 2026-10-02 --dry-run   # exact request body + cap check; calls nothing, writes nothing
+uv run python -m tools.summary --date 2026-10-02             # write the day (stored line → no call)
+uv run python -m tools.summary --date 2026-10-02 --force     # regenerate, calling the model again
+uv run python -m tools.summary --spend                       # month-to-date usd, calls, cap
+sqlite3 data/life.db "SELECT day_local, source, gate_result, line FROM summary_lines ORDER BY day_local DESC LIMIT 7"
+sqlite3 data/life.db "SELECT day_local, request_id, input_tokens, cache_read_tokens, output_tokens, usd, stop_reason FROM model_spend ORDER BY id DESC LIMIT 7"
+grep -n "summary .* model unavailable" data/logs/life-dashboard.err.log | tail   # why a day fell back
+```
+
+Model: `summary.model` in `config.toml` (`claude-opus-5-5`), key `ANTHROPIC_API_KEY`
+in `.env`. No key → every day is rule-based copy and no call is attempted. Cap:
+`summary.monthly_cap_usd` (3). Before each call, month-to-date plus the worst
+case for that call (about $0.016) must stay under the cap; otherwise the day
+falls back and the attempt is recorded as `cap: ...` in `summary_lines.attempts_json`.
+Read `--spend` before and after any round that calls the model.
+
+A line the gate rejects (invented number, ban list, a named source twice in a
+week, too similar to a recent line) is regenerated once with the reason, then
+replaced by rule-based copy. The gate's rules and the mutants that prove them
+are in `app/summary/gate.py` and `tests/summary/test_mutants.py`.

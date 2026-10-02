@@ -54,8 +54,16 @@ start_window_min = 5
 duration_tolerance_pct = 10
 
 [summary]
-model = ""
+# Model id is pinned here, never in code. Prices are USD per million tokens at the pinned
+# model's first-party rate; the spend counter and the cap check use them.
+model = "claude-opus-5-5"
 monthly_cap_usd = 3
+time = "06:50"
+price_input_per_mtok = 4.0
+price_output_per_mtok = 20.0
+price_cache_read_per_mtok = 0.20
+price_cache_write_per_mtok = 5.0
+similarity_threshold = 0.5
 
 [scheduler]
 enabled = true
