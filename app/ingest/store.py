@@ -10,7 +10,7 @@ from statistics import fmean
 
 from app.config import Settings
 from app.ingest import dedupe
-from app.ingest.parse import DailyValue, ParsedPayload, SleepSession, Workout
+from app.ingest.parse import DailyValue, ParsedPayload, SleepSession, Workout, window_start_utc
 from app.timeutil import from_utc_iso
 
 
@@ -246,15 +246,49 @@ def sleep_id(session: SleepSession) -> str:
     return "sleep_" + hashlib.sha256(key).hexdigest()[:16]
 
 
-def replace_sleep(conn: sqlite3.Connection, sessions: list[SleepSession]) -> None:
+def _clipped_by_window(
+    conn: sqlite3.Connection, session: SleepSession, window_start_utc: str | None
+) -> list[str]:
+    """Ids of stored sessions (same wake day and source) that began before the payload's
+    window and overlap this one: fuller reports of the same night, which the window cut."""
+    if window_start_utc is None or session.start_utc < window_start_utc:
+        return []
+    rows = conn.execute(
+        "SELECT id FROM sleep_sessions WHERE wake_day_local = ? AND source = ? "
+        "AND start_utc < ? AND end_utc > ?",
+        (session.wake_day_local, session.source, window_start_utc, session.start_utc),
+    ).fetchall()
+    return [str(r["id"]) for r in rows]
+
+
+def replace_sleep(
+    conn: sqlite3.Connection, sessions: list[SleepSession], window_start_utc: str | None = None
+) -> None:
     """A payload is authoritative for each (wake day, source) it carries: that day's sessions
-    from that source are replaced by the payload's, so a corrected night leaves one row."""
+    from that source are replaced by the payload's, so a corrected night leaves one row.
+
+    One exception. The export's date window opens at midnight of its first day, so a night
+    that began the evening before arrives cut at midnight (seen on every real 7-day push:
+    the first segment starts a few minutes past 00:00). A cut night never replaces a stored
+    session of the same wake day and source that began before the window and overlaps it;
+    the stored one is the same night, reported whole by an earlier push.
+    """
+    keep: set[str] = set()
+    fresh: list[SleepSession] = []
+    for session in sessions:
+        clipped_by = _clipped_by_window(conn, session, window_start_utc)
+        if clipped_by:
+            keep.update(clipped_by)
+        else:
+            fresh.append(session)
+    kept = sorted(keep)
+    spared = f" AND id NOT IN ({','.join('?' * len(kept))})" if kept else ""
     for wake_day, source in sorted({(s.wake_day_local, s.source) for s in sessions}):
         conn.execute(
-            "DELETE FROM sleep_sessions WHERE wake_day_local = ? AND source = ?",
-            (wake_day, source),
+            f"DELETE FROM sleep_sessions WHERE wake_day_local = ? AND source = ?{spared}",
+            (wake_day, source, *kept),
         )
-    for session in sessions:
+    for session in fresh:
         upsert_sleep(conn, session)
 
 
@@ -306,7 +340,7 @@ def store_payload(
         stats.workouts_seen += 1
         if upsert_workout(conn, workout, raw_archive_id, settings):
             stats.workouts_merged += 1
-    replace_sleep(conn, parsed.sleep)
+    replace_sleep(conn, parsed.sleep, window_start_utc(parsed, settings.home_tz))
     for value in parsed.steps:
         upsert_steps(conn, value)
     for value in parsed.wellness:

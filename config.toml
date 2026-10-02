@@ -46,6 +46,8 @@ raw_dir = "data/raw"
 
 [ingest]
 hr_incomplete_ratio = 0.25
+# Sleep-stage segments closer than this (minutes, end to next start) are one session.
+sleep_gap_min = 60
 
 [ingest.dedupe]
 start_window_min = 5

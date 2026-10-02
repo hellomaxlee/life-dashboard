@@ -41,6 +41,7 @@ BAD_CONFIG = [
     (r"^keep = 14", "keep = 2.9", "backup.keep"),
     (r'^time = "03:15"', 'time = "3h15"', "backup.time"),
     (r"^hr_incomplete_ratio = 0.25", "hr_incomplete_ratio = -1", "ingest.hr_incomplete_ratio"),
+    (r"^sleep_gap_min = 60", "sleep_gap_min = -1", "ingest.sleep_gap_min"),
     (r"^start_window_min = 5", "start_window_min = -5", "ingest.dedupe.start_window_min"),
     (r'^home_tz = "America/New_York"', 'home_tz = "Mars/Olympus"', "home_tz"),
 ]
