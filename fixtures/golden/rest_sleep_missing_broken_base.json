@@ -1,0 +1,87 @@
+{
+  "name": "rest / sleep missing / broken last week / base: one dot last week",
+  "cell": "rest / sleep missing / broken last week / base",
+  "comment": [
+    "Lifts 2026-09-14..09-27 Mon/Wed/Fri 40 min at 140 = 120: weeks 09-14 and 09-21 hit (streak 1 then 2).",
+    "Week 09-28 has one lift (L-2026-09-29, 120): 1 < 3, the week closed (today is Wed 10-07, a push landed 10-05) -> week_hit false, streak 0.",
+    "Week 10-05 is in progress with nothing in it: quality_workouts 0, week_hit null, streak 0 (the broken streak, not the old 2).",
+    "No sleep session woke on 10-07 (the last one woke 10-06, 6.9 h): sleep_hours null, sleep_win false, wins []. Nothing is carried from 10-06."
+  ],
+  "today_local": "2026-10-07",
+  "now_utc": "2026-10-07T16:00:00Z",
+  "inputs": {
+    "activities": [
+      {
+        "repeat_weekly": {
+          "id_prefix": "L-",
+          "from": "2026-09-14",
+          "to": "2026-09-27",
+          "weekdays": [0, 2, 4],
+          "time": "18:00",
+          "type": "lift",
+          "minutes": 40,
+          "hr": [[40, 140]]
+        }
+      },
+      {
+        "id": "L-2026-09-29",
+        "type": "lift",
+        "start_local": "2026-09-29 18:00",
+        "minutes": 40,
+        "hr": [[40, 140]]
+      }
+    ],
+    "sleep": [
+      {
+        "wake_day": "2026-10-06",
+        "start_local": "2026-10-05 23:30",
+        "end_local": "2026-10-06 06:24",
+        "asleep_h": 6.9
+      }
+    ],
+    "health_pushes_utc": ["2026-10-05T10:00:00Z"]
+  },
+  "expected": {
+    "daily": {
+      "2026-10-07": {
+        "quality_workout": false,
+        "workout_count": 0,
+        "sleep_hours": null,
+        "sleep_win": false,
+        "wins": [],
+        "load_trimp": 0.0
+      },
+      "2026-10-06": {
+        "sleep_hours": 6.9,
+        "sleep_win": false
+      },
+      "2026-09-29": {
+        "quality_workout": true,
+        "workout_load": 120.0
+      }
+    },
+    "weekly": {
+      "2026-10-05": {
+        "quality_workouts": 0,
+        "week_hit": null,
+        "weeks_hit_streak": 0
+      },
+      "2026-09-28": {
+        "quality_workouts": 1,
+        "week_hit": false,
+        "weeks_hit_streak": 0,
+        "week_complete_at": null
+      },
+      "2026-09-21": {
+        "quality_workouts": 3,
+        "week_hit": true,
+        "weeks_hit_streak": 2
+      },
+      "2026-09-14": {
+        "quality_workouts": 3,
+        "week_hit": true,
+        "weeks_hit_streak": 1
+      }
+    }
+  }
+}

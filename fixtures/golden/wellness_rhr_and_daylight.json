@@ -1,0 +1,41 @@
+{
+  "name": "wellness: a resting-HR-only crossing and a daylight-only crossing each produce their own fact",
+  "cell": "rest / all sources / never started / base",
+  "comment": [
+    "Resting HR 55 on 10-10..10-19 (10 values), 61 on 10-20: baseline 55.0, 61 >= 60 -> fact resting_hr above. HRV 50 on every day including 10-20 (50 > 40, no crossing).",
+    "Daylight 45 on 10-10..10-18, 12 on 10-19, 45 on 10-20. 10-19: baseline = 9 x 45 / 9 = 45.0, 12 < 20 -> fact daylight_min below (HRV and RHR ordinary that day).",
+    "10-20 daylight baseline = (9 x 45 + 12) / 10 = 417 / 10 = 41.7; 45 >= 20 so daylight does not cross; the fact is the resting HR one.",
+    "10-16: 6 prior values of resting HR (10-10..10-15) -> baseline null; 10-17: 7 -> 55.0."
+  ],
+  "today_local": "2026-10-20",
+  "now_utc": "2026-10-20T16:00:00Z",
+  "inputs": {
+    "wellness": [
+      {"metric": "heart_rate_variability", "from": "2026-10-10", "to": "2026-10-20", "value": 50},
+      {"metric": "resting_heart_rate", "from": "2026-10-10", "to": "2026-10-19", "value": 55},
+      {"metric": "resting_heart_rate", "day": "2026-10-20", "value": 61},
+      {"metric": "time_in_daylight", "from": "2026-10-10", "to": "2026-10-18", "value": 45},
+      {"metric": "time_in_daylight", "day": "2026-10-19", "value": 12},
+      {"metric": "time_in_daylight", "day": "2026-10-20", "value": 45}
+    ],
+    "health_pushes_utc": ["2026-10-20T12:00:00Z"]
+  },
+  "expected": {
+    "daily": {
+      "2026-10-20": {
+        "resting_hr": 61.0,
+        "resting_hr_baseline": 55.0,
+        "daylight_min": 45.0,
+        "daylight_min_baseline": 41.7,
+        "wellness_fact": {"metric": "resting_hr", "value": 61.0, "baseline": 55.0, "direction": "above"}
+      },
+      "2026-10-19": {
+        "daylight_min": 12.0,
+        "daylight_min_baseline": 45.0,
+        "wellness_fact": {"metric": "daylight_min", "value": 12.0, "baseline": 45.0, "direction": "below"}
+      },
+      "2026-10-16": {"resting_hr_baseline": null},
+      "2026-10-17": {"resting_hr_baseline": 55.0}
+    }
+  }
+}

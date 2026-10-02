@@ -1,0 +1,51 @@
+{
+  "name": "wellness: one fact on a band-crossing day by priority, none on an ordinary day",
+  "cell": "rest / all sources / never started / base",
+  "comment": [
+    "Baseline = mean of the metric's values on the 28 days before the day (the day itself excluded), null with fewer than 7 values.",
+    "HRV 50 ms, resting HR 55 bpm, daylight 45 min on every day 09-22..10-19. VO2 max 43.5 on 10-13 and 44.0 on 10-20 only.",
+    "10-20: HRV 38 <= 50 x (1 - 20/100) = 40 -> crossing (below); resting HR 61 >= 55 + 5 = 60 -> crossing (above); daylight 15 < 20 -> crossing (below). Priority hrv_ms, resting_hr, daylight_min -> the one fact is HRV. VO2 max baseline: 1 prior value < 7 -> null.",
+    "10-19 (ordinary): HRV 50 > 40, RHR 55 < 60, daylight 45 >= 20 -> wellness_fact null. Its HRV baseline is the 27 prior values (09-22..10-18) = 50.0.",
+    "09-28: 6 prior values (09-22..09-27) -> hrv_ms_baseline null, and no fact can fire without a baseline. 09-29: 7 prior values -> 50.0."
+  ],
+  "today_local": "2026-10-20",
+  "now_utc": "2026-10-20T16:00:00Z",
+  "inputs": {
+    "wellness": [
+      {"metric": "heart_rate_variability", "from": "2026-09-22", "to": "2026-10-19", "value": 50},
+      {"metric": "heart_rate_variability", "day": "2026-10-20", "value": 38},
+      {"metric": "resting_heart_rate", "from": "2026-09-22", "to": "2026-10-19", "value": 55},
+      {"metric": "resting_heart_rate", "day": "2026-10-20", "value": 61},
+      {"metric": "time_in_daylight", "from": "2026-09-22", "to": "2026-10-19", "value": 45},
+      {"metric": "time_in_daylight", "day": "2026-10-20", "value": 15},
+      {"metric": "vo2_max", "day": "2026-10-13", "value": 43.5},
+      {"metric": "vo2_max", "day": "2026-10-20", "value": 44.0}
+    ],
+    "health_pushes_utc": ["2026-10-20T12:00:00Z"]
+  },
+  "expected": {
+    "daily": {
+      "2026-10-20": {
+        "hrv_ms": 38.0,
+        "hrv_ms_baseline": 50.0,
+        "resting_hr": 61.0,
+        "resting_hr_baseline": 55.0,
+        "daylight_min": 15.0,
+        "daylight_min_baseline": 45.0,
+        "vo2_max": 44.0,
+        "vo2_max_baseline": null,
+        "wellness_fact": {"metric": "hrv_ms", "value": 38.0, "baseline": 50.0, "direction": "below"}
+      },
+      "2026-10-19": {
+        "hrv_ms": 50.0,
+        "hrv_ms_baseline": 50.0,
+        "resting_hr": 55.0,
+        "daylight_min": 45.0,
+        "vo2_max": null,
+        "wellness_fact": null
+      },
+      "2026-09-28": {"hrv_ms": 50.0, "hrv_ms_baseline": null, "wellness_fact": null},
+      "2026-09-29": {"hrv_ms_baseline": 50.0}
+    }
+  }
+}

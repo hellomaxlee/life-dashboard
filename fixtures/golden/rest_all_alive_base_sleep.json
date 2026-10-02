@@ -1,0 +1,81 @@
+{
+  "name": "rest / all sources / alive / base: no workout, 7.4 h of sleep",
+  "cell": "rest / all sources / alive / base",
+  "comment": [
+    "Lifts 2026-09-21..10-04 Mon/Wed/Fri 18:00, 40 min at 140 bpm = 40 x 3 = 120 >= 100: weeks 09-21 and 09-28 hit, streak 2.",
+    "Today Tue 2026-10-06: no workout -> rest day: quality false, workout_load null, load_trimp 0, nothing breaks.",
+    "The night 10-05 23:10 -> 10-06 06:34, asleep 26640 s / 3600 = 7.4 h, belongs to wake day 10-06 (the start day is 10-05; a mutant that files it by start day leaves 10-06 empty).",
+    "A 1.0 h nap on 10-06 is a second session of the same wake day; the longest session is the night, so sleep_hours is 7.4 not 1.0 and not 8.4.",
+    "7.4 >= 7.0 -> sleep win; wins = [sleep].",
+    "Week 10-05 is in progress: quality_workouts 0, week_hit null, streak carried as 2."
+  ],
+  "today_local": "2026-10-06",
+  "now_utc": "2026-10-06T16:00:00Z",
+  "inputs": {
+    "activities": [
+      {
+        "repeat_weekly": {
+          "id_prefix": "L-",
+          "from": "2026-09-21",
+          "to": "2026-10-04",
+          "weekdays": [0, 2, 4],
+          "time": "18:00",
+          "type": "lift",
+          "minutes": 40,
+          "hr": [[40, 140]]
+        }
+      }
+    ],
+    "sleep": [
+      {
+        "wake_day": "2026-10-06",
+        "start_local": "2026-10-05 23:10",
+        "end_local": "2026-10-06 06:34",
+        "asleep_h": 7.4
+      },
+      {
+        "wake_day": "2026-10-06",
+        "start_local": "2026-10-06 14:00",
+        "end_local": "2026-10-06 15:00",
+        "asleep_h": 1.0
+      }
+    ],
+    "steps": {"2026-10-06": 4100},
+    "health_pushes_utc": ["2026-10-05T10:00:00Z", "2026-10-06T10:00:00Z"]
+  },
+  "expected": {
+    "daily": {
+      "2026-10-06": {
+        "quality_workout": false,
+        "workout_count": 0,
+        "workout_load": null,
+        "workout_ids": [],
+        "sleep_hours": 7.4,
+        "sleep_win": true,
+        "steps": 4100,
+        "books_ytd": 0,
+        "book_finished_today": false,
+        "wins": ["sleep"],
+        "load_trimp": 0.0
+      }
+    },
+    "weekly": {
+      "2026-10-05": {
+        "quality_workouts": 0,
+        "week_hit": null,
+        "weeks_hit_streak": 2,
+        "week_complete_at": null
+      },
+      "2026-09-28": {
+        "quality_workouts": 3,
+        "week_hit": true,
+        "weeks_hit_streak": 2
+      },
+      "2026-09-21": {
+        "quality_workouts": 3,
+        "week_hit": true,
+        "weeks_hit_streak": 1
+      }
+    }
+  }
+}

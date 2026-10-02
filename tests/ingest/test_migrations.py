@@ -19,6 +19,8 @@ EXPECTED_TABLES = {
     "schema_version",
     "summary_lines",
     "model_spend",
+    "load_bar_history",
+    "metrics_state",
 }
 
 

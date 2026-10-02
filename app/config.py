@@ -108,6 +108,15 @@ class DeviceConfig:
 
 
 @dataclass(frozen=True)
+class MetricsConfig:
+    recompute_minutes: int = 15
+    rollover_time: str = "00:05"
+    week_close_grace_hours: float = 12.0
+    max_sample_gap_s: int = 300
+    wellness_priority: tuple[str, ...] = ("hrv_ms", "resting_hr", "daylight_min")
+
+
+@dataclass(frozen=True)
 class Settings:
     home_tz: str
     hr_max: int
@@ -129,6 +138,7 @@ class Settings:
     backup: BackupConfig
     device: DeviceConfig = DeviceConfig()
     anthropic_api_key: str = ""
+    metrics: MetricsConfig = MetricsConfig()
 
 
 def _resolve(path_str: str) -> Path:
@@ -211,6 +221,42 @@ def _summary_config(raw: dict) -> SummaryConfig:
         price_cache_write_per_mtok=price("price_cache_write_per_mtok", 5.0),
         similarity_threshold=_number(
             "summary.similarity_threshold", raw.get("similarity_threshold", 0.5), 0, 1
+        ),
+    )
+
+
+WELLNESS_FACT_METRICS = ("hrv_ms", "resting_hr", "daylight_min")
+
+
+def _priority(key: str, value: object) -> tuple[str, ...]:
+    names = tuple(value) if isinstance(value, list) else None
+    ok = names is not None and all(isinstance(n, str) for n in names)
+    if not ok or len(set(names)) != len(names) or not set(names) <= set(WELLNESS_FACT_METRICS):
+        raise _fail(key, value, f"a list of distinct names from {list(WELLNESS_FACT_METRICS)}")
+    return names
+
+
+def _metrics(raw: dict) -> MetricsConfig:
+    section = raw.get("metrics", {})
+    defaults = MetricsConfig()
+    return MetricsConfig(
+        recompute_minutes=_whole(
+            "metrics.recompute_minutes", section.get("recompute_minutes", 15), 1
+        ),
+        rollover_time=_clock(
+            "metrics.rollover_time", section.get("rollover_time", defaults.rollover_time)
+        ),
+        week_close_grace_hours=_number(
+            "metrics.week_close_grace_hours",
+            section.get("week_close_grace_hours", defaults.week_close_grace_hours),
+            0,
+        ),
+        max_sample_gap_s=_whole(
+            "metrics.max_sample_gap_s", section.get("max_sample_gap_s", 300), 1
+        ),
+        wellness_priority=_priority(
+            "metrics.wellness_priority",
+            section.get("wellness_priority", list(defaults.wellness_priority)),
         ),
     )
 
@@ -305,4 +351,5 @@ def load_settings(config_path: Path | None = None) -> Settings:
             screen_seconds=int(raw.get("device", {}).get("screen_seconds", 20)),
         ),
         anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY", "").strip(),
+        metrics=_metrics(raw),
     )

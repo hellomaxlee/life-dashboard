@@ -23,6 +23,7 @@ from app.config import Settings
 from app.ingest import goodreads
 from app.ingest.claude_usage import read_usage_file
 from app.jobs.rotation import ROTATION_JOB, ClipAdapter, DeviceRotation, device_adapter
+from app.metrics.job import RECOMPUTE_JOB, ROLLOVER_JOB, run_recompute
 from app.summary.run import write_summary
 from app.timeutil import from_utc_iso, local_day, now_utc
 from tools import backup
@@ -32,8 +33,11 @@ BACKUP_JOB = "nightly_backup"
 BACKUP_CHECK_JOB = "backup_overdue_check"
 GOODREADS_JOB = "goodreads_poll"
 SUMMARY_JOB = "daily_summary"
-CORE_JOBS = frozenset({USAGE_JOB, BACKUP_JOB, BACKUP_CHECK_JOB, SUMMARY_JOB})
+CORE_JOBS = frozenset(
+    {USAGE_JOB, BACKUP_JOB, BACKUP_CHECK_JOB, SUMMARY_JOB, RECOMPUTE_JOB, ROLLOVER_JOB}
+)
 SUMMARY_MISFIRE_GRACE_S = 12 * 3600
+RECOMPUTE_FIRST_DELAY = timedelta(seconds=60)
 BACKUP_MISFIRE_GRACE_S = 18 * 3600
 BACKUP_OVERDUE = timedelta(hours=26)
 BACKUP_CATCHUP_DELAY = timedelta(minutes=2)
@@ -277,6 +281,19 @@ def build_scheduler(
         CronTrigger(hour=summary_hour, minute=summary_minute, timezone=tz),
         id=SUMMARY_JOB,
         misfire_grace_time=SUMMARY_MISFIRE_GRACE_S,
+    )
+    scheduler.add_job(
+        guarded(RECOMPUTE_JOB, lambda: run_recompute(settings, open_conn), stats),
+        IntervalTrigger(minutes=settings.metrics.recompute_minutes, timezone=tz),
+        id=RECOMPUTE_JOB,
+        next_run_time=moment + RECOMPUTE_FIRST_DELAY,
+    )
+    roll_hour, roll_minute = parse_hh_mm(settings.metrics.rollover_time)
+    scheduler.add_job(
+        guarded(ROLLOVER_JOB, lambda: run_recompute(settings, open_conn), stats),
+        CronTrigger(hour=roll_hour, minute=roll_minute, timezone=tz),
+        id=ROLLOVER_JOB,
+        misfire_grace_time=int(timedelta(hours=23).total_seconds()),
     )
 
     if settings.device.pixoo_host:
