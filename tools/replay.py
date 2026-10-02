@@ -1,6 +1,6 @@
-"""Replay archived Health Auto Export payloads through the product's own parser.
+"""Replay archived raw payloads (health, claude_usage) through the product's own parsers.
 
-python -m tools.replay --since YYYY-MM-DD   re-parse data/raw/health into data/replay/scratch.db
+python -m tools.replay --since YYYY-MM-DD   re-parse data/raw into data/replay/scratch.db
 python -m tools.replay --snapshot PATH      dump the live data tables to JSON
 python -m tools.replay --diff PATH          compare live tables to a snapshot; exit 1 on difference
 """
@@ -17,7 +17,8 @@ from pathlib import Path
 
 from app.config import REPO_ROOT, Settings, load_settings
 from app.db import open_db
-from app.ingest.health import SOURCE, archive_raw, ingest_archived, received_at_from_filename
+from app.ingest import claude_usage, health
+from app.ingest.health import SOURCE, archive_raw, received_at_from_filename
 from app.timeutil import from_utc_iso
 
 DATA_TABLES = (
@@ -33,6 +34,7 @@ DATA_TABLES = (
 )
 PROVENANCE_COLUMNS = {"activity_sources": {"raw_archive_id"}}
 SCRATCH_DB = REPO_ROOT / "data" / "replay" / "scratch.db"
+INGESTERS = {SOURCE: health.ingest_archived, claude_usage.SOURCE: claude_usage.ingest_archived}
 
 
 def _primary_key(conn: sqlite3.Connection, table: str) -> list[str]:
@@ -74,8 +76,8 @@ def diff(
     return lines
 
 
-def archived_files(raw_dir: Path, since: str | None) -> list[Path]:
-    files = sorted((raw_dir / SOURCE).glob("*.json"))
+def archived_files(raw_dir: Path, since: str | None, source: str = SOURCE) -> list[Path]:
+    files = sorted((raw_dir / source).glob("*.json"))
     if since is None:
         return files
     floor = datetime.strptime(since, "%Y-%m-%d").date()
@@ -89,18 +91,25 @@ def replay(
     for suffix in ("", "-wal", "-shm"):
         Path(str(scratch_db) + suffix).unlink(missing_ok=True)
     conn = open_db(scratch_db)
-    for path in archived_files(raw_dir, since):
-        body = path.read_bytes()
-        received = from_utc_iso(received_at_from_filename(path.name))
-        archived = archive_raw(
-            conn, raw_dir, body, received_at=received, write_file=False, path=path
-        )
-        if archived.duplicate:
-            continue
-        try:
-            ingest_archived(conn, body, archived.raw_archive_id, settings)
-        except Exception as exc:
-            print(f"skip {path.name}: {type(exc).__name__}: {exc}", file=sys.stderr)
+    for source, ingest in INGESTERS.items():
+        for path in archived_files(raw_dir, since, source):
+            body = path.read_bytes()
+            received = from_utc_iso(received_at_from_filename(path.name))
+            archived = archive_raw(
+                conn,
+                raw_dir,
+                body,
+                source=source,
+                received_at=received,
+                write_file=False,
+                path=path,
+            )
+            if archived.duplicate:
+                continue
+            try:
+                ingest(conn, body, archived.raw_archive_id, settings)
+            except Exception as exc:
+                print(f"skip {path.name}: {type(exc).__name__}: {exc}", file=sys.stderr)
     return conn
 
 

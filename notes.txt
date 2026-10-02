@@ -138,6 +138,7 @@ Build order, with "both in parallel" chosen for ingest and render.
 | Summary model | Anthropic SDK; id pinned in config; monthly cap enforced in code | budget is small and must be a hard stop |
 | Time | store UTC, compute days in the home timezone | streaks and sleep depend on local day boundaries |
 | Day-grouped metrics | rows the phone already summed per day (steps, HRV, resting HR, VO2 max, daylight) keep the phone's calendar date; only sleep wake-day and workout times are re-projected UTC→America/New_York | re-projecting a day summed abroad would shift it; at home both agree (ratified Bartek, 2026-09-30) |
+| Claude usage feed | `tools/claude_usage_hook.py` is called from Max's existing `~/.claude/statusline-command.sh` (one line after `input=$(cat)`), not set as `statusLine` in settings; it saves only `rate_limits` plus `captured_at_utc`. The reader files the reading under the home-timezone day it was captured, latest capture of a day wins, and also stores `claude_week_captured_at` so the stale marker traces to a metrics row. Read on demand with `tools.sync --source claude_usage` until the Phase 4 scheduler exists | Claude Code allows one status-line command and Max already has one; the feed also carries cwd and session ids that have no business in the archive |
 
 ## Risks
 | Risk | Why it bites | Mitigation / owner |

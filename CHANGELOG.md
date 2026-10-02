@@ -3,6 +3,12 @@
 Running log, newest first. The Lead reads this to find root causes and prioritize.
 Entry format: `## YYYY-MM-DD · <Title> (<Author>)` followed by terse bullets. Name the fixture combo on render/summary cycles.
 
+## 2026-10-01 · Claude usage hook and reader (Bartek Zieliński)
+- Issue #2, Phase 1a half, built by Tendai: `tools/claude_usage_hook.py` (stdlib only, silent, always exit 0, atomic write of `rate_limits` + `captured_at_utc` to `data/claude_usage.json`; a feed without `rate_limits` keeps the last reading), `app/ingest/claude_usage.py` (archive raw to `data/raw/claude_usage/` first, then `claude_week_used_pct`, `claude_week_resets_at`, `claude_week_captured_at` merged into the capture day's `daily_metrics` row), `tools.sync --source claude_usage`, and `tools.replay` now replays both sources.
+- Wired on Max's Mac: one line added to `~/.claude/statusline-command.sh` after `input=$(cat)`; `settings.json` untouched because it already had a status line. Decision recorded in `notes.txt § Architecture assumptions`.
+- QA (Bartek): ruff clean; 38 passed; mutant `CLAUDE_USAGE_MUTANT_FIVE_HOUR=1` turns the golden case red (73.5 ≠ 41.2, 6 failed); hook runs in ~30 ms; hand-fed 41.2 payload through the status-line script → line printed, file written; live session then wrote a real reading, `tools.sync` → `ok used_pct=33.0`, replay twice → identical checksum `9cbd9e76…`, `--diff` → 0 differences.
+- Fixtures are synthetic from the documented status-line shape (`fixtures/claude_usage/README.md`). Not in scope: the Week-screen bar and stale marker (Diego, Phase 1b), scheduling the reader (Callum, Phase 4).
+
 ## 2026-09-30 · Health ingest service: raw archive, SQLite, idempotent replay, dedupe (Bartek Zieliński)
 - Phase 0 + Phase 1a health path built by Tendai: `config.toml` with every goal-model key, WAL SQLite with versioned migrations (`app/migrations/001_initial.sql`), `POST /ingest/health` archiving bytes to `data/raw/health/` before any parse, v2 parser for workouts (heartRateData samples) and day-grouped metrics (sleep, steps, HRV, resting HR, VO2 max, daylight), dedupe by start window 5 min / duration 10 % with every provenance kept, `hr_incomplete` flag when the HR trace spans under 25 % of the workout (upstream bug #60), `GET /` status page, `tools.replay --since/--snapshot/--diff` sharing the endpoint's parser.
 - Callum: LaunchAgent + install/uninstall scripts under `additional/launchd/`, runbook `workflows/run-service.md`, static egress allowlist test with two red mutants.
