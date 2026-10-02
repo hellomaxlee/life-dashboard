@@ -22,13 +22,16 @@ from apscheduler.triggers.interval import IntervalTrigger
 from app.config import Settings
 from app.ingest.claude_usage import read_usage_file
 from app.jobs.rotation import ROTATION_JOB, ClipAdapter, DeviceRotation, device_adapter
-from app.timeutil import now_utc
+from app.summary.run import write_summary
+from app.timeutil import local_day, now_utc
 from tools import backup
 
 USAGE_JOB = "claude_usage_watch"
 BACKUP_JOB = "nightly_backup"
 BACKUP_CHECK_JOB = "backup_overdue_check"
-CORE_JOBS = frozenset({USAGE_JOB, BACKUP_JOB, BACKUP_CHECK_JOB})
+SUMMARY_JOB = "daily_summary"
+CORE_JOBS = frozenset({USAGE_JOB, BACKUP_JOB, BACKUP_CHECK_JOB, SUMMARY_JOB})
+SUMMARY_MISFIRE_GRACE_S = 12 * 3600
 BACKUP_MISFIRE_GRACE_S = 18 * 3600
 BACKUP_OVERDUE = timedelta(hours=26)
 BACKUP_CATCHUP_DELAY = timedelta(minutes=2)
@@ -136,6 +139,18 @@ def backup_if_overdue(settings: Settings, now: datetime) -> bool:
     return True
 
 
+def run_daily_summary(settings: Settings, open_conn: OpenConn) -> str:
+    """Write today's summary (home-timezone day). Stored line → no model call."""
+    day = local_day(now_utc(), settings.home_tz)
+    conn = open_conn()
+    try:
+        result = write_summary(conn, settings, day)
+    finally:
+        conn.close()
+    log.info("summary %s [%s] %s", day, result.source, result.line)
+    return result.source
+
+
 def stop_scheduler(scheduler: BackgroundScheduler) -> bool:
     """Shut the scheduler down, letting running jobs finish for at most SHUTDOWN_WAIT_S.
 
@@ -197,6 +212,14 @@ def build_scheduler(
         IntervalTrigger(seconds=int(BACKUP_CHECK_EVERY.total_seconds()), timezone=tz),
         id=BACKUP_CHECK_JOB,
         next_run_time=moment + BACKUP_CATCHUP_DELAY,
+    )
+
+    summary_hour, summary_minute = parse_hh_mm(settings.summary.time)
+    scheduler.add_job(
+        guarded(SUMMARY_JOB, lambda: run_daily_summary(settings, open_conn), stats),
+        CronTrigger(hour=summary_hour, minute=summary_minute, timezone=tz),
+        id=SUMMARY_JOB,
+        misfire_grace_time=SUMMARY_MISFIRE_GRACE_S,
     )
 
     if settings.device.pixoo_host:

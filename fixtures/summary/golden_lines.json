@@ -1,0 +1,80 @@
+{
+  "_about": "The ten hand-written lines from notes.txt § Voice brief as payload + line pairs. Each must PASS the gate against the payload built from these rows. `daily_metrics` is the day's row, `weekly_metrics` the week's Monday row, `last_week` the previous Monday's row, `earlier_week` a row two weeks back (so broken-last-week classifies), `book` a books row.",
+  "cases": [
+    {
+      "cell": "train / all-sources / alive / base",
+      "day": "2026-09-30",
+      "daily_metrics": {"quality_workout": true, "workout_count": 1, "workout_load": 118.0, "sleep_hours": 7.4, "sleep_win": true, "steps": 8412, "books_ytd": 3, "book_finished_today": false, "wins": ["sleep", "workout"], "load_trimp": 118.0, "load_acute": 410.2, "load_chronic": 380.5, "load_balance": 1.08, "wellness_fact": null},
+      "weekly_metrics": {"quality_workouts": 3, "week_hit": true, "weeks_hit_streak": 4, "week_complete_at": "2026-09-30T21:00:00Z"},
+      "line": "Third dot this week, load 118. What you repeat is what you become; this week you repeated the right thing."
+    },
+    {
+      "cell": "rest / all-sources / alive / base",
+      "day": "2026-10-01",
+      "daily_metrics": {"quality_workout": false, "workout_count": 0, "workout_load": null, "sleep_hours": 7.4, "sleep_win": true, "steps": 6210, "books_ytd": 3, "book_finished_today": false, "wins": ["sleep"], "load_trimp": 0, "load_acute": 350.0, "load_chronic": 380.0, "load_balance": 0.92},
+      "weekly_metrics": {"quality_workouts": 1, "week_hit": null, "weeks_hit_streak": 4},
+      "line": "No workout, 7.4 h of sleep. Rest is not the absence of training. It is where the training lands."
+    },
+    {
+      "cell": "train / workout-without-hr / alive / peak",
+      "day": "2026-10-02",
+      "daily_metrics": {"quality_workout": false, "workout_count": 1, "workout_load": null, "workout_minutes": 52, "sleep_hours": 7.1, "sleep_win": true, "steps": 9001, "books_ytd": 3, "book_finished_today": false, "wins": ["sleep"], "day_flags": ["peak"]},
+      "weekly_metrics": {"quality_workouts": 1, "week_hit": null, "weeks_hit_streak": 2},
+      "line": "A 52-minute session with no heart-rate data, so no dot. The work was real; the record just did not see it."
+    },
+    {
+      "cell": "rest / sleep-missing / broken-last-week / base",
+      "day": "2026-10-05",
+      "daily_metrics": {"quality_workout": false, "workout_count": 0, "workout_load": null, "sleep_hours": null, "sleep_win": false, "steps": 5100, "books_ytd": 3, "book_finished_today": false, "wins": []},
+      "weekly_metrics": {"quality_workouts": 0, "week_hit": null, "weeks_hit_streak": 0},
+      "last_week": {"quality_workouts": 1, "week_hit": false, "weeks_hit_streak": 0},
+      "earlier_week": {"quality_workouts": 3, "week_hit": true, "weeks_hit_streak": 5},
+      "line": "One dot last week. That week is over and owes you nothing; this one has not started yet."
+    },
+    {
+      "cell": "train / all-sources / never-started / off",
+      "day": "2026-10-06",
+      "daily_metrics": {"quality_workout": true, "workout_count": 1, "workout_load": 104.0, "sleep_hours": 7.0, "sleep_win": true, "steps": 7200, "books_ytd": 3, "book_finished_today": false, "wins": ["sleep", "workout"], "day_flags": ["off"]},
+      "weekly_metrics": {"quality_workouts": 1, "week_hit": null, "weeks_hit_streak": 0},
+      "line": "First quality workout on record, load 104. Every long habit has a day it was one day old."
+    },
+    {
+      "cell": "rest / health-delayed / alive / base",
+      "day": "2026-10-07",
+      "daily_metrics": {"books_ytd": 3},
+      "weekly_metrics": {"quality_workouts": 1, "week_hit": null, "weeks_hit_streak": 4},
+      "line": "Health data has not arrived; last night's sleep is unknown. Not knowing is fine. Guessing is what to avoid."
+    },
+    {
+      "cell": "race-week / all-sources / alive / peak",
+      "day": "2026-10-14",
+      "daily_metrics": {"quality_workout": true, "workout_count": 1, "workout_load": 96.0, "sleep_hours": 7.2, "sleep_win": true, "steps": 6600, "books_ytd": 4, "book_finished_today": false, "wins": ["sleep", "workout"], "load_trimp": 96.0, "load_acute": 520.0, "load_chronic": 400.0, "load_balance": 1.3, "day_flags": ["race-week", "peak"]},
+      "weekly_metrics": {"quality_workouts": 2, "week_hit": null, "weeks_hit_streak": 3},
+      "line": "Two dots by Wednesday, load balance 1.3. Enough has been done; the remaining work is to not add to it."
+    },
+    {
+      "cell": "travel / all-sources / broken-last-week / off",
+      "day": "2026-10-20",
+      "daily_metrics": {"quality_workout": false, "workout_count": 0, "workout_load": null, "sleep_hours": 6.1, "sleep_win": false, "steps": 11200, "books_ytd": 4, "book_finished_today": false, "wins": [], "day_flags": ["travel", "off"]},
+      "weekly_metrics": {"quality_workouts": 0, "week_hit": null, "weeks_hit_streak": 0},
+      "last_week": {"quality_workouts": 2, "week_hit": false, "weeks_hit_streak": 0},
+      "earlier_week": {"quality_workouts": 3, "week_hit": true, "weeks_hit_streak": 1},
+      "line": "Away from home, no workout, 6.1 h of sleep. You control the packing, not the schedule."
+    },
+    {
+      "cell": "rest / all-sources / alive / base (book)",
+      "day": "2026-10-22",
+      "daily_metrics": {"quality_workout": false, "workout_count": 0, "workout_load": null, "sleep_hours": 7.3, "sleep_win": true, "steps": 5900, "books_ytd": 1, "book_finished_today": true, "wins": ["sleep", "book"]},
+      "weekly_metrics": {"quality_workouts": 1, "week_hit": null, "weeks_hit_streak": 2},
+      "book": {"id": "gr-1", "title": "Little Fires Everywhere", "author": "Celeste Ng", "read_at": "2026-10-22"},
+      "line": "Finished *Little Fires Everywhere*, 1 of 12 this year. A page a night is how the number moves."
+    },
+    {
+      "cell": "train / all-sources / alive / base (second dot)",
+      "day": "2026-10-28",
+      "daily_metrics": {"quality_workout": true, "workout_count": 1, "workout_load": 110.0, "sleep_hours": 6.6, "sleep_win": false, "steps": 8800, "books_ytd": 4, "book_finished_today": false, "wins": ["workout"]},
+      "weekly_metrics": {"quality_workouts": 2, "week_hit": null, "weeks_hit_streak": 4},
+      "line": "Second dot, 6.6 h of sleep. Notice the pull to do more tonight, and notice it is not the same as needing to."
+    }
+  ]
+}

@@ -1,0 +1,79 @@
+{
+  "_about": "Lines Max would hate (notes.txt § Voice brief) plus the gate's other negative cases. Each is checked against the payload of golden case 0 (train / all-sources / alive / base, load 118, sleep 7.4) unless `case` names another golden case, and must FAIL with a reason starting with `reason`.",
+  "cases": [
+    {
+      "line": "Don't let the streak die!",
+      "reason": "ban: 'don't let the streak'"
+    },
+    {
+      "line": "Don't let the streak die.",
+      "reason": "ban: 'don't let the streak'"
+    },
+    {
+      "line": "Third dot this week, load 118. Well done!",
+      "reason": "ban: exclamation mark"
+    },
+    {
+      "line": "Only one more and you're done!",
+      "reason": "ban: 'only N left'"
+    },
+    {
+      "line": "You slacked off yesterday.",
+      "reason": "ban: 'slacked'"
+    },
+    {
+      "line": "As Marcus Aurelius said, what stands in the way becomes the way.",
+      "reason": "names: attributed quote"
+    },
+    {
+      "line": "Be a beast.",
+      "reason": "ban: 'beast'"
+    },
+    {
+      "line": "Third dot this week, load 124. What you repeat is what you become.",
+      "reason": "grounding: 124 not in payload"
+    },
+    {
+      "line": "Third dot this week, load 118 and 9,900 steps. Steady.",
+      "reason": "grounding: 9900 not in payload"
+    },
+    {
+      "line": "Third dot this week, load 118. Nice work 💪",
+      "reason": "ban: emoji"
+    },
+    {
+      "line": "What a week, load 118. How steady you were.",
+      "reason": "ban: second exclamatory clause"
+    },
+    {
+      "line": "Third dot this week, load 118. You need to keep this up.",
+      "reason": "ban: 'you need to'"
+    },
+    {
+      "line": "Third dot this week, load 118. No days off, as Goggins would say.",
+      "reason": "ban: 'no days off'"
+    },
+    {
+      "line": "Third dot this week, load 118. Goggins would approve.",
+      "reason": "names: living or modern person 'goggins'"
+    },
+    {
+      "line": "Third dot this week, load 118. Your HRV says the week landed.",
+      "reason": "wellness: 'hrv' with no band crossing today"
+    },
+    {
+      "line": "Third dot this week, load 118. Steady is the whole point, and the point is to keep it steady, every single day you can, which is most of them.",
+      "reason": "length: 142 chars, limit 110"
+    },
+    {
+      "line": "One dot last week. The streak is gone; nothing to do but begin.",
+      "case": 3,
+      "reason": "hard-days: 'streak' after a broken week"
+    },
+    {
+      "line": "One dot last week. Next week is a clean sheet.",
+      "case": 3,
+      "reason": "hard-days: 'next week' after a broken week"
+    }
+  ]
+}
