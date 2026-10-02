@@ -28,6 +28,7 @@ from app.ingest.store import IngestStats, store_payload
 from app.timeutil import UTC_ISO, now_utc
 
 SOURCE = "health"
+RAW_SUFFIXES = {"goodreads": ".xml"}
 log = logging.getLogger(__name__)
 router = APIRouter()
 
@@ -46,8 +47,13 @@ class ArchiveResult:
     duplicate: bool
 
 
-def raw_filename(received_at: datetime, sha256: str) -> str:
-    return f"{received_at.strftime('%Y%m%dT%H%M%SZ')}_{sha256[:8]}.json"
+def raw_suffix(source: str) -> str:
+    """The archive file extension of a source's payloads: `.json` unless listed."""
+    return RAW_SUFFIXES.get(source, ".json")
+
+
+def raw_filename(received_at: datetime, sha256: str, source: str = SOURCE) -> str:
+    return f"{received_at.strftime('%Y%m%dT%H%M%SZ')}_{sha256[:8]}{raw_suffix(source)}"
 
 
 def received_at_from_filename(name: str) -> str:
@@ -81,7 +87,7 @@ def _unrecorded_copy(
     before its row was. The retry adopts it instead of writing a second copy.
     """
     digest = hashlib.sha256(body).hexdigest()
-    for candidate in sorted((raw_dir / source).glob(f"*_{digest[:8]}.json")):
+    for candidate in sorted((raw_dir / source).glob(f"*_{digest[:8]}{raw_suffix(source)}")):
         recorded = conn.execute(
             "SELECT 1 FROM raw_archive WHERE source = ? AND path IN (?, ?)",
             (source, f"{source}/{candidate.name}", str(candidate)),
@@ -129,7 +135,7 @@ def archive_raw(
     if target is None:
         target = _unrecorded_copy(conn, raw_dir, source, body) if write_file else None
         if target is None:
-            target = raw_dir / source / raw_filename(moment, digest)
+            target = raw_dir / source / raw_filename(moment, digest, source)
             if write_file:
                 _write_durably(target, body)
                 wrote = True

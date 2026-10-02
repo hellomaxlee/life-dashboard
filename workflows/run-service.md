@@ -129,8 +129,7 @@ is no separate process to supervise. Config: `[scheduler]` and `[backup]` in
 | `nightly_backup` | `backup.time` (03:15 America/New_York) | `tools.backup` nightly: `data/backups/life-<utc stamp>/`, keeps the newest `backup.keep` (14) |
 | `backup_overdue_check` | two minutes after start, then every hour | takes a backup if none is newer than 26 hours; otherwise does nothing |
 | `device_rotation` | every `device.screen_seconds` (20 s), **only while `device.pixoo_host` is set** | sends the next screen (Week, Today, Books, wrapping) to the Pixoo; section 15 |
-
-The Goodreads 06:30 job is not here; it is added to `build_scheduler` together with the poller.
+| `goodreads_poll` | `pull.goodreads` (06:30 America/New_York), **only while `GOODREADS_RSS_URL` is set in `.env`**; plus once, three minutes after start, when no parsed feed arrived in the last 24 h | fetches the `read` shelf RSS, archives it, upserts `books`; section 17 |
 
 A job never overlaps itself, opens its own db connection per run, and an
 exception is logged (`job <id> failed` plus traceback in the err log), not fatal.
@@ -346,3 +345,49 @@ backup from step 1 (section 12, `--overwrite-live`) and check out the previous
 commit. Starting the service without step 3 also migrates the schema (it does
 so at start), but it does not normalise old activities and gives you no chance
 to look first.
+
+## 17. Goodreads
+
+The `read` shelf's public RSS is the reading source. Its URL carries a private
+key, so it is the secret `GOODREADS_RSS_URL` in `.env` (Goodreads → My Books →
+the `read` shelf → the RSS icon at the bottom of the list; copy the link). Set
+it, restart the service (section 4), and `goodreads_poll` is registered; leave
+it empty and the job is simply absent, nothing else changes. The host must be
+`www.goodreads.com` or `goodreads.com` over https; any other URL, any redirect
+(even within Goodreads), a non-2xx status or a body over 32 MB is refused with
+nothing archived, and the failure shows in the job stats and the err log.
+
+```sh
+uv run python -m tools.sync --source goodreads      # poll by hand: "goodreads ok raw_archive_id=N books=75",
+                                                    # "goodreads duplicate ..." (shelf unchanged), exit 2 + message when the URL is unset
+ls data/raw/goodreads | tail                        # archived feeds, <utc stamp>_<sha8>.xml, verbatim bytes
+sqlite3 data/life.db "SELECT id, title, read_at, date_added, date_inferred FROM books ORDER BY read_at DESC LIMIT 10"
+grep -n "goodreads_poll" data/logs/*.err.log | tail # a refused redirect, a timeout, a malformed feed
+```
+
+What the archive holds: the exact bytes Goodreads served, one file per distinct
+feed. An unchanged shelf serves identical bytes (`lastBuildDate` is the time of
+the last shelf change, not of the fetch), so a daily poll of an unchanged shelf
+adds no file and changes nothing. A feed that will not parse is archived with
+`parsed_ok = 0` and the error in `raw_archive.error`; `tools.replay --verify`
+lists it as unparsed and does not replay it.
+
+What lands in `books`: one row per item keyed by Goodreads' book id; title,
+author, `read_at`, `date_added`, `date_inferred`. The feed is authoritative for
+what it carries, so a read-at date fixed on Goodreads replaces the stored one at
+the next poll; a book taken off the shelf keeps its row. `read_at` is the chosen
+calendar day's midnight America/New_York stored as UTC (`2026-02-17T05:00:00Z`
+for 17 Feb); `date_added` is the instant Goodreads recorded. With
+`books.fallback_to_date_added = true` a book with no read-at date takes its
+date-added as `read_at` and is marked `date_inferred = 1` (Phase 3 shows the
+mark); set the key to `false` and `read_at` stays null for those. A date in no
+accepted format is stored as null and logged with the book id; it is never
+guessed. Accepted: the RFC 822 form Goodreads writes (`Tue, 17 Feb 2026
+00:00:00 +0000`, day padded or not, weekday optional, seconds optional, numeric
+offset or GMT/UTC or a US zone name) and ISO 8601.
+
+Catch-up: when the service starts and no parsed feed arrived in the last 24 h
+(first boot, or the Mac slept through 06:30 for longer than the 18 h misfire
+grace) the job runs once three minutes after start, then settles on 06:30.
+Because an unchanged shelf adds no raw row, a restart more than a day after the
+last shelf change also triggers that one poll; it costs one 300 KB fetch.

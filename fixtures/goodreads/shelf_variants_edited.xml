@@ -1,0 +1,228 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" >
+  <channel>
+    <xhtml:meta xmlns:xhtml="http://www.w3.org/1999/xhtml" name="robots" content="noindex" />
+    <title>Reader's bookshelf: read</title>
+    <copyright><![CDATA[Copyright (C) 2026 Goodreads LLC. All rights reserved.]]>
+    </copyright>
+    <link><![CDATA[https://www.goodreads.com/review/list_rss/1?key=FIXTURE&shelf=read]]></link>
+    <atom:link href="https://www.goodreads.com/review/list_rss/1?key=FIXTURE&amp;shelf=read" rel="self" type="application/rss+xml" />
+    <description>Reader's bookshelf: read</description>
+    <language>en-US</language>
+    <lastBuildDate>Tue, 17 Feb 2026 19:52:40 -0800</lastBuildDate>
+    <ttl>60</ttl>
+    <image>
+      <title>Reader's bookshelf: read</title>
+      <link><![CDATA[https://www.goodreads.com/review/list_rss/1?key=FIXTURE&shelf=read]]></link>
+      <width>144</width>
+      <height>41</height>
+      <url>https://www.goodreads.com/images/layout/goodreads_logo_144.jpg</url>
+    </image>
+
+  <item>
+    <guid><![CDATA[https://www.goodreads.com/review/show/1000000001?utm_medium=api&utm_source=rss]]></guid>
+    <pubDate><![CDATA[Tue, 17 Feb 2026 19:52:40 -0800]]></pubDate>
+    <title>The Lighthouse at Dusk</title>
+    <link><![CDATA[https://www.goodreads.com/review/show/1000000001?utm_medium=api&utm_source=rss]]></link>
+    <book_id>90000001</book_id>
+    <book_image_url><![CDATA[https://i.gr-assets.com/images/S/compressed.photo.goodreads.com/books/1/90000001._SY75_.jpg]]></book_image_url>
+    <book_small_image_url><![CDATA[https://i.gr-assets.com/images/S/compressed.photo.goodreads.com/books/1/90000001._SY75_.jpg]]></book_small_image_url>
+    <book_medium_image_url><![CDATA[https://i.gr-assets.com/images/S/compressed.photo.goodreads.com/books/1/90000001._SX98_.jpg]]></book_medium_image_url>
+    <book_large_image_url><![CDATA[https://i.gr-assets.com/images/S/compressed.photo.goodreads.com/books/1/90000001._SY475_.jpg]]></book_large_image_url>
+    <book_description><![CDATA[A keeper, a storm, a letter never sent.]]></book_description>
+    <book id="90000001">
+      <num_pages>338</num_pages>
+    </book>
+    <author_name>Ada Marsh</author_name>
+    <isbn>0000000001</isbn>
+    <user_name>Reader</user_name>
+    <user_rating>5</user_rating>
+    <user_read_at><![CDATA[Wed, 18 Feb 2026 00:00:00 +0000]]></user_read_at>
+    <user_date_added><![CDATA[Tue, 17 Feb 2026 19:52:40 -0800]]></user_date_added>
+    <user_date_created><![CDATA[Mon, 24 Nov 2025 19:53:42 -0800]]></user_date_created>
+    <user_shelves></user_shelves>
+    <user_review></user_review>
+    <average_rating>4.04</average_rating>
+    <book_published>2017</book_published>
+    <description>
+      <![CDATA[
+      <a href="https://www.goodreads.com/book/show/90000001"><img alt="The Lighthouse at Dusk" src="https://i.gr-assets.com/images/S/compressed.photo.goodreads.com/books/1/90000001._SY75_.jpg" /></a><br/>
+                                      author: Ada Marsh<br/>
+                                      name: Reader<br/>
+                                      average rating: 4.04<br/>
+                                      book published: 2017<br/>
+                                      rating: 5<br/>
+                                      read at: 2026/02/17<br/>
+                                      date added: 2026/02/17<br/>
+                                      shelves: <br/>
+                                      review: <br/><br/>
+                                      ]]>
+    </description>
+  </item>
+
+  <item>
+    <guid><![CDATA[https://www.goodreads.com/review/show/1000000002?utm_medium=api&utm_source=rss]]></guid>
+    <pubDate><![CDATA[Fri, 03 Nov 2023 22:17:37 -0700]]></pubDate>
+    <title>Why We&apos;re Restless</title>
+    <link><![CDATA[https://www.goodreads.com/review/show/1000000002?utm_medium=api&utm_source=rss]]></link>
+    <book_id>90000002</book_id>
+    <book_image_url><![CDATA[https://i.gr-assets.com/images/S/compressed.photo.goodreads.com/books/1/90000002._SY75_.jpg]]></book_image_url>
+    <book_small_image_url><![CDATA[https://i.gr-assets.com/images/S/compressed.photo.goodreads.com/books/1/90000002._SY75_.jpg]]></book_small_image_url>
+    <book_medium_image_url><![CDATA[https://i.gr-assets.com/images/S/compressed.photo.goodreads.com/books/1/90000002._SX98_.jpg]]></book_medium_image_url>
+    <book_large_image_url><![CDATA[https://i.gr-assets.com/images/S/compressed.photo.goodreads.com/books/1/90000002._SY475_.jpg]]></book_large_image_url>
+    <book_description><![CDATA[Essays.]]></book_description>
+    <book id="90000002">
+      <num_pages>210</num_pages>
+    </book>
+    <author_name>Ezra O&apos;Neill</author_name>
+    <isbn>0000000002</isbn>
+    <user_name>Reader</user_name>
+    <user_rating>4</user_rating>
+    <user_read_at><![CDATA[Fri, 3 Nov 2023 00:00:00 +0000]]></user_read_at>
+    <user_date_added><![CDATA[Fri, 03 Nov 2023 22:17:37 -0700]]></user_date_added>
+    <user_date_created><![CDATA[Fri, 03 Nov 2023 22:17:37 -0700]]></user_date_created>
+    <user_shelves>foundational</user_shelves>
+    <user_review></user_review>
+    <average_rating>3.90</average_rating>
+    <book_published>2020</book_published>
+    <description><![CDATA[rating: 4<br/>read at: 2023/11/03<br/>]]></description>
+  </item>
+
+  <item>
+    <guid><![CDATA[https://www.goodreads.com/review/show/1000000003?utm_medium=api&utm_source=rss]]></guid>
+    <pubDate><![CDATA[Mon, 08 Aug 2022 05:34:44 -0700]]></pubDate>
+    <title><![CDATA[Salt & Stone: A Field Guide to the Coast (Field Guides, #2)]]></title>
+    <link><![CDATA[https://www.goodreads.com/review/show/1000000003?utm_medium=api&utm_source=rss]]></link>
+    <book_id>90000003</book_id>
+    <book_image_url><![CDATA[https://i.gr-assets.com/images/S/compressed.photo.goodreads.com/books/1/90000003._SY75_.jpg]]></book_image_url>
+    <book_small_image_url><![CDATA[https://i.gr-assets.com/images/S/compressed.photo.goodreads.com/books/1/90000003._SY75_.jpg]]></book_small_image_url>
+    <book_medium_image_url><![CDATA[https://i.gr-assets.com/images/S/compressed.photo.goodreads.com/books/1/90000003._SX98_.jpg]]></book_medium_image_url>
+    <book_large_image_url><![CDATA[https://i.gr-assets.com/images/S/compressed.photo.goodreads.com/books/1/90000003._SY475_.jpg]]></book_large_image_url>
+    <book_description><![CDATA[Tide tables & more.]]></book_description>
+    <book id="90000003">
+      <num_pages>412</num_pages>
+    </book>
+    <author_name><![CDATA[Nadia Qureshi-Ławski]]></author_name>
+    <isbn></isbn>
+    <user_name>Reader</user_name>
+    <user_rating>0</user_rating>
+    <user_read_at><![CDATA[Sat, 1 Mar 2025 00:00:00 +0000]]></user_read_at>
+    <user_date_added><![CDATA[Mon, 08 Aug 2022 05:34:44 -0700]]></user_date_added>
+    <user_date_created><![CDATA[Mon, 08 Aug 2022 05:34:44 -0700]]></user_date_created>
+    <user_shelves></user_shelves>
+    <user_review></user_review>
+    <average_rating>4.21</average_rating>
+    <book_published></book_published>
+    <description><![CDATA[read at: <br/>date added: 2022/08/08<br/>]]></description>
+  </item>
+
+  <item>
+    <guid><![CDATA[https://www.goodreads.com/review/show/1000000004?utm_medium=api&utm_source=rss]]></guid>
+    <pubDate><![CDATA[Wed, 17 Jan 2024 09:15:37 -0800]]></pubDate>
+    <title>The Handmaid&#8217;s Garden (The Gardener&quot;s Trilogy, #1)</title>
+    <link><![CDATA[https://www.goodreads.com/review/show/1000000004?utm_medium=api&utm_source=rss]]></link>
+    <book_id>90000004</book_id>
+    <book_image_url><![CDATA[https://i.gr-assets.com/images/S/compressed.photo.goodreads.com/books/1/90000004._SY75_.jpg]]></book_image_url>
+    <book_small_image_url><![CDATA[https://i.gr-assets.com/images/S/compressed.photo.goodreads.com/books/1/90000004._SY75_.jpg]]></book_small_image_url>
+    <book_medium_image_url><![CDATA[https://i.gr-assets.com/images/S/compressed.photo.goodreads.com/books/1/90000004._SX98_.jpg]]></book_medium_image_url>
+    <book_large_image_url><![CDATA[https://i.gr-assets.com/images/S/compressed.photo.goodreads.com/books/1/90000004._SY475_.jpg]]></book_large_image_url>
+    <book_description><![CDATA[Fiction.]]></book_description>
+    <book id="90000004">
+      <num_pages>302</num_pages>
+    </book>
+    <author_name>Margaret &amp; Roland Atwell</author_name>
+    <isbn>0000000004</isbn>
+    <user_name>Reader</user_name>
+    <user_rating>3</user_rating>
+    <user_read_at></user_read_at>
+    <user_date_added><![CDATA[Wed, 17 Jan 2024 09:15:37 -0800]]></user_date_added>
+    <user_date_created><![CDATA[Wed, 17 Jan 2024 09:15:37 -0800]]></user_date_created>
+    <user_shelves>foundational</user_shelves>
+    <user_review><![CDATA[Slow start, strong finish.]]></user_review>
+    <average_rating>4.12</average_rating>
+    <book_published>1985</book_published>
+    <description><![CDATA[read at: <br/>date added: 2024/01/17<br/>]]></description>
+  </item>
+
+
+  <item>
+    <guid><![CDATA[https://www.goodreads.com/review/show/1000000006?utm_medium=api&utm_source=rss]]></guid>
+    <pubDate><![CDATA[Fri, 20 Jun 2025 17:12:17 -0700]]></pubDate>
+    <title><![CDATA[Garbled Dates]]></title>
+    <link><![CDATA[https://www.goodreads.com/review/show/1000000006?utm_medium=api&utm_source=rss]]></link>
+    <book_id>90000006</book_id>
+    <book_image_url><![CDATA[https://i.gr-assets.com/images/S/compressed.photo.goodreads.com/books/1/90000006._SY75_.jpg]]></book_image_url>
+    <book_small_image_url><![CDATA[https://i.gr-assets.com/images/S/compressed.photo.goodreads.com/books/1/90000006._SY75_.jpg]]></book_small_image_url>
+    <book_medium_image_url><![CDATA[https://i.gr-assets.com/images/S/compressed.photo.goodreads.com/books/1/90000006._SX98_.jpg]]></book_medium_image_url>
+    <book_large_image_url><![CDATA[https://i.gr-assets.com/images/S/compressed.photo.goodreads.com/books/1/90000006._SY475_.jpg]]></book_large_image_url>
+    <book_description><![CDATA[What a parser does with a date it cannot read.]]></book_description>
+    <book id="90000006">
+      <num_pages>100</num_pages>
+    </book>
+    <author_name>Anonymous</author_name>
+    <isbn>0000000006</isbn>
+    <user_name>Reader</user_name>
+    <user_rating>0</user_rating>
+    <user_read_at><![CDATA[Thu, 30 Feb 2025 00:00:00 +0000]]></user_read_at>
+    <user_date_added><![CDATA[sometime in June]]></user_date_added>
+    <user_date_created><![CDATA[Fri, 20 Jun 2025 17:12:17 -0700]]></user_date_created>
+    <user_shelves></user_shelves>
+    <user_review></user_review>
+    <average_rating>0.00</average_rating>
+    <book_published></book_published>
+    <description><![CDATA[]]></description>
+  </item>
+
+  <item>
+    <guid><![CDATA[https://www.goodreads.com/review/show/1000000007?utm_medium=api&utm_source=rss]]></guid>
+    <pubDate><![CDATA[Sun, 8 Mar 2026 02:30:00 -0800]]></pubDate>
+    <title>Nested Id Only</title>
+    <link><![CDATA[https://www.goodreads.com/review/show/1000000007?utm_medium=api&utm_source=rss]]></link>
+    <book_id></book_id>
+    <book_description><![CDATA[The id lives only on the nested book element.]]></book_description>
+    <book id="90000007">
+      <num_pages>80</num_pages>
+    </book>
+    <author_name></author_name>
+    <isbn></isbn>
+    <user_name>Reader</user_name>
+    <user_rating>0</user_rating>
+    <user_read_at>2026-03-08</user_read_at>
+    <user_date_added>2026-03-08T10:30:00Z</user_date_added>
+    <user_date_created><![CDATA[Sun, 8 Mar 2026 02:30:00 -0800]]></user_date_created>
+    <user_shelves></user_shelves>
+    <user_review></user_review>
+    <average_rating>0.00</average_rating>
+    <book_published></book_published>
+    <description><![CDATA[]]></description>
+  </item>
+
+  <item>
+    <guid><![CDATA[https://www.goodreads.com/review/show/1000000008?utm_medium=api&utm_source=rss]]></guid>
+    <pubDate><![CDATA[Sun, 8 Mar 2026 02:30:00 -0800]]></pubDate>
+    <title>No Id At All</title>
+    <link><![CDATA[https://www.goodreads.com/review/show/1000000008?utm_medium=api&utm_source=rss]]></link>
+    <book_description><![CDATA[Skipped: nothing to key it by.]]></book_description>
+    <author_name>Anonymous</author_name>
+    <user_name>Reader</user_name>
+    <user_read_at><![CDATA[Sun, 8 Mar 2026 00:00:00 +0000]]></user_read_at>
+    <user_date_added><![CDATA[Sun, 8 Mar 2026 02:30:00 -0800]]></user_date_added>
+    <description><![CDATA[]]></description>
+  </item>
+
+  <item>
+    <guid><![CDATA[https://www.goodreads.com/review/show/1000000009?utm_medium=api&utm_source=rss]]></guid>
+    <pubDate><![CDATA[Sun, 8 Mar 2026 02:30:00 -0800]]></pubDate>
+    <title></title>
+    <link><![CDATA[https://www.goodreads.com/review/show/1000000009?utm_medium=api&utm_source=rss]]></link>
+    <book_id>90000009</book_id>
+    <book_description><![CDATA[Skipped: nothing to show.]]></book_description>
+    <author_name>Anonymous</author_name>
+    <user_name>Reader</user_name>
+    <user_read_at></user_read_at>
+    <user_date_added><![CDATA[Sun, 8 Mar 2026 02:30:00 -0800]]></user_date_added>
+    <description><![CDATA[]]></description>
+  </item>
+
+</channel>
+</rss>

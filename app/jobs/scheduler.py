@@ -20,19 +20,24 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
 from app.config import Settings
+from app.ingest import goodreads
 from app.ingest.claude_usage import read_usage_file
 from app.jobs.rotation import ROTATION_JOB, ClipAdapter, DeviceRotation, device_adapter
-from app.timeutil import now_utc
+from app.timeutil import from_utc_iso, now_utc
 from tools import backup
 
 USAGE_JOB = "claude_usage_watch"
 BACKUP_JOB = "nightly_backup"
 BACKUP_CHECK_JOB = "backup_overdue_check"
+GOODREADS_JOB = "goodreads_poll"
 CORE_JOBS = frozenset({USAGE_JOB, BACKUP_JOB, BACKUP_CHECK_JOB})
 BACKUP_MISFIRE_GRACE_S = 18 * 3600
 BACKUP_OVERDUE = timedelta(hours=26)
 BACKUP_CATCHUP_DELAY = timedelta(minutes=2)
 BACKUP_CHECK_EVERY = timedelta(hours=1)
+GOODREADS_MISFIRE_GRACE_S = 18 * 3600
+GOODREADS_OVERDUE = timedelta(hours=24)
+GOODREADS_CATCHUP_DELAY = timedelta(minutes=3)
 SHUTDOWN_WAIT_S = 10.0
 
 log = logging.getLogger(__name__)
@@ -136,6 +141,42 @@ def backup_if_overdue(settings: Settings, now: datetime) -> bool:
     return True
 
 
+def last_goodreads_poll(conn: sqlite3.Connection) -> datetime | None:
+    """When the newest parsed Goodreads feed was received, or None before the first one.
+
+    An unchanged shelf polls to the same bytes and adds no row, so this is the last poll
+    that brought a new feed, not the last poll."""
+    row = conn.execute(
+        "SELECT MAX(received_at_utc) FROM raw_archive WHERE source = ? AND parsed_ok = 1",
+        (goodreads.SOURCE,),
+    ).fetchone()
+    return None if row[0] is None else from_utc_iso(row[0])
+
+
+def goodreads_overdue(open_conn: OpenConn, now: datetime) -> bool:
+    """True when no parsed feed arrived within GOODREADS_OVERDUE, or the db cannot say."""
+    try:
+        conn = open_conn()
+    except Exception:
+        log.exception("%s: cannot read the last poll time; polling soon", GOODREADS_JOB)
+        return True
+    try:
+        last = last_goodreads_poll(conn)
+    finally:
+        conn.close()
+    return last is None or now - last > GOODREADS_OVERDUE
+
+
+def run_goodreads_poll(settings: Settings, open_conn: OpenConn) -> goodreads.PollResult:
+    conn = open_conn()
+    try:
+        result = goodreads.poll_goodreads(conn, settings)
+    finally:
+        conn.close()
+    log.info("%s: %s (%d books)", GOODREADS_JOB, result.status, result.books)
+    return result
+
+
 def stop_scheduler(scheduler: BackgroundScheduler) -> bool:
     """Shut the scheduler down, letting running jobs finish for at most SHUTDOWN_WAIT_S.
 
@@ -198,6 +239,23 @@ def build_scheduler(
         id=BACKUP_CHECK_JOB,
         next_run_time=moment + BACKUP_CATCHUP_DELAY,
     )
+
+    if settings.goodreads_rss_url:
+        try:
+            poll_hour, poll_minute = parse_hh_mm(settings.pull.goodreads)
+        except ValueError:
+            log.exception("%s not registered: pull.goodreads is not HH:MM", GOODREADS_JOB)
+        else:
+            first_run = {}
+            if goodreads_overdue(open_conn, moment):
+                first_run = {"next_run_time": moment + GOODREADS_CATCHUP_DELAY}
+            scheduler.add_job(
+                guarded(GOODREADS_JOB, lambda: run_goodreads_poll(settings, open_conn), stats),
+                CronTrigger(hour=poll_hour, minute=poll_minute, timezone=tz),
+                id=GOODREADS_JOB,
+                misfire_grace_time=GOODREADS_MISFIRE_GRACE_S,
+                **first_run,
+            )
 
     if settings.device.pixoo_host:
         try:
