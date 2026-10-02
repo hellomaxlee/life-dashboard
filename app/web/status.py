@@ -11,6 +11,7 @@ from fastapi.responses import HTMLResponse
 from app.config import Settings
 from app.db import table_names
 from app.timeutil import utc_iso_to_local_display
+from app.web.nav import NAV_STYLE, nav_html
 
 router = APIRouter()
 
@@ -83,8 +84,9 @@ def render_status(conn: sqlite3.Connection, settings: Settings) -> str:
     return (
         "<!doctype html><html lang='en'><head><meta charset='utf-8'>"
         "<meta name='viewport' content='width=device-width,initial-scale=1'>"
-        f"<title>life-dashboard status</title><style>{_STYLE}</style></head><body>"
-        "<h1>life-dashboard</h1>"
+        f"<title>life-dashboard status</title><style>{_STYLE}{NAV_STYLE}</style></head><body>"
+        + nav_html("/")
+        + "<h1>life-dashboard</h1>"
         f"{last_line}"
         "<h2>Rows per table</h2>"
         + _table(["table", "rows"], counts)

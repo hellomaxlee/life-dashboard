@@ -25,6 +25,7 @@ from app.render.rotation import ROTATION_ORDER, rotation_clips
 from app.render.view import DayView, load_fixture
 from app.render.view_db import view_from_db
 from app.timeutil import local_day, now_utc
+from app.web.nav import NAV_STYLE, nav_html
 
 router = APIRouter()
 
@@ -126,8 +127,9 @@ def preview_page(
     title = fixture if fixture is not None else view.day_local
     return HTMLResponse(
         "<!doctype html><html lang='en'><head><meta charset='utf-8'>"
-        f"<title>life-dashboard preview</title><style>{_STYLE}</style></head><body>"
-        f"<h1>Preview: {escape(title)}</h1>"
+        f"<title>life-dashboard preview</title><style>{_STYLE}{NAV_STYLE}</style></head><body>"
+        + nav_html("/preview")
+        + f"<h1>Preview: {escape(title)}</h1>"
         "<p>Judge legibility on the <b>1x LED gamma</b> column at native size. "
         "The 8x columns are for inspecting pixels only. A celebration marked (sample) was not "
         "earned by this day's data and is shown only so it can be looked at.</p>"
