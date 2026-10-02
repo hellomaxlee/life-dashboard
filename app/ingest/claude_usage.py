@@ -97,7 +97,7 @@ def ingest_archived(
     except ValueError as exc:
         mark_parsed(conn, raw_archive_id, False, f"malformed claude usage: {exc}")
         raise
-    conn.execute("BEGIN")
+    conn.execute("BEGIN IMMEDIATE")
     try:
         if reading is not None:
             store_reading(conn, reading, settings.home_tz)
@@ -118,7 +118,8 @@ def read_usage_file(conn: sqlite3.Connection, settings: Settings) -> ReadResult:
     body = path.read_bytes()
     archived = archive_raw(conn, settings.storage.raw_dir, body, source=SOURCE)
     if archived.duplicate:
-        return ReadResult("duplicate", archived.raw_archive_id)
+        status = "superseded" if archived.superseded else "duplicate"
+        return ReadResult(status, archived.raw_archive_id)
     try:
         reading = ingest_archived(conn, body, archived.raw_archive_id, settings)
     except ValueError:

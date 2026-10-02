@@ -14,6 +14,8 @@ _SESSION_DIR = Path(tempfile.mkdtemp(prefix="life-dashboard-import-"))
 os.environ.setdefault("LIFE_DB_PATH", str(_SESSION_DIR / "life.db"))
 os.environ.setdefault("LIFE_RAW_DIR", str(_SESSION_DIR / "raw"))
 os.environ["HEALTH_EXPORT_TOKEN"] = ""
+os.environ["LIFE_SCHEDULER_ENABLED"] = "0"
+os.environ.setdefault("LIFE_BACKUP_DIR", str(_SESSION_DIR / "backups"))
 
 from app.config import Settings, load_settings  # noqa: E402
 from app.db import open_db  # noqa: E402
