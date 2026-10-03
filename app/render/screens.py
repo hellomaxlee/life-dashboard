@@ -32,6 +32,7 @@ from app.render.palette import (
     GREEN,
     LABEL,
     RING,
+    SECONDARY,
     SKY,
     SPINES,
     TEXT,
@@ -47,7 +48,9 @@ from app.timeutil import from_utc_iso
 
 LEFT = 2
 RIGHT = 61
+DOT_LABEL_X = 13
 DOT_ROW_Y = 17
+STREAK_Y = 28
 SLEEP_BAR_HOURS = 10
 LINE_WIDTH = 60
 PAGE_MS = 2000
@@ -139,11 +142,11 @@ def _draw_streak(frame: Frame, streak: int) -> None:
         total = text_width(number, font) + 3 + text_width(tail, SMALL)
         if total <= RIGHT - LEFT + 1:
             x = (SIZE - total) // 2
-            y = 50 if font is BODY else 52
+            y = STREAK_Y if font is BODY else STREAK_Y + 2
             after = draw_text(frame, x, y, number, GOLD if streak else TEXT, font)
-            draw_text(frame, after + 2, 52, tail, LABEL, SMALL)
+            draw_text(frame, after + 2, STREAK_Y + 2, tail, LABEL, SMALL)
             return
-    draw_text_centered(frame, 52, "MANY WK STREAK", LABEL, SMALL)
+    draw_text_centered(frame, STREAK_Y + 2, "MANY WK STREAK", LABEL, SMALL)
 
 
 def _week_frame(view: DayView, now: datetime, tick: int) -> Frame:
@@ -164,17 +167,18 @@ def _week_frame(view: DayView, now: datetime, tick: int) -> Frame:
         else:
             draw_ring(frame, cx, DOT_ROW_Y, radius, RING)
 
-    draw_usage(frame, usage_state(view.claude, now, view.stale_hours), tick)
-
     if streak is None:
-        draw_text_centered(frame, 52, "STREAK NO DATA", TEXT, SMALL)
+        draw_text_centered(frame, STREAK_Y + 2, "STREAK NO DATA", TEXT, SMALL)
     else:
         _draw_streak(frame, streak)
+
+    draw_usage(frame, usage_state(view.claude, now, view.stale_hours), tick)
     return frame
 
 
 def render_week(view: DayView, now: datetime) -> Clip:
-    """Three dots, the Claude usage bar, the weeks-hit streak. Animated only when stale."""
+    """Three dots, the weeks-hit streak under them, the Claude usage bar at the bottom.
+    Animated only when stale."""
     state = usage_state(view.claude, now, view.stale_hours)
     if not state.stale:
         return still(_week_frame(view, now, 0))
@@ -238,6 +242,23 @@ def as_of_label(view: DayView, now: datetime | None = None) -> str | None:
     return f"AS OF {days_back}D AGO"
 
 
+def no_dot_label(view: DayView) -> str:
+    """Why the day has no dot, from the day's own row: no workout, a workout with no usable
+    heart rate, or its load against the week's bar (floored, so it never reads as met).
+    "NO DOT YET" when the row does not say."""
+    if view.workout_count == 0:
+        return "NO WORKOUT"
+    if view.workout_count is None:
+        return "NO DOT YET"
+    if view.workout_load is None:
+        return "NO HR DATA"
+    if view.load_bar is not None and 0 <= view.workout_load < view.load_bar:
+        label = f"LOAD {int(view.workout_load)}/{int(view.load_bar)}"
+        if DOT_LABEL_X + text_width(label, SMALL) - 1 <= RIGHT:
+            return label
+    return "NO DOT YET"
+
+
 def render_today(view: DayView, now: datetime | None = None) -> Clip:
     """Last night's sleep against the target, today's dot, steps, and when the data is from."""
     frame = new_frame()
@@ -276,14 +297,14 @@ def render_today(view: DayView, now: datetime | None = None) -> Clip:
         draw_text(frame, 13, 42, "WORKOUT DONE", GOLD, SMALL)
     else:
         draw_ring(frame, 6, 44, 4, RING)
-        draw_text(frame, 13, 42, "NO DOT YET", TEXT, SMALL)
+        draw_text(frame, DOT_LABEL_X, 42, no_dot_label(view), TEXT, SMALL)
 
     draw_text(frame, LEFT, 51, "STEPS", LABEL, SMALL)
     steps = "NO DATA" if _count(view.steps) is None else str(view.steps)
     draw_text_right(frame, RIGHT, 51, steps, TEXT, SMALL)
     as_of = as_of_label(view, now)
     if as_of is not None:
-        draw_text(frame, LEFT, 58, as_of, LABEL, SMALL)
+        draw_text(frame, LEFT, 58, as_of, SECONDARY, SMALL)
     return still(frame)
 
 

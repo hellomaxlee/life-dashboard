@@ -48,6 +48,9 @@ from app.config import Settings
 from app.timeutil import from_utc_iso, to_utc_iso
 
 QUALITY_WORKOUT = "quality_workout"
+WORKOUT_COUNT = "workout_count"
+WORKOUT_LOAD = "workout_load"
+WEEK_LOAD_BAR = "load_bar"
 SLEEP_HOURS = "sleep_hours"
 STEPS = "steps"
 BOOKS_YTD = "books_ytd"
@@ -76,6 +79,9 @@ class DayView:
     week_dots: int | None = None
     streak_weeks: int | None = None
     today_dot: bool | None = None
+    workout_count: int | None = None
+    workout_load: float | None = None
+    load_bar: float | None = None
     sleep_hours: float | None = None
     sleep_target_hours: float = 7.0
     steps: int | None = None
@@ -168,6 +174,9 @@ def view_from_metrics(
         week_dots=_whole(weekly.get(WEEK_QUALITY_WORKOUTS)),
         streak_weeks=_whole(weekly.get(WEEKS_HIT_STREAK)),
         today_dot=quality if isinstance(quality, bool) else None,
+        workout_count=_whole(daily.get(WORKOUT_COUNT)),
+        workout_load=_number(daily.get(WORKOUT_LOAD)),
+        load_bar=_number(weekly.get(WEEK_LOAD_BAR)),
         sleep_hours=sleep if sleep is not None else _sleep(stored_sleep_hours),
         sleep_target_hours=settings.sleep_target_hours,
         steps=steps if steps is not None else _whole(stored_steps),

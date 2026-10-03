@@ -15,6 +15,8 @@ BLACK: Color = (0, 0, 0)
 WHITE: Color = (255, 255, 255)
 TEXT: Color = (235, 235, 245)
 LABEL: Color = (90, 150, 255)
+# When a number is from or until, not what it is: "RESETS IN 2D", "AS OF 18:10".
+SECONDARY: Color = (150, 140, 190)
 TRACK: Color = (34, 36, 54)
 RING: Color = (72, 76, 104)
 

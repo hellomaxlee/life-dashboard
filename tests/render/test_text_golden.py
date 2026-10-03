@@ -13,7 +13,7 @@ from dataclasses import replace
 import pytest
 from PIL import Image
 
-from app.render.font import BODY, SMALL, draw_text
+from app.render.font import BODY, SMALL, draw_text, text_width
 from app.render.rotation import render_screen
 from app.render.screens import render_books, render_today, render_week
 from tests.render import WEEK_41, load, record_text
@@ -45,11 +45,11 @@ def test_week_screen_text_race_week(monkeypatch, settings):
     assert drawn == [
         ("WEEK", 2, 2, S, 1),
         ("2 OF 3", 41, 2, S, 1),
-        ("CLAUDE", 2, 33, S, 1),
-        ("87%", 28, 33, S, 1),
-        ("RESETS IN 2D", 2, 40, S, 1),
-        ("0", 10, 50, B, 1),
-        ("WK STREAK", 18, 52, S, 1),
+        ("0", 10, 28, B, 1),
+        ("WK STREAK", 18, 30, S, 1),
+        ("CLAUDE", 2, 47, S, 1),
+        ("87%", 28, 47, S, 1),
+        ("RESETS IN 2D", 2, 54, S, 1),
     ]
     centres = [clip.poster.getpixel(xy) for xy in DOT_CENTRES]
     assert centres == [CORAL, GOLD, (0, 0, 0)]
@@ -62,11 +62,11 @@ def test_week_screen_text_week_41(monkeypatch, settings):
     assert [item[0] for item in drawn] == [
         "WEEK",
         "2 OF 3",
+        "4",
+        "WK STREAK",
         "CLAUDE",
         "41%",
         "RESETS IN 3D",
-        "4",
-        "WK STREAK",
     ]
 
 
@@ -82,11 +82,11 @@ def test_stale_week_text_alternates_reset_and_age(monkeypatch, settings):
         assert frame_text == [
             ("WEEK", 2, 2, S, 1),
             ("3 OF 3", 41, 2, S, 1),
-            ("CLAUDE", 2, 33, S, 1),
-            ("24%", 28, 33, S, 1),
-            (line_2, 2, 40, S, 1),
-            ("76", 7, 50, B, 1),
-            ("WK STREAK", 21, 52, S, 1),
+            ("76", 7, 28, B, 1),
+            ("WK STREAK", 21, 30, S, 1),
+            ("CLAUDE", 2, 47, S, 1),
+            ("24%", 28, 47, S, 1),
+            (line_2, 2, 54, S, 1),
         ], index
     assert [clip.poster.getpixel(xy) for xy in DOT_CENTRES] == [CORAL, GOLD, TEAL]
 
@@ -102,7 +102,7 @@ def test_today_screen_text_race_week(monkeypatch, settings):
         ("h", 47, 16, B, 1),
         ("SLEEP", 2, 32, S, 1),
         ("GOAL 7H", 36, 32, S, 1),
-        ("NO DOT YET", 13, 42, S, 1),
+        ("LOAD 62/100", 13, 42, S, 1),
         ("STEPS", 2, 51, S, 1),
         ("20634", 43, 51, S, 1),
         ("AS OF 01:30", 2, 58, S, 1),
@@ -124,6 +124,29 @@ def test_today_screen_text_when_health_is_delayed(monkeypatch, settings):
         ("NO DATA", 35, 51, S, 1),
         ("AS OF MON 18:00", 2, 58, S, 1),
     ]
+
+
+@pytest.mark.parametrize(
+    ("count", "workout_load", "bar", "label"),
+    [
+        (0, None, 100.0, "NO WORKOUT"),
+        (1, None, 100.0, "NO HR DATA"),
+        (1, 62.9, 100.0, "LOAD 62/100"),
+        (2, 99.99, 100.0, "LOAD 99/100"),
+        (1, 104.0, 120.0, "LOAD 104/120"),
+        (1, 62.0, None, "NO DOT YET"),
+        (None, None, 100.0, "NO DOT YET"),
+        (1, 1000.0, 1200.0, "NO DOT YET"),
+    ],
+)
+def test_a_false_dot_says_why(monkeypatch, settings, count, workout_load, bar, label):
+    view, _ = load(WEEK_41, settings)
+    drawn = record_text(monkeypatch)
+    render_today(
+        replace(view, today_dot=False, workout_count=count, workout_load=workout_load, load_bar=bar)
+    )
+    assert [item for item in drawn if item[2] == 42] == [(label, 13, 42, S, 1)]
+    assert 13 + text_width(label) - 1 <= 61
 
 
 @pytest.mark.parametrize(

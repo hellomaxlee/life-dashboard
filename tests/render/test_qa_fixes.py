@@ -140,8 +140,8 @@ def test_a_passed_reset_time_marks_the_reading_stale(settings):
     fresh_capture = replace(view.claude, captured_at_utc=to_utc_iso(later - timedelta(hours=1)))
     clip = render_week(replace(view, claude=fresh_capture), later)
     assert len(clip.frames) == 16
-    assert clip.frames[0].getpixel((60, 35)) == AMBER
-    assert AMBER in {clip.frames[0].getpixel((x, 42)) for x in range(2, 62)}
+    assert clip.frames[0].getpixel((60, 49)) == AMBER
+    assert AMBER in {clip.frames[0].getpixel((x, 56)) for x in range(2, 62)}
 
 
 def test_a_reading_with_no_capture_time_is_stale(settings):
@@ -153,7 +153,7 @@ def test_a_reading_with_no_capture_time_is_stale(settings):
     assert state.stale and state.age_label == "AGE UNKNOWN"
     clip = render_week(replace(view, claude=reading), now)
     assert len(clip.frames) == 16
-    assert clip.frames[0].getpixel((60, 35)) == AMBER
+    assert clip.frames[0].getpixel((60, 49)) == AMBER
 
 
 # 5b. the latest reading on or before the day
@@ -334,11 +334,11 @@ def test_usage_track_has_ticks_at_60_and_85(settings):
     view, now = load(WEEK_41, settings)
     for pct in (5.0, 41.2, 70.0, 100.0):
         frame = render_week(replace(view, claude=replace(view.claude, used_pct=pct)), now).poster
-        for y in (27, 31):
+        for y in (41, 45):
             lit = [x for x in range(64) if frame.getpixel((x, y)) != (0, 0, 0)]
             assert lit == [37, 52], (pct, y, lit)
     amber_starts = render_week(replace(view, claude=replace(view.claude, used_pct=61.0)), now)
-    assert amber_starts.poster.getpixel((37, 28)) == AMBER
+    assert amber_starts.poster.getpixel((37, 42)) == AMBER
 
 
 # the entry point the scheduler calls

@@ -5,6 +5,8 @@
   "as_of_utc": "2026-11-19T00:05:00Z",
   "daily_metrics": {
     "quality_workout": false,
+    "workout_count": 1,
+    "workout_load": null,
     "sleep_hours": 6.96,
     "steps": 10957,
     "books_ytd": 10,

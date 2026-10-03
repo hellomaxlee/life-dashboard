@@ -7,6 +7,8 @@
   "daily_metrics": {
     "books_ytd": 10,
     "quality_workout": false,
+    "workout_count": 1,
+    "workout_load": 62.4,
     "steps": 20634,
     "sleep_hours": 9.83,
     "summary_device_line": "Finished *Jazz* (10 of 12); 9.8 h of sleep. It's enough - rest is 57% of the work.",
@@ -16,6 +18,7 @@
   },
   "weekly_metrics": {
     "quality_workouts": 2,
-    "weeks_hit_streak": 0
+    "weeks_hit_streak": 0,
+    "load_bar": 100.0
   }
 }

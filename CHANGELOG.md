@@ -3,6 +3,13 @@
 Running log, newest first. The Lead reads this to find root causes and prioritize.
 Entry format: `## YYYY-MM-DD · <Title> (<Author>)` followed by terse bullets. Name the fixture combo on render/summary cycles.
 
+## 2026-10-03 · Display: a missing dot says why, streak under the dots, secondary text colour (Lucía Ferrer)
+- Three requests from Max on the live preview. Today: a day without a dot now says why from its own row instead of "NO DOT YET": "NO WORKOUT" (`workout_count` 0), "NO HR DATA" (a workout with no `workout_load`), or "LOAD 62/100" (`workout_load` floored against the week's `load_bar`, so it never reads as met); "NO DOT YET" remains only when the row carries none of those. This replaces Ingrid's 2026-10-02 wording ruling at Max's request; the label still states the dot, not the day. `DayView` gains `workout_count`, `workout_load`, `load_bar`.
+- Week: the streak is the workout streak, so it now sits directly under the dots (y 28) and the Claude usage bar and its two lines moved to the bottom (bar 42 to 44, lines at 47 and 54).
+- New palette colour `SECONDARY` (150, 140, 190) for "RESETS IN ..." and "AS OF ..." / "NO PUSH YET"; a stale reading's line stays amber.
+- Fixture combos rendered and read at 1x under gamma: race-week / all sources / broken last week / base (LOAD 62/100); rest / sleep missing / broken last week / base (NO WORKOUT); travel / workout without HR / broken last week / off (NO HR DATA); train / all sources / alive / base and rest / Health delayed / alive / peak (Week layout, colour, stale amber). Four fixture days gained the workout keys the engine writes.
+- Gate: ruff clean; 806 passed, 1 failed (the same wall-clock Goodreads test). Mutant: rounding the load instead of flooring turns `test_a_false_dot_says_why` red (3 failed). 14 week and today snapshots regenerated after the 1x review. Service restarted so `/preview` shows the change.
+
 ## 2026-10-03 · Real summarized sleep row parsed; live service restarted on current code (Bartek Zieliński)
 - Issue #3 status: Max's Health Metrics automation is now right (screenshots: JSON v2, Previous 7 Days, Summarize Data on, Time Grouping Day, every 6 h). The two pushes of 2026-10-03 are 10 to 11 KB with one row per day. No Workouts push has ever arrived; a second automation with Data Type Workouts is still needed on the phone.
 - Parser defect on the real summarized shape: an Apple Watch row has `asleep` 0 and `inBed` 0 with the night in `totalSleep`; `parse_sleep_row` took `asleep` first, so every night stored 0 h. It now takes `totalSleep` when positive, else `asleep`. New fixture `metrics_v2_sleep_watch_summary.json` and test; red before the fix (`assert 0 == 31320`), green after.

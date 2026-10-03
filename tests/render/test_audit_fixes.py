@@ -142,10 +142,10 @@ def test_usage_fill_is_floored_and_crosses_each_tick_with_its_colour(settings):
         (85.0, RED, RED, 52),
     ):
         frame = render_week(replace(view, claude=replace(view.claude, used_pct=pct)), now).poster
-        reached = frame.getpixel((tick_x, 28)) != TRACK
-        assert frame.getpixel((2, 28)) == before == after
+        reached = frame.getpixel((tick_x, 42)) != TRACK
+        assert frame.getpixel((2, 42)) == before == after
         assert reached == (pct in (60.0, 85.0)), pct
-        for y in (27, 31):
+        for y in (41, 45):
             assert [x for x in range(64) if frame.getpixel((x, y)) != (0, 0, 0)] == [37, 52]
 
 

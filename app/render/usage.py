@@ -33,16 +33,16 @@ from datetime import datetime
 
 from app.render.font import SMALL, draw_text
 from app.render.frame import Color, Frame
-from app.render.palette import AMBER, GREEN, LABEL, RED, TEXT, TRACK, dim
+from app.render.palette import AMBER, GREEN, LABEL, RED, SECONDARY, TEXT, TRACK, dim
 from app.render.view import ClaudeUsage, valid_percent
 from app.timeutil import from_utc_iso
 
 BAR_LEFT = 2
 BAR_WIDTH = 60
-BAR_TOP = 28
+BAR_TOP = 42
 BAR_HEIGHT = 3
-LINE_1_Y = 33
-LINE_2_Y = 40
+LINE_1_Y = 47
+LINE_2_Y = 54
 STALE_DOT_X = 59
 AMBER_FROM_PCT = 60.0
 RED_FROM_PCT = 85.0
@@ -178,4 +178,4 @@ def draw_usage(frame: Frame, state: UsageState, tick: int = 0) -> None:
         for dy in range(3):
             for dx in range(3):
                 pixels[STALE_DOT_X + dx, LINE_1_Y + 1 + dy] = dot
-    draw_text(frame, BAR_LEFT, LINE_2_Y, line_2, AMBER if state.stale else LABEL, SMALL)
+    draw_text(frame, BAR_LEFT, LINE_2_Y, line_2, AMBER if state.stale else SECONDARY, SMALL)

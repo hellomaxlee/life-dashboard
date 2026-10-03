@@ -47,7 +47,11 @@ celebrations always. No clip may exceed 59 frames, the most one device animation
 to hold; a test holds every fixture to it and the Pixoo adapter refuses a longer clip.
 
 What the screens say when data is thin. Today's dot label states the dot, not the day:
-"WORKOUT DONE", "NO DOT YET", or "DOT NO DATA". The as-of line shows the clock for a
+"WORKOUT DONE" or "DOT NO DATA", and a day without a dot says why from its own row: "NO
+WORKOUT" (`workout_count` 0), "NO HR DATA" (a workout with no `workout_load`), or "LOAD
+62/100" (`workout_load` floored against the week's `load_bar`); "NO DOT YET" only when the
+row carries none of those. The Week screen reads top to bottom: dots, the weeks-hit streak
+under them, the Claude usage bar at the bottom. The as-of line shows the clock for a
 same-day push, weekday and clock up to six days back, and whole days beyond that ("AS OF 8D
 AGO"); a push dated after the day or after "now" is ignored. A day that has numbers but no
 push before it ended (a later push back-filled it) gets no as-of line; "NO PUSH YET" appears
