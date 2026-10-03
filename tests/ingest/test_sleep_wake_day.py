@@ -16,6 +16,17 @@ def test_sleep_belongs_to_wake_day(client, db):
     assert s["source"] == "Apple Watch"
 
 
+def test_watch_summary_row_takes_total_sleep_when_asleep_is_zero(client, db):
+    """The real Summarize Data row from an Apple Watch: `asleep` (unspecified stage) and
+    `inBed` are 0, the night is in `totalSleep` and the stages."""
+    resp = post_fixture(client, "metrics_v2_sleep_watch_summary.json")
+    assert resp.status_code == 200, resp.text
+    s = db.execute("SELECT * FROM sleep_sessions").fetchone()
+    assert s["wake_day_local"] == "2026-10-01"
+    assert s["asleep_s"] == round(8.7 * 3600)
+    assert (s["core_s"], s["deep_s"], s["rem_s"]) == (18180, 5400, 7740)
+
+
 def test_dst_fall_back_and_late_nap(client, db):
     resp = post_fixture(client, "metrics_v2_sleep_dst.json")
     assert resp.status_code == 200, resp.text

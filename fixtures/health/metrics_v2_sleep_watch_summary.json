@@ -1,0 +1,27 @@
+{
+ "data": {
+  "metrics": [
+   {
+    "name": "sleep_analysis",
+    "units": "hr",
+    "data": [
+     {
+      "date": "2026-10-01 00:00:00 -0400",
+      "asleep": 0,
+      "totalSleep": 8.7,
+      "core": 5.05,
+      "deep": 1.5,
+      "rem": 2.15,
+      "awake": 0.6,
+      "sleepStart": "2026-09-30 22:45:00 -0400",
+      "sleepEnd": "2026-10-01 08:03:00 -0400",
+      "inBed": 0,
+      "inBedStart": "2026-09-30 22:45:00 -0400",
+      "inBedEnd": "2026-10-01 08:03:00 -0400",
+      "source": "Apple Watch"
+     }
+    ]
+   }
+  ]
+ }
+}

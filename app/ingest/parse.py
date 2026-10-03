@@ -283,9 +283,10 @@ def parse_sleep_row(row: dict[str, Any], tz: str) -> SleepSession | None:
         return None
     start = parse_hae_datetime(str(start_text), tz)
     end = parse_hae_datetime(str(end_text), tz)
-    asleep = row.get("asleep")
-    if asleep is None:
-        asleep = row.get("totalSleep")
+    # `asleep` is only the unspecified stage (0 from a Watch); the night is `totalSleep`.
+    asleep = row.get("totalSleep")
+    if not isinstance(asleep, int | float) or isinstance(asleep, bool) or asleep <= 0:
+        asleep = row.get("asleep")
     return SleepSession(
         wake_day_local=local_day(end, tz),
         start_utc=to_utc_iso(start),
