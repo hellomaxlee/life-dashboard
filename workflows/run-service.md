@@ -339,6 +339,20 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.maxlee.life-dashboar
 curl -s http://127.0.0.1:8080/healthz
 ```
 
+When a parser changed and live still holds what the old one stored (`--verify` in step 4
+prints differences that the code change explains), rebuild the live data tables from the
+archive before starting the service:
+
+```sh
+uv run python -m tools.replay --rebuild-live                    # every parsed payload, in arrival order
+uv run python -m tools.replay --rebuild-live --drop-ids 1,2,3   # ... leaving out test pushes for good
+uv run python -m tools.replay --verify                          # 0 difference(s)
+```
+
+It replaces the ingested tables in one transaction, keeps the summary lines, recomputes the
+metrics, and moves any dropped payload's file to `data/raw/_dropped/` (never deleted). The
+backup from step 1 is the way back.
+
 `tools.migrate` is safe to repeat. Besides the schema it re-clusters every
 stored workout copy into activities by the current rule (notes.txt § Dedupe:
 clustering owns activities) and rewrites each activity from its canonical copy;

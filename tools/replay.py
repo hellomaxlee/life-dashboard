@@ -6,6 +6,15 @@ python -m tools.replay --verify             replay into the scratch db and diff 
 python -m tools.replay --since YYYY-MM-DD   re-parse data/raw into data/replay/scratch.db
 python -m tools.replay --snapshot PATH      dump the live data tables to JSON
 python -m tools.replay --diff PATH          compare live tables to a snapshot; exit 1 on difference
+python -m tools.replay --rebuild-live [--drop-ids 1,2,3]
+                                            replace the LIVE data tables with a from-scratch
+                                            replay of the archive (stop the service and back up
+                                            first; see workflows/run-service.md section 16)
+
+--rebuild-live is for the day the parsers changed and live still holds what the old ones
+stored. --drop-ids names raw_archive ids to leave out for good (test pushes): their rows are
+removed and their files moved to data/raw/_dropped/, never deleted. The summary's keys are
+kept; the metrics engine's rows are recomputed under the clock.
 
 --snapshot and --diff compare live with live across a code change; they never look at the
 scratch db. --verify is the one that tests the parsers against what is stored.
@@ -281,6 +290,113 @@ def verify(settings: Settings, scratch_db: Path) -> tuple[list[str], list[str]]:
     return lines, notes
 
 
+def _copy_rows(
+    scratch: sqlite3.Connection, live: sqlite3.Connection, table: str, archive_ids: dict[int, int]
+) -> int:
+    rows = [dict(row) for row in scratch.execute(f'SELECT * FROM "{table}"')]
+    for row in rows:
+        if "raw_archive_id" in row and row["raw_archive_id"] is not None:
+            row["raw_archive_id"] = archive_ids.get(row["raw_archive_id"])
+        columns = ", ".join(f'"{name}"' for name in row)
+        marks = ", ".join("?" for _ in row)
+        live.execute(f'INSERT INTO "{table}" ({columns}) VALUES ({marks})', list(row.values()))
+    return len(rows)
+
+
+def _authored(live: sqlite3.Connection) -> dict[str, dict[str, object]]:
+    """Each day's summary keys: authored output a replay cannot reproduce."""
+    kept: dict[str, dict[str, object]] = {}
+    for row in live.execute("SELECT day_local, metrics_json FROM daily_metrics"):
+        try:
+            loaded = json.loads(row["metrics_json"])
+        except (TypeError, ValueError):
+            continue
+        if isinstance(loaded, dict):
+            keys = {k: v for k, v in loaded.items() if k in SUMMARY_KEYS}
+            if keys:
+                kept[row["day_local"]] = keys
+    return kept
+
+
+def _restore_authored(live: sqlite3.Connection, authored: dict[str, dict[str, object]]) -> None:
+    for day, keys in authored.items():
+        row = live.execute(
+            "SELECT metrics_json FROM daily_metrics WHERE day_local = ?", (day,)
+        ).fetchone()
+        metrics = json.loads(row["metrics_json"]) if row is not None else {}
+        metrics.update(keys)
+        live.execute(
+            "INSERT INTO daily_metrics (day_local, metrics_json) VALUES (?, ?) "
+            "ON CONFLICT (day_local) DO UPDATE SET metrics_json = excluded.metrics_json",
+            (day, json.dumps(metrics, sort_keys=True)),
+        )
+
+
+def rebuild_live(
+    settings: Settings, scratch_db: Path, drop_ids: tuple[int, ...] = ()
+) -> tuple[dict[str, int], list[str]]:
+    """Replace live's data tables with a from-scratch replay of its own archive.
+
+    Returns (rows written per table, files moved to data/raw/_dropped). ValueError, with
+    live untouched, when a drop id is unknown or a parsed payload cannot be replayed.
+    """
+    raw_dir = settings.storage.raw_dir
+    live = connect_live(settings.storage.db_path)
+    try:
+        plan = replay_plan(raw_dir, live)
+        if plan.refused():
+            raise ValueError("; ".join(plan.refused()))
+        dropped: dict[str, Path] = {}
+        for raw_id in drop_ids:
+            row = live.execute(
+                "SELECT source, path FROM raw_archive WHERE id = ?", (raw_id,)
+            ).fetchone()
+            if row is None:
+                raise ValueError(f"no raw_archive row with id {raw_id}")
+            dropped[f"{row['source']}/{Path(row['path']).name}"] = (
+                raw_dir / row["source"] / Path(row["path"]).name
+            )
+        gone = set(dropped.values())
+        plan.entries = [entry for entry in plan.entries if entry[1] not in gone]
+        scratch = replay(raw_dir, scratch_db, settings, plan=plan)
+        try:
+            by_sha = {row["sha256"]: row["id"] for row in live.execute("SELECT * FROM raw_archive")}
+            archive_ids = {
+                row["id"]: by_sha[row["sha256"]]
+                for row in scratch.execute("SELECT id, sha256 FROM raw_archive")
+            }
+            authored = _authored(live)
+            written: dict[str, int] = {}
+            live.execute("BEGIN IMMEDIATE")
+            try:
+                for table in reversed(DATA_TABLES + DERIVED_TABLES):
+                    live.execute(f'DELETE FROM "{table}"')
+                live.execute("DELETE FROM metrics_state")
+                for raw_id in drop_ids:
+                    live.execute("DELETE FROM ingest_log WHERE raw_archive_id = ?", (raw_id,))
+                    live.execute("DELETE FROM raw_archive WHERE id = ?", (raw_id,))
+                for table in DATA_TABLES:
+                    written[table] = _copy_rows(scratch, live, table, archive_ids)
+                _restore_authored(live, authored)
+                live.execute("COMMIT")
+            except BaseException:
+                live.execute("ROLLBACK")
+                raise
+        finally:
+            scratch.close()
+        moved = []
+        for rel, path in dropped.items():
+            target = raw_dir / "_dropped" / rel
+            target.parent.mkdir(parents=True, exist_ok=True)
+            if path.is_file():
+                path.rename(target)
+                moved.append(rel)
+        recompute(live, settings)
+        return written, moved
+    finally:
+        live.close()
+
+
 def metrics_clock(live: sqlite3.Connection) -> tuple[tuple[str, str] | None, str | None]:
     """The (today, now) to recompute the replay under, or why the derived rows cannot be
     compared: the engine never ran, or live holds a payload newer than its last run."""
@@ -314,6 +430,8 @@ def main(argv: list[str] | None = None) -> int:
     group.add_argument("--since", metavar="YYYY-MM-DD")
     group.add_argument("--snapshot", metavar="PATH")
     group.add_argument("--diff", metavar="PATH")
+    group.add_argument("--rebuild-live", action="store_true")
+    parser.add_argument("--drop-ids", default="", help="with --rebuild-live: 1,2,3")
     parser.add_argument("--scratch", default=str(SCRATCH_DB))
     args = parser.parse_args(argv)
     settings = load_settings()
@@ -338,6 +456,23 @@ def _run(args: argparse.Namespace, settings: Settings) -> int:
             print(f"note: {note}")
         print(f"{len(lines)} difference(s)")
         return 1 if lines else 0
+
+    if args.rebuild_live:
+        if not live_exists:
+            print(f"no live database at {settings.storage.db_path}", file=sys.stderr)
+            return 2
+        try:
+            drop = tuple(int(part) for part in args.drop_ids.split(",") if part.strip())
+            written, moved = rebuild_live(settings, Path(args.scratch), drop)
+        except ValueError as exc:
+            print(f"refusing: {exc}", file=sys.stderr)
+            return 2
+        for table, count in written.items():
+            print(f"{table:24s} {count}")
+        for rel in moved:
+            print(f"dropped: {rel} moved to data/raw/_dropped/")
+        print("rebuilt live from the archive; now run: uv run python -m tools.replay --verify")
+        return 0
 
     if args.since:
         recorded = connect_live(settings.storage.db_path) if live_exists else None

@@ -4,7 +4,8 @@ Reads only; computes nothing and carries nothing forward.
 
 The contract with the metrics engine (Phase 2) and the summary (Phase 3). The view looks up
 exactly two rows: `daily_metrics` for the requested home-timezone day and `weekly_metrics`
-for the Monday that starts its week. It never falls back to yesterday's row or last week's.
+for the Monday that starts its week. It never falls back to yesterday's row or last week's,
+with one stated exception: the Today screen's day facts (see `view_from_db`).
 So the engine must write the new day's row at rollover (00:00 local) with the values that
 carry over (`books_ytd`, and the summary once there is one), and the new week's row on Monday
 00:00 local (`quality_workouts` = 0, `weeks_hit_streak` as it stands). Until those rows
@@ -25,12 +26,20 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from dataclasses import replace
 from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from app.config import Settings
 from app.ingest.health import SOURCE as HEALTH_SOURCE
-from app.render.view import ClaudeUsage, DayView, claude_from_metrics, view_from_metrics, week_start
+from app.render.view import (
+    ClaudeUsage,
+    DayView,
+    claude_from_metrics,
+    has_health_data,
+    view_from_metrics,
+    week_start,
+)
 from app.timeutil import to_utc_iso
 
 CLAUDE_LOOKBACK_DAYS = 30
@@ -83,8 +92,37 @@ def _last_push(conn: sqlite3.Connection, day_local: str, home_tz: str) -> str | 
 
 
 def view_from_db(conn: sqlite3.Connection, settings: Settings, day_local: str) -> DayView:
-    """Build the view from what is stored for a home-timezone day. ValueError if not a date."""
+    """Build the view from what is stored for a home-timezone day. ValueError if not a date.
+
+    Health pushes cover whole days ending yesterday, so the requested day usually has no
+    sleep, steps or workout yet. The Today screen's day facts then come from the day before,
+    when that day has them, and `day_shown` names it so the screen is headed YESTERDAY.
+    Nothing else falls back: week, streak, books, summary and Claude stay the requested day's.
+    """
     day_local = date.fromisoformat(day_local).isoformat()
+    view = _view_for(conn, settings, day_local)
+    if has_health_data(view):
+        return view
+    try:
+        before = (date.fromisoformat(day_local) - timedelta(days=1)).isoformat()
+    except OverflowError:
+        return view
+    prior = _view_for(conn, settings, before)
+    if not has_health_data(prior):
+        return view
+    return replace(
+        view,
+        day_shown=before,
+        sleep_hours=prior.sleep_hours,
+        steps=prior.steps,
+        today_dot=prior.today_dot,
+        workout_count=prior.workout_count,
+        workout_load=prior.workout_load,
+        load_bar=prior.load_bar,
+    )
+
+
+def _view_for(conn: sqlite3.Connection, settings: Settings, day_local: str) -> DayView:
     daily = _metrics_row(conn, "daily_metrics", "day_local", day_local)
     weekly = _metrics_row(conn, "weekly_metrics", "week_start_local", week_start(day_local))
     sleep = conn.execute(

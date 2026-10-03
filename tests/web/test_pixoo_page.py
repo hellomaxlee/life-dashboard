@@ -131,7 +131,7 @@ def test_date_and_fixture_selection(client, settings):
     today = local_day(datetime.now(UTC), settings.home_tz)
     default = client.get("/pixoo/rotation.json").json()
     assert default["source"] == {"date": today} and default["day_local"] == today
-    page = client.get("/pixoo")
+    page = client.get("/pixoo?placeholder=0")
     assert page.status_code == 200 and f"value='{today}'" in page.text
     assert "Device: " + today in page.text
     by_date = client.get("/pixoo/rotation.json?date=2026-10-02").json()

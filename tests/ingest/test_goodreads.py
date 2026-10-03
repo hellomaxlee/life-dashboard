@@ -416,7 +416,9 @@ def test_overdue_poll_is_caught_up_soon_after_start(db, jobs_settings, monkeypat
     settled = jobs.build_scheduler(with_url, open_conn, now)
     settled.start(paused=True)
     next_run = settled.get_job(jobs.GOODREADS_JOB).next_run_time
-    assert next_run == datetime(2026, 10, 3, 6, 30, tzinfo=NY)
+    local_next = next_run.astimezone(NY)
+    assert (local_next.hour, local_next.minute) == (6, 30)
+    assert timedelta(0) < next_run - datetime.now(UTC) <= timedelta(days=1)
     settled.shutdown(wait=False)
 
     monkeypatch.setattr(health, "now_utc", lambda: now - timedelta(hours=1))

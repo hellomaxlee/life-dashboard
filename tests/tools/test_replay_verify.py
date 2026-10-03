@@ -139,3 +139,51 @@ def test_rebuild_with_no_db_uses_filename_order_and_says_so(client, db, settings
     assert code == 0
     assert "filename order" in captured.err and "approximate" in captured.err
     assert not settings.storage.db_path.exists()
+
+
+def test_rebuild_live_replaces_drifted_rows_and_keeps_the_summary(
+    client, db, settings, tmp_path, capsys
+):
+    post_fixture(client, "workouts_v2_overlap.json")
+    post_fixture(client, "metrics_v2_days.json")
+    db.execute("UPDATE steps_daily SET steps = 1")
+    db.execute(
+        "INSERT INTO daily_metrics (day_local, metrics_json) VALUES ('2026-09-23', ?)",
+        ('{"summary_device_line": "kept", "summary_source": "model", "summary_web_line": null}',),
+    )
+    code, out, _ = verify_cli(tmp_path, capsys)
+    assert code == 1 and "steps_daily" in out
+
+    assert replay.main(["--rebuild-live", "--scratch", str(tmp_path / "rebuild.db")]) == 0
+    capsys.readouterr()
+
+    assert steps(db)["2026-09-23"] == 6712
+    code, out, _ = verify_cli(tmp_path, capsys)
+    assert code == 0 and "0 difference(s)" in out
+    row = db.execute("SELECT metrics_json FROM daily_metrics WHERE day_local = '2026-09-23'")
+    assert '"summary_device_line": "kept"' in row.fetchone()["metrics_json"]
+    sources = db.execute("SELECT raw_archive_id FROM activity_sources").fetchall()
+    assert sources and {r["raw_archive_id"] for r in sources} == {1}
+
+
+def test_rebuild_live_drops_a_named_push_and_keeps_its_file(client, db, settings, tmp_path, capsys):
+    post_fixture(client, "workouts_v2_overlap.json")
+    post_fixture(client, "metrics_v2_days.json")
+    assert db.execute("SELECT COUNT(*) FROM activities").fetchone()[0] == 1
+    name = db.execute("SELECT path FROM raw_archive WHERE id = 1").fetchone()["path"]
+    name = name.rsplit("/", 1)[-1]
+
+    scratch = str(tmp_path / "rebuild.db")
+    assert replay.main(["--rebuild-live", "--drop-ids", "9", "--scratch", scratch]) == 2
+    assert db.execute("SELECT COUNT(*) FROM activities").fetchone()[0] == 1
+    assert replay.main(["--rebuild-live", "--drop-ids", "1", "--scratch", scratch]) == 0
+    capsys.readouterr()
+
+    assert db.execute("SELECT COUNT(*) FROM activities").fetchone()[0] == 0
+    assert [r["id"] for r in db.execute("SELECT id FROM raw_archive")] == [2]
+    raw_dir = settings.storage.raw_dir
+    assert not (raw_dir / "health" / name).exists()
+    assert (raw_dir / "_dropped" / "health" / name).is_file()
+    assert steps(db)["2026-09-23"] == 6712
+    code, out, _ = verify_cli(tmp_path, capsys)
+    assert code == 0 and "0 difference(s)" in out and "unrecorded" not in out

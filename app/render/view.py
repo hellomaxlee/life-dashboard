@@ -82,6 +82,7 @@ class DayView:
     workout_count: int | None = None
     workout_load: float | None = None
     load_bar: float | None = None
+    day_shown: str | None = None
     sleep_hours: float | None = None
     sleep_target_hours: float = 7.0
     steps: int | None = None
@@ -105,6 +106,17 @@ def valid_percent(value: float | None) -> bool:
 
 def valid_sleep_hours(value: float | None) -> bool:
     return value is not None and math.isfinite(value) and 0.0 <= value <= MAX_SLEEP_HOURS
+
+
+def has_health_data(view: DayView) -> bool:
+    """A push has covered this day: it has sleep, steps or a workout. A row with only
+    `workout_count` 0 says nothing; the engine writes that before any push arrives."""
+    return (
+        valid_sleep_hours(view.sleep_hours)
+        or valid_count(view.steps)
+        or view.today_dot is True
+        or bool(view.workout_count)
+    )
 
 
 def valid_count(value: int | None) -> bool:

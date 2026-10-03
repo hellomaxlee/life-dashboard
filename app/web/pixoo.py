@@ -35,7 +35,14 @@ from app.render.rotation import ROTATION_ORDER, render_screen
 from app.render.view import DayView
 from app.timeutil import to_utc_iso, utc_iso_to_local_display
 from app.web.nav import NAV_STYLE, nav_html
-from app.web.preview import _resolve, fixture_paths
+from app.web.preview import (
+    PLACEHOLDER,
+    PLACEHOLDER_BANNER,
+    PLACEHOLDER_STYLE,
+    _resolve,
+    fixture_paths,
+    resolve_page,
+)
 
 router = APIRouter()
 
@@ -155,8 +162,12 @@ def pixoo_page(
     request: Request,
     day: str | None = Query(default=None, alias="date"),
     fixture: str | None = None,
+    placeholder: bool = True,
 ) -> HTMLResponse:
-    view, now = _resolve(request, day, fixture)
+    view, now, fixture, is_placeholder = resolve_page(request, day, fixture, placeholder)
+    banner = (
+        PLACEHOLDER_BANNER.format(stem=escape(PLACEHOLDER), path="/pixoo") if is_placeholder else ""
+    )
     settings = request.app.state.settings
     config = {
         "source": _source(view, fixture),
@@ -179,9 +190,11 @@ def pixoo_page(
     return HTMLResponse(
         "<!doctype html><html lang='en'><head><meta charset='utf-8'>"
         "<meta name='viewport' content='width=device-width,initial-scale=1'>"
-        f"<title>life-dashboard device</title><style>{_STYLE}{NAV_STYLE}</style></head><body>"
+        f"<title>life-dashboard device</title><style>{_STYLE}{NAV_STYLE}{PLACEHOLDER_STYLE}"
+        "</style></head><body>"
         + nav_html("/pixoo")
         + f"<h1>Device: {escape(title)}</h1>"
+        + banner
         + _CONTROLS.replace("{options}", options).replace("{day}", escape(view.day_local))
         + _DEVICE
         + _STRIP

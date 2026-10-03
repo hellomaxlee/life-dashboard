@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import io
+from datetime import UTC, datetime
 
 from PIL import Image, ImageChops
 
 from app.render.gamma import led_gamma
+from app.timeutil import local_day
+from app.web.preview import PLACEHOLDER
 from tests.render import STALE, WEEK_41, load, rotation
 from tools.render import main as render_main
 
@@ -89,3 +92,26 @@ def test_render_tool_by_date_reads_the_database(tmp_path, settings):
     assert render_main(["--date", "2026-10-02", "--out", str(out), "--scale", "4"]) == 0
     assert Image.open(out / "week" / "frame_4x.png").size == (256, 256)
     assert Image.open(out / "week" / "frame_gamma_1x.png").getbbox() is not None
+
+
+def test_an_empty_database_shows_the_labelled_placeholder_until_data_lands(client, db, settings):
+    today = local_day(datetime.now(UTC), settings.home_tz)
+    for path in ("/preview", "/pixoo"):
+        page = client.get(path)
+        assert page.status_code == 200
+        assert "Placeholder data." in page.text and PLACEHOLDER in page.text
+        assert f"{path}?placeholder=0" in page.text
+        plain = client.get(f"{path}?placeholder=0")
+        assert "Placeholder data." not in plain.text and today in plain.text
+        assert "Placeholder data." not in client.get(f"{path}?date={today}").text
+    assert f"/preview/image/week?fixture={PLACEHOLDER}" in client.get("/preview").text
+
+    db.execute(
+        "INSERT INTO daily_metrics (day_local, metrics_json) VALUES (?, ?)",
+        (today, '{"steps": 4200, "quality_workout": false, "workout_count": 0}'),
+    )
+    for path in ("/preview", "/pixoo"):
+        page = client.get(path)
+        assert "Placeholder data." not in page.text and today in page.text
+    # the frames a device would get never carry placeholder numbers
+    assert client.get("/pixoo/rotation.json").json()["source"] == {"date": today}

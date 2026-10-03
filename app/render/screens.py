@@ -43,7 +43,7 @@ from app.render.palette import (
     dim,
 )
 from app.render.usage import STALE_FRAME_MS, STALE_FRAMES, draw_usage, usage_state
-from app.render.view import DayView, valid_count, valid_sleep_hours
+from app.render.view import DayView, has_health_data, valid_count, valid_sleep_hours
 from app.timeutil import from_utc_iso
 
 LEFT = 2
@@ -243,12 +243,12 @@ def as_of_label(view: DayView, now: datetime | None = None) -> str | None:
 
 
 def no_dot_label(view: DayView) -> str:
-    """Why the day has no dot, from the day's own row: no workout, a workout with no usable
-    heart rate, or its load against the week's bar (floored, so it never reads as met).
-    "NO DOT YET" when the row does not say."""
-    if view.workout_count == 0:
+    """Why the day has no dot, from the day's own row: no workout on a day a push has
+    covered, a workout with no usable heart rate, or its load against the week's bar
+    (floored, so it never reads as met). "NO DOT YET" when the row does not say."""
+    if view.workout_count == 0 and has_health_data(view):
         return "NO WORKOUT"
-    if view.workout_count is None:
+    if not view.workout_count:
         return "NO DOT YET"
     if view.workout_load is None:
         return "NO HR DATA"
@@ -262,8 +262,9 @@ def no_dot_label(view: DayView) -> str:
 def render_today(view: DayView, now: datetime | None = None) -> Clip:
     """Last night's sleep against the target, today's dot, steps, and when the data is from."""
     frame = new_frame()
-    day = date.fromisoformat(view.day_local)
-    draw_text(frame, LEFT, 2, "TODAY", LABEL, SMALL)
+    day = date.fromisoformat(view.day_shown or view.day_local)
+    title = "TODAY" if view.day_shown in (None, view.day_local) else "YESTERDAY"
+    draw_text(frame, LEFT, 2, title, LABEL, SMALL)
     draw_text_right(frame, RIGHT, 2, f"{_WEEKDAYS[day.weekday()]} {day.day}", TEXT, SMALL)
 
     draw_bitmap(frame, LEFT, 11, MOON, VIOLET)

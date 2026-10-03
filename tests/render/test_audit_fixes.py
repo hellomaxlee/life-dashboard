@@ -366,5 +366,45 @@ def test_view_reads_only_the_exact_day_and_week_rows(db, settings):
         4,
     )
     monday = view_from_db(db, settings, "2026-10-05")
-    assert (monday.books_ytd, monday.summary_line, monday.today_dot) == (None, None, None)
+    assert (monday.books_ytd, monday.summary_line) == (None, None)
     assert (monday.week_dots, monday.streak_weeks) == (None, None)
+    # the one stated exception: Monday has no health data yet, so the Today screen shows
+    # Sunday's day facts and says whose they are
+    assert (monday.day_shown, monday.today_dot) == ("2026-10-04", True)
+    assert sunday.day_shown is None
+
+
+def test_today_screen_is_headed_yesterday_only_when_it_shows_the_day_before(
+    db, settings, monkeypatch
+):
+    db.execute(
+        "INSERT INTO daily_metrics VALUES ('2026-10-04', ?)",
+        (
+            json.dumps(
+                {"sleep_hours": 7.6, "steps": 9100, "quality_workout": False, "workout_count": 0}
+            ),
+        ),
+    )
+    db.execute(
+        "INSERT INTO daily_metrics VALUES ('2026-10-05', ?)",
+        (json.dumps({"quality_workout": False, "workout_count": 0}),),
+    )
+    monday = view_from_db(db, settings, "2026-10-05")
+    assert (monday.day_shown, monday.sleep_hours, monday.steps) == ("2026-10-04", 7.6, 9100)
+    drawn = record_text(monkeypatch)
+    render_today(monday)
+    assert [item[0] for item in drawn if item[2] == 2] == ["YESTERDAY", "SUN 4"]
+    assert ("NO WORKOUT", 13, 42, "small-3x5", 1) in drawn
+
+    tuesday = view_from_db(db, settings, "2026-10-06")
+    assert (tuesday.day_shown, tuesday.sleep_hours) == (None, None)
+    drawn.clear()
+    render_today(tuesday)
+    assert [item[0] for item in drawn if item[2] == 2] == ["TODAY", "TUE 6"]
+    assert "NO WORKOUT" not in texts(drawn)
+
+    sunday = view_from_db(db, settings, "2026-10-04")
+    assert sunday.day_shown is None
+    drawn.clear()
+    render_today(sunday)
+    assert [item[0] for item in drawn if item[2] == 2] == ["TODAY", "SUN 4"]

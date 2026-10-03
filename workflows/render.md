@@ -50,8 +50,19 @@ What the screens say when data is thin. Today's dot label states the dot, not th
 "WORKOUT DONE" or "DOT NO DATA", and a day without a dot says why from its own row: "NO
 WORKOUT" (`workout_count` 0), "NO HR DATA" (a workout with no `workout_load`), or "LOAD
 62/100" (`workout_load` floored against the week's `load_bar`); "NO DOT YET" only when the
-row carries none of those. The Week screen reads top to bottom: dots, the weeks-hit streak
-under them, the Claude usage bar at the bottom. The as-of line shows the clock for a
+row carries none of those. "NO WORKOUT" needs a day a push has covered (it has sleep or steps); the row the
+engine writes before any push says nothing. The Week screen reads top to bottom: dots, the
+weeks-hit streak under them, the Claude usage bar at the bottom.
+
+Health pushes cover whole days ending yesterday, so today has no sleep, steps or workout
+until tomorrow. When the requested day has none and the day before does, the Today screen
+shows the day before and is headed "YESTERDAY FRI 2" instead of "TODAY SAT 3". Week, streak,
+books, summary and Claude never fall back.
+
+`/preview` and `/pixoo` with no `date` or `fixture` show a placeholder fixture under an amber
+"Placeholder data" banner when the database has no Health data for today or yesterday, and the
+database as soon as it does; `?placeholder=0` always shows the database. The frames a device
+is sent (`/pixoo/rotation.json`, the rotation job) never use the placeholder. The as-of line shows the clock for a
 same-day push, weekday and clock up to six days back, and whole days beyond that ("AS OF 8D
 AGO"); a push dated after the day or after "now" is ignored. A day that has numbers but no
 push before it ended (a later push back-filled it) gets no as-of line; "NO PUSH YET" appears
