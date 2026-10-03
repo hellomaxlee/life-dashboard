@@ -1,0 +1,93 @@
+{
+  "name": "a Sunday-night workout that arrives with Monday's push still counts for its week",
+  "cell": "train / Health delayed / alive / base",
+  "comment": [
+    "Lifts 2026-09-14..09-27 Mon/Wed/Fri 40 min at 140 = 120: weeks 09-14 and 09-21 hit, streak 2.",
+    "Week 09-28 holds two lifts (09-28, 09-30, 120 each) in the base inputs. The Sunday run is added in stage 3.",
+    "A week closes after the first health push following Monday 00:00 local, or after week_close_grace_hours (12) with no push.",
+    "Stage 1, Mon 10-05 00:30 EDT (04:30Z): the last push was Sunday 22:00Z, none since Monday 00:00 (04:00Z), grace not passed -> week 09-28 still open: week_hit null, streak 2.",
+    "Stage 2, Mon 13:00 EDT (17:00Z): no push since 04:00Z and 04:00Z + 12 h = 16:00Z has passed -> the week closes on what is stored: 2 < 3, week_hit false, streak 0.",
+    "Stage 3: the 18:00Z push carries R-2026-10-04, Sunday 21:30-22:10 EDT (start day Sunday -> week 09-28; end 02:10Z Monday). 20 @140 (60) + 20 @155 (80) = 140 >= 100 -> third dot: quality_workouts 3, week_hit true, streak 3, week_complete_at = its end 2026-10-05T02:10:00Z. The recompute re-opened and re-scored the closed week from stored data."
+  ],
+  "today_local": "2026-10-05",
+  "now_utc": "2026-10-05T04:30:00Z",
+  "inputs": {
+    "activities": [
+      {
+        "repeat_weekly": {
+          "id_prefix": "L-",
+          "from": "2026-09-14",
+          "to": "2026-09-27",
+          "weekdays": [0, 2, 4],
+          "time": "18:00",
+          "type": "lift",
+          "minutes": 40,
+          "hr": [[40, 140]]
+        }
+      },
+      {
+        "id": "L-2026-09-28",
+        "type": "lift",
+        "start_local": "2026-09-28 18:00",
+        "minutes": 40,
+        "hr": [[40, 140]]
+      },
+      {
+        "id": "L-2026-09-30",
+        "type": "lift",
+        "start_local": "2026-09-30 18:00",
+        "minutes": 40,
+        "hr": [[40, 140]]
+      }
+    ],
+    "health_pushes_utc": ["2026-10-04T22:00:00Z"]
+  },
+  "stages": [
+    {
+      "today_local": "2026-10-05",
+      "now_utc": "2026-10-05T04:30:00Z",
+      "expected": {
+        "weekly": {
+          "2026-09-28": {"quality_workouts": 2, "week_hit": null, "weeks_hit_streak": 2, "week_complete_at": null},
+          "2026-10-05": {"quality_workouts": 0, "week_hit": null, "weeks_hit_streak": 2}
+        }
+      }
+    },
+    {
+      "today_local": "2026-10-05",
+      "now_utc": "2026-10-05T17:00:00Z",
+      "expected": {
+        "weekly": {
+          "2026-09-28": {"quality_workouts": 2, "week_hit": false, "weeks_hit_streak": 0},
+          "2026-10-05": {"quality_workouts": 0, "week_hit": null, "weeks_hit_streak": 0}
+        }
+      }
+    },
+    {
+      "today_local": "2026-10-05",
+      "now_utc": "2026-10-05T18:05:00Z",
+      "add": {
+        "activities": [
+          {
+            "id": "R-2026-10-04",
+            "type": "run",
+            "start_local": "2026-10-04 21:30",
+            "minutes": 40,
+            "distance_mi": 3.0,
+            "hr": [[20, 140], [20, 155]]
+          }
+        ],
+        "health_pushes_utc": ["2026-10-05T18:00:00Z"]
+      },
+      "expected": {
+        "daily": {
+          "2026-10-04": {"quality_workout": true, "workout_load": 140.0, "workout_ids": ["R-2026-10-04"]}
+        },
+        "weekly": {
+          "2026-09-28": {"quality_workouts": 3, "week_hit": true, "weeks_hit_streak": 3, "week_complete_at": "2026-10-05T02:10:00Z"},
+          "2026-10-05": {"quality_workouts": 0, "week_hit": null, "weeks_hit_streak": 3}
+        }
+      }
+    }
+  ]
+}

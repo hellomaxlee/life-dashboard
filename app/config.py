@@ -79,6 +79,12 @@ class IngestConfig:
 class SummaryConfig:
     model: str
     monthly_cap_usd: float
+    time: str = "06:50"
+    price_input_per_mtok: float = 4.0
+    price_output_per_mtok: float = 20.0
+    price_cache_read_per_mtok: float = 0.20
+    price_cache_write_per_mtok: float = 5.0
+    similarity_threshold: float = 0.5
 
 
 @dataclass(frozen=True)
@@ -102,6 +108,15 @@ class DeviceConfig:
 
 
 @dataclass(frozen=True)
+class MetricsConfig:
+    recompute_minutes: int = 15
+    rollover_time: str = "00:05"
+    week_close_grace_hours: float = 12.0
+    max_sample_gap_s: int = 300
+    wellness_priority: tuple[str, ...] = ("hrv_ms", "resting_hr", "daylight_min")
+
+
+@dataclass(frozen=True)
 class Settings:
     home_tz: str
     hr_max: int
@@ -122,6 +137,8 @@ class Settings:
     scheduler: SchedulerConfig
     backup: BackupConfig
     device: DeviceConfig = DeviceConfig()
+    anthropic_api_key: str = ""
+    metrics: MetricsConfig = MetricsConfig()
 
 
 def _resolve(path_str: str) -> Path:
@@ -190,12 +207,66 @@ def _folder(key: str, value: object) -> Path:
     return _resolve(value)
 
 
+def _summary_config(raw: dict) -> SummaryConfig:
+    def price(name: str, default: float) -> float:
+        return _number(f"summary.{name}", raw.get(name, default), 0)
+
+    return SummaryConfig(
+        model=str(raw["model"]),
+        monthly_cap_usd=_number("summary.monthly_cap_usd", raw["monthly_cap_usd"], 0),
+        time=_clock("summary.time", raw.get("time", "06:50")),
+        price_input_per_mtok=price("price_input_per_mtok", 4.0),
+        price_output_per_mtok=price("price_output_per_mtok", 20.0),
+        price_cache_read_per_mtok=price("price_cache_read_per_mtok", 0.20),
+        price_cache_write_per_mtok=price("price_cache_write_per_mtok", 5.0),
+        similarity_threshold=_number(
+            "summary.similarity_threshold", raw.get("similarity_threshold", 0.5), 0, 1
+        ),
+    )
+
+
+WELLNESS_FACT_METRICS = ("hrv_ms", "resting_hr", "daylight_min")
+
+
+def _priority(key: str, value: object) -> tuple[str, ...]:
+    names = tuple(value) if isinstance(value, list) else None
+    ok = names is not None and all(isinstance(n, str) for n in names)
+    if not ok or len(set(names)) != len(names) or not set(names) <= set(WELLNESS_FACT_METRICS):
+        raise _fail(key, value, f"a list of distinct names from {list(WELLNESS_FACT_METRICS)}")
+    return names
+
+
+def _metrics(raw: dict) -> MetricsConfig:
+    section = raw.get("metrics", {})
+    defaults = MetricsConfig()
+    return MetricsConfig(
+        recompute_minutes=_whole(
+            "metrics.recompute_minutes", section.get("recompute_minutes", 15), 1
+        ),
+        rollover_time=_clock(
+            "metrics.rollover_time", section.get("rollover_time", defaults.rollover_time)
+        ),
+        week_close_grace_hours=_number(
+            "metrics.week_close_grace_hours",
+            section.get("week_close_grace_hours", defaults.week_close_grace_hours),
+            0,
+        ),
+        max_sample_gap_s=_whole(
+            "metrics.max_sample_gap_s", section.get("max_sample_gap_s", 300), 1
+        ),
+        wellness_priority=_priority(
+            "metrics.wellness_priority",
+            section.get("wellness_priority", list(defaults.wellness_priority)),
+        ),
+    )
+
+
 def load_settings(config_path: Path | None = None) -> Settings:
     """Load config.toml into a frozen Settings.
 
     Environment overrides: LIFE_CONFIG_PATH (file), LIFE_DB_PATH, LIFE_RAW_DIR (storage),
     LIFE_BACKUP_DIR, LIFE_SCHEDULER_ENABLED (1/true/yes or 0/false/no),
-    HEALTH_EXPORT_TOKEN and GOODREADS_RSS_URL (secrets, from .env or the environment).
+    HEALTH_EXPORT_TOKEN, GOODREADS_RSS_URL, ANTHROPIC_API_KEY (secrets, from .env or the env).
     """
     load_dotenv(REPO_ROOT / ".env")
     path = config_path or Path(os.environ.get("LIFE_CONFIG_PATH", DEFAULT_CONFIG_PATH))
@@ -256,10 +327,7 @@ def load_settings(config_path: Path | None = None) -> Settings:
                 ),
             ),
         ),
-        summary=SummaryConfig(
-            model=str(raw["summary"]["model"]),
-            monthly_cap_usd=float(raw["summary"]["monthly_cap_usd"]),
-        ),
+        summary=_summary_config(raw["summary"]),
         health_export_token=os.environ.get("HEALTH_EXPORT_TOKEN", "").strip(),
         goodreads_rss_url=os.environ.get("GOODREADS_RSS_URL", "").strip(),
         scheduler=SchedulerConfig(
@@ -282,4 +350,6 @@ def load_settings(config_path: Path | None = None) -> Settings:
             pixoo_host=str(raw.get("device", {}).get("pixoo_host", "")).strip(),
             screen_seconds=int(raw.get("device", {}).get("screen_seconds", 20)),
         ),
+        anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY", "").strip(),
+        metrics=_metrics(raw),
     )

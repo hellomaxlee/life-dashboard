@@ -82,6 +82,41 @@ Until then `tests/render/test_snapshots.py` fails for that fixture by design; no
    must fail. The golden case: 41.2 % fills `floor(0.412 * 60) = 24` px of the 60 px track.
 5. With the API running, open `http://127.0.0.1:8080/preview?fixture=<combo>` or
    `/preview?date=YYYY-MM-DD`; it shows every screen as LED gamma 1x, LED gamma 8x, raw 1x, raw 8x.
+6. For the desk view, open `/pixoo?fixture=<combo>` (next section) and watch one full rotation.
+
+## The device page
+
+`GET /pixoo` is the display as a Pixoo-64 on a desk: a dark bezel, a 64x64 matrix drawn as
+round LEDs with black gaps and a soft glow, and the rotation running live the way the device
+job runs it (Week → Today → Books, each held for `device.screen_seconds` or the clip's own
+length if longer, the clip looping while held). `/preview` stays the engineering view; the
+three pages link each other on their first line.
+
+Rendering never moves into the browser. The page fetches `/pixoo/rotation.json` (screens in
+order, one URL per frame with its duration, `hold_ms`, the as-of time, and the lookup tables)
+and each frame as raw 64x64 PNG bytes from `/pixoo/frame/<screen>/<index>.png`, then maps
+pixels to LEDs on a canvas with inline script: one disc per pixel, 70 % of the cell wide, over
+faint unlit dots, with a glow made by drawing the 64x64 frame smoothed up to panel size at
+55 % in additive mode under the discs. No external scripts, fonts, or assets.
+
+Controls: date (defaults to today in the home timezone) or fixture, size 256/512/768 px,
+brightness 10 to 100 %, LED gamma on/off (default on), pause, next screen. Brightness and
+gamma are client-side: the server ships `led_lut(brightness=b)` for every step and the raw
+`int(v * b)` table beside it, so dimming scales the PWM level before the panel curve exactly as
+`led_gamma(frame, brightness=b)` does, and changing either redraws from cached pixels without
+another request. The strip under the device shows both celebrations with earned or sample
+marked; a button plays either on the panel; an earned one plays once when the page loads.
+`#screen=today` in the URL starts the rotation on that screen (and skips the auto-play) so a
+screenshot can target one screen; `#paused` holds it.
+
+`tools/pixoo_window.py` draws the same look in a native window with stdlib tkinter
+(`python -m tools.pixoo_window --url http://<service>:8080 --fixture <combo>`; keys: space
+pause, n next, s sparkle, p party, q quit). It reads the service's rotation JSON and frames,
+so it shows what the page shows.
+
+What the LED look cannot settle: the glow strength, dot size and unlit grey are a guess at a
+panel nobody here has photographed; they are display chrome, not the emulator. Legibility is
+still judged on `frame_gamma_1x.png` and on the device.
 
 ## Device
 

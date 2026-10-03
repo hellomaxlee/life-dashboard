@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from app.db import connect, migrate, schema_version, table_names
+from app.db import CODE_SCHEMA_VERSION, connect, migrate, schema_version, table_names
 
 EXPECTED_TABLES = {
     "raw_archive",
@@ -17,6 +17,10 @@ EXPECTED_TABLES = {
     "books",
     "ingest_log",
     "schema_version",
+    "summary_lines",
+    "model_spend",
+    "load_bar_history",
+    "metrics_state",
 }
 
 
@@ -28,11 +32,11 @@ def _schema(conn) -> list[str]:
 def test_apply_twice_is_noop(tmp_path: Path):
     conn = connect(tmp_path / "m.db")
     first = migrate(conn)
-    assert first == [1, 2, 3]
+    assert first == list(range(1, CODE_SCHEMA_VERSION + 1))
     after_first = _schema(conn)
     assert migrate(conn) == []
     assert _schema(conn) == after_first
-    assert schema_version(conn) == 3
+    assert schema_version(conn) == CODE_SCHEMA_VERSION
     assert set(table_names(conn)) == EXPECTED_TABLES
     assert conn.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
     assert conn.execute("PRAGMA foreign_keys").fetchone()[0] == 1

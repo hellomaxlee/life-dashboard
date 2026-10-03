@@ -1,0 +1,78 @@
+{
+  "name": "train / all sources / never started / off: first quality workout on record, load 104",
+  "cell": "train / all sources / never started / off",
+  "comment": [
+    "The first stored day is Mon 2026-10-12 (a sleep session woke then). No workout before 10-13.",
+    "R-2026-10-13: 10 min @100 (Z1 x1 = 10) + 7 @120 (Z2 x2 = 14) + 20 @140 (Z3 x3 = 60) + 5 @155 (Z4 x4 = 20) = 104 >= 100 -> first dot.",
+    "Only one run (3.2 mi): the bar is the placeholder 100.",
+    "Streak 0: no completed week exists; week 10-12 is in progress (quality_workouts 1, week_hit null, week_complete_at null).",
+    "Sleep 10-13: 6.5 h < 7.0, no sleep win; wins = [workout]. Sleep 10-12: 7.2 h -> [sleep].",
+    "Load: 10-12 trimp 0, acute 0.0, chronic 0.0, balance null (chronic 0 and under 14 days). 10-13: acute 0.25 x 104 = 26.0, chronic 104 x 2/43 = 4.837 -> 4.84, balance null."
+  ],
+  "today_local": "2026-10-13",
+  "now_utc": "2026-10-13T16:00:00Z",
+  "inputs": {
+    "activities": [
+      {
+        "id": "R-2026-10-13",
+        "type": "run",
+        "start_local": "2026-10-13 07:00",
+        "minutes": 42,
+        "distance_mi": 3.2,
+        "hr": [[10, 100], [7, 120], [20, 140], [5, 155]]
+      }
+    ],
+    "sleep": [
+      {
+        "wake_day": "2026-10-12",
+        "start_local": "2026-10-11 23:00",
+        "end_local": "2026-10-12 06:30",
+        "asleep_h": 7.2
+      },
+      {
+        "wake_day": "2026-10-13",
+        "start_local": "2026-10-12 23:40",
+        "end_local": "2026-10-13 06:30",
+        "asleep_h": 6.5
+      }
+    ],
+    "health_pushes_utc": ["2026-10-13T12:00:00Z"]
+  },
+  "expected": {
+    "daily": {
+      "2026-10-13": {
+        "quality_workout": true,
+        "workout_count": 1,
+        "workout_load": 104.0,
+        "workout_ids": ["R-2026-10-13"],
+        "sleep_hours": 6.5,
+        "sleep_win": false,
+        "wins": ["workout"],
+        "load_trimp": 104.0,
+        "load_acute": 26.0,
+        "load_chronic": 4.84,
+        "load_balance": null
+      },
+      "2026-10-12": {
+        "quality_workout": false,
+        "workout_count": 0,
+        "wins": ["sleep"],
+        "load_trimp": 0.0,
+        "load_acute": 0.0,
+        "load_chronic": 0.0,
+        "load_balance": null
+      }
+    },
+    "weekly": {
+      "2026-10-12": {
+        "quality_workouts": 1,
+        "week_hit": null,
+        "weeks_hit_streak": 0,
+        "week_complete_at": null,
+        "load_bar": 100.0,
+        "load_bar_source": "placeholder"
+      }
+    },
+    "load_bar_history": []
+  }
+}
