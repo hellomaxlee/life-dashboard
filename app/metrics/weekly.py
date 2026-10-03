@@ -1,9 +1,13 @@
 """Weekly count, week closure and the weeks-hit streak (notes.txt § Goal model, "Weekly
 target", "Weeks-hit streak", "Pull schedule").
 
-A week closes after the first health push following its Monday 00:00 local, or, with no
-push by then, `week_close_grace_hours` after it. Until it closes the week is in progress:
-`week_hit` is null and the streak neither extends nor breaks. A closed week is scored from
+A week closes after the first health push that carried workouts (`ingest_log.workouts_seen
+> 0`) received at or after its following Monday 00:00 local, or, with no such push by
+then, `week_close_grace_hours` after it. A Health Metrics push carries no workouts, so it
+landing first never closes a week on the dots it had before Sunday's workout arrives
+(ruling Bartek, 2026-10-02). The caller passes only those pushes. Until it closes the week
+is in progress: `week_hit` is null and the streak neither extends nor breaks. A closed week
+is scored from
 whatever is stored at recompute time, so a Sunday workout that lands with Monday's push
 re-opens and re-scores the week.
 """

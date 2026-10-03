@@ -16,7 +16,8 @@ A golden file is hand-written before any engine code and states its arithmetic i
     wellness[]                {metric, value, day} or {metric, value, from, to} (one per day)
     books[]                   {id, title, read_at, date_added}
     load_bar_history[]        rows already decided
-    health_pushes_utc[]       parsed health pushes in raw_archive (week closure)
+    health_pushes_utc[]       parsed health pushes in raw_archive (week closure): a UTC ISO
+                              string is a Workouts push; {"at", "workouts": 0} a metrics-only one
   expected                    {daily: {day: {key: value}}, weekly: {monday: {...}},
                                load_bar_history: [...]}; every key listed must match exactly
   stages[]                    optional; each {today_local, now_utc, add: <inputs shape>,
@@ -154,12 +155,20 @@ def _expand_wellness(entries: list[dict]) -> list[tuple[str, str, float]]:
     return rows
 
 
-def insert_push(conn: sqlite3.Connection, received_at_utc: str) -> None:
+def insert_push(conn: sqlite3.Connection, push: str | dict) -> None:
+    """A parsed health push. A bare timestamp is a Workouts push (ingest_log workouts_seen 1);
+    {"at": ts, "workouts": 0} is a Health Metrics push that carried no workout."""
+    received_at_utc = push if isinstance(push, str) else push["at"]
+    workouts = 1 if isinstance(push, str) else int(push.get("workouts", 0))
     from_utc_iso(received_at_utc)
-    conn.execute(
+    cursor = conn.execute(
         "INSERT INTO raw_archive (source, received_at_utc, sha256, path, byte_len, parsed_ok) "
         "VALUES (?, ?, ?, ?, 2, 1)",
         (HEALTH, received_at_utc, f"sha-{received_at_utc}", f"{HEALTH}/{received_at_utc}.json"),
+    )
+    conn.execute(
+        "INSERT INTO ingest_log (raw_archive_id, workouts_seen) VALUES (?, ?)",
+        (cursor.lastrowid, workouts),
     )
 
 

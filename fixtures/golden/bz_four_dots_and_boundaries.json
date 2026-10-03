@@ -1,0 +1,27 @@
+{
+  "name": "BZ2: four quality workouts; week_complete_at is the third's end; every zone floor at its exact bpm",
+  "comment": [
+    "Mon 09-14 lift 40@140 = 120 (ends 22:40Z). Tue 09-15 lift 120 (ends 09-15T22:40Z). Wed 09-16 boundary run 07:00, 100 min: 10@94 (0) + 10@95 (Z1 10) + 10@112 (10) + 10@113 (Z2 20) + 10@131 (20) + 10@132 (Z3 30) + 10@150 (30) + 10@151 (Z4 40) + 10@169 (40) + 10@170 (Z5 50) = 250; ends 08:40 EDT = 12:40Z. Thu 09-17 lift 120.",
+    "Sorted ends: 09-14T22:40, 09-15T22:40, 09-16T12:40, 09-17T22:40 -> third = 09-16T12:40Z.",
+    "Push 09-21T10:00Z closes the week: hit, streak 1."
+  ],
+  "today_local": "2026-09-22",
+  "now_utc": "2026-09-22T16:00:00Z",
+  "inputs": {
+    "activities": [
+      {"id": "L-2026-09-14", "type": "lift", "start_local": "2026-09-14 18:00", "minutes": 40, "hr": [[40, 140]]},
+      {"id": "L-2026-09-15", "type": "lift", "start_local": "2026-09-15 18:00", "minutes": 40, "hr": [[40, 140]]},
+      {"id": "R-2026-09-16", "type": "run", "start_local": "2026-09-16 07:00", "minutes": 100, "distance_mi": 3.0,
+       "hr": [[10, 94], [10, 95], [10, 112], [10, 113], [10, 131], [10, 132], [10, 150], [10, 151], [10, 169], [10, 170]]},
+      {"id": "L-2026-09-17", "type": "lift", "start_local": "2026-09-17 18:00", "minutes": 40, "hr": [[40, 140]]}
+    ],
+    "health_pushes_utc": ["2026-09-21T10:00:00Z"]
+  },
+  "expected": {
+    "daily": {"2026-09-16": {"quality_workout": true, "workout_load": 250.0, "load_trimp": 250.0}},
+    "weekly": {
+      "2026-09-14": {"quality_workouts": 4, "week_hit": true, "weeks_hit_streak": 1, "week_complete_at": "2026-09-16T12:40:00Z"},
+      "2026-09-21": {"quality_workouts": 0, "week_hit": null, "weeks_hit_streak": 1}
+    }
+  }
+}

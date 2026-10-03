@@ -1,0 +1,24 @@
+{
+  "name": "BZ6: a hit week then a closed miss -> streak 0; the next in-progress week carries 0",
+  "comment": [
+    "Week 09-14: Mon/Wed/Fri lifts 120 -> 3 dots; closed by push 09-28T10:00Z (>= 09-21 00:00 local): hit, streak 1.",
+    "Week 09-21: one lift -> 1 dot; closed by the same push: hit false, streak 0.",
+    "Week 09-28 in progress (today Tue 09-29): null, 0."
+  ],
+  "today_local": "2026-09-29",
+  "now_utc": "2026-09-29T16:00:00Z",
+  "inputs": {
+    "activities": [
+      {"repeat_weekly": {"id_prefix": "L-", "from": "2026-09-14", "to": "2026-09-20", "weekdays": [0, 2, 4], "time": "18:00", "type": "lift", "minutes": 40, "hr": [[40, 140]]}},
+      {"id": "L-2026-09-21", "type": "lift", "start_local": "2026-09-21 18:00", "minutes": 40, "hr": [[40, 140]]}
+    ],
+    "health_pushes_utc": ["2026-09-28T10:00:00Z"]
+  },
+  "expected": {
+    "weekly": {
+      "2026-09-14": {"quality_workouts": 3, "week_hit": true, "weeks_hit_streak": 1},
+      "2026-09-21": {"quality_workouts": 1, "week_hit": false, "weeks_hit_streak": 0},
+      "2026-09-28": {"quality_workouts": 0, "week_hit": null, "weeks_hit_streak": 0}
+    }
+  }
+}

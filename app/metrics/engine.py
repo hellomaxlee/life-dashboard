@@ -14,6 +14,7 @@ A workout belongs to the home-timezone day its start falls on, and to that day's
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
@@ -25,19 +26,23 @@ from app.metrics import books as books_rules
 from app.metrics.calendar import days_between, end_of_day_utc, local_date, week_start, weeks_between
 from app.metrics.calibration import (
     BarEntry,
+    Check,
     RunLoad,
     bar_for_week,
     entry_from_row,
     is_calibration_run,
-    plan_calibration,
+    plan_with_checks,
 )
-from app.metrics.keys import STATE_NOW, STATE_TODAY, WELLNESS_KEYS, round_half_up
+from app.metrics.keys import STATE_CHECK, STATE_NOW, STATE_TODAY, WELLNESS_KEYS, round_half_up
 from app.metrics.load import load_rows
+from app.metrics.sleep import SleepFragment, night_seconds
 from app.metrics.weekly import WeekInput, WeekRow, week_rows
 from app.metrics.wellness import Series, wellness_json
 from app.metrics.wins import sleep_win, wins
 from app.metrics.zones import Sample, edwards_load, zone_floors
 from app.timeutil import from_utc_iso, local_day, now_utc, to_utc_iso
+
+log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -111,11 +116,19 @@ def read_inputs(conn: sqlite3.Connection, settings: Settings) -> Inputs:
                 local_date(row["start_utc"], tz),
             )
         )
-    for row in conn.execute(
-        "SELECT wake_day_local, MAX(asleep_s) AS s FROM sleep_sessions "
-        "WHERE asleep_s IS NOT NULL GROUP BY wake_day_local"
-    ):
-        inputs.sleep_s[date.fromisoformat(row["wake_day_local"])] = int(row["s"])
+    fragments = [
+        SleepFragment(
+            date.fromisoformat(row["wake_day_local"]),
+            row["start_utc"],
+            int(row["asleep_s"]),
+            str(row["source"]),
+        )
+        for row in conn.execute(
+            "SELECT wake_day_local, start_utc, asleep_s, source FROM sleep_sessions "
+            "WHERE asleep_s IS NOT NULL ORDER BY wake_day_local, start_utc, source"
+        )
+    ]
+    inputs.sleep_s = night_seconds(fragments, tz)
     for row in conn.execute("SELECT day_local, steps FROM steps_daily"):
         inputs.steps[date.fromisoformat(row["day_local"])] = int(row["steps"])
     for row in conn.execute("SELECT day_local, metric, value FROM wellness_daily"):
@@ -129,7 +142,9 @@ def read_inputs(conn: sqlite3.Connection, settings: Settings) -> Inputs:
         if when is not None:
             inputs.book_dates.append(when)
     for row in conn.execute(
-        "SELECT received_at_utc FROM raw_archive WHERE source = ? AND parsed_ok = 1",
+        "SELECT received_at_utc FROM raw_archive AS r WHERE source = ? AND parsed_ok = 1 "
+        "AND EXISTS (SELECT 1 FROM ingest_log AS l "
+        "WHERE l.raw_archive_id = r.id AND l.workouts_seen > 0)",
         (HEALTH_SOURCE,),
     ):
         inputs.pushes_utc.append(from_utc_iso(row["received_at_utc"]))
@@ -211,8 +226,9 @@ def _resolve_clock(
 
 def compute_rows(
     inputs: Inputs, settings: Settings, today: date, now: datetime
-) -> tuple[list[BarEntry], list[WeekRow], dict[str, dict[str, object]]]:
-    """Pure: the calibration history, the week rows and the daily JSON per day."""
+) -> tuple[list[BarEntry], list[WeekRow], dict[str, dict[str, object]], list[Check]]:
+    """Pure: the calibration history, the week rows, the daily JSON per day and the
+    load-bar re-checks since the last decision."""
     tz = settings.home_tz
     now_iso = to_utc_iso(now)
     activities = [a for a in inputs.activities if a.day_local <= today]
@@ -222,7 +238,7 @@ def compute_rows(
         for a in activities
         if is_calibration_run(a.type, a.distance_m, loads[a.id]) and a.end_utc <= now_iso
     ]
-    history = plan_calibration(inputs.bar_history, runs, settings, today)
+    history, checks = plan_with_checks(inputs.bar_history, runs, settings, today)
 
     first = min(inputs.first_day() or today, today)
     bars = {
@@ -289,7 +305,20 @@ def compute_rows(
         }
         row.update(wellness_json(inputs.wellness, day, settings))
         daily[day.isoformat()] = row
-    return history, weeks, daily
+    return history, weeks, daily, checks
+
+
+def _record_check(conn: sqlite3.Connection, check: Check) -> None:
+    """Keep the latest re-check in metrics_state; log it once, when it is new."""
+    row = conn.execute("SELECT value FROM metrics_state WHERE key = ?", (STATE_CHECK,)).fetchone()
+    if row is not None and row["value"] == check.describe():
+        return
+    conn.execute(
+        "INSERT INTO metrics_state (key, value) VALUES (?, ?) "
+        "ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+        (STATE_CHECK, check.describe()),
+    )
+    log.info("load bar re-check %s", check.describe())
 
 
 def recompute(
@@ -304,8 +333,10 @@ def recompute(
     conn.execute("BEGIN IMMEDIATE")
     try:
         inputs = read_inputs(conn, settings)
-        history, weeks, daily = compute_rows(inputs, settings, today, moment)
+        history, weeks, daily, checks = compute_rows(inputs, settings, today, moment)
         added = _write_calibrations(conn, history[len(inputs.bar_history) :])
+        if checks:
+            _record_check(conn, checks[-1])
         days_written = sum(
             _merge_row(conn, "daily_metrics", "day_local", day, row) for day, row in daily.items()
         )

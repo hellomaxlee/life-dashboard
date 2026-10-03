@@ -52,6 +52,7 @@ WEEKLY_KEYS = frozenset(
 
 STATE_TODAY = "last_today_local"
 STATE_NOW = "last_now_utc"
+STATE_CHECK = "last_calibration_check"
 
 
 def round_half_up(value: float, places: int) -> float:
