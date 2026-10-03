@@ -341,3 +341,51 @@ def test_a_real_sized_push_parses_in_seconds():
     assert round(parsed.steps[0].value) == round((12000 - 1715) * 0.41666666666666669)
     assert parsed.steps[0].source == "Someone’s Apple Watch|Someone’s iPhone (summed)"
     assert parsed.unknown_metrics == []
+
+
+def two_segments(gap_min: int) -> dict:
+    """Core 2026-09-22 23:00 -> 09-23 01:00, then Core for 2 h starting `gap_min` later."""
+
+    def stamp(minute: int) -> str:
+        day, minute = divmod(minute, 1440)
+        return f"2026-09-{22 + day:02d} {minute // 60:02d}:{minute % 60:02d}:00 -0400"
+
+    first = (23 * 60, 25 * 60)
+    second = (first[1] + gap_min, first[1] + gap_min + 120)
+    rows = [
+        {
+            "date": stamp(start),
+            "start": stamp(start),
+            "startDate": stamp(start),
+            "end": stamp(end),
+            "endDate": stamp(end),
+            "qty": (end - start) / 60,
+            "value": "Core",
+            "source": "Apple Watch",
+        }
+        for start, end in (first, second)
+    ]
+    return {"data": {"metrics": [{"name": "sleep_analysis", "units": "hr", "data": rows}]}}
+
+
+def test_a_gap_of_exactly_the_threshold_keeps_one_session():
+    """Gap 60 min = ingest.sleep_gap_min: one session; asleep 2 h + 2 h = 14400 s, in bed
+    23:00 -> 04:00 = 5 h = 18000 s (the silent hour is in bed, not asleep)."""
+    sessions = parse_payload(two_segments(60), TZ, 60).sleep
+    assert [(s.asleep_s, s.in_bed_s) for s in sessions] == [(14400, 18000)]
+
+
+def test_a_gap_one_minute_over_the_threshold_splits_the_session():
+    """Gap 61 min > 60: two sessions of 7200 s each, both waking on 09-23."""
+    sessions = parse_payload(two_segments(61), TZ, 60).sleep
+    assert [(s.wake_day_local, s.asleep_s, s.in_bed_s) for s in sessions] == [
+        ("2026-09-23", 7200, 7200),
+        ("2026-09-23", 7200, 7200),
+    ]
+
+
+def test_the_configured_gap_reaches_the_parser(client, db, settings):
+    """Through POST /ingest/health with the shipped config (60): the 61-minute gap splits."""
+    assert settings.ingest.sleep_gap_min == 60
+    post(client, json.dumps(two_segments(61)).encode())
+    assert count(db, "sleep_sessions") == 2
