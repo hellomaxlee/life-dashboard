@@ -1,0 +1,40 @@
+{
+  "name": "BZ3: first bar = median 112 -> 110 (not a run load); re-check of four runs -> median 115",
+  "comment": [
+    "All runs 4.5 mi. R-01-05 36@140 = 108; R-01-07 28@151 = 112; R-01-09 31@151 = 124. median 112 -> nearest 5 = 110. decided_at = R-01-09 end 07:31 EST = 12:31Z; effective Mon 01-12.",
+    "Re-check date add_months(01-09, 3) = 04-09; window = runs ended after decided_at with local end date in [01-09, 04-09).",
+    "R-02-10 25@155 = 100; R-02-17 22@170 = 110; R-03-03 40@140 = 120; R-03-10 10@140 + 25@155 = 130. median of 4 = (110+120)/2 = 115 != 110 -> entry effective 04-13, decided_at 04-09 00:00 EDT = 04:00Z.",
+    "R-02-10 (100) under bar 110 is not a dot. Today 04-20."
+  ],
+  "today_local": "2026-04-20",
+  "now_utc": "2026-04-20T16:00:00Z",
+  "inputs": {
+    "activities": [
+      {"id": "R-2026-01-05", "type": "run", "start_local": "2026-01-05 07:00", "minutes": 36, "distance_mi": 4.5, "hr": [[36, 140]]},
+      {"id": "R-2026-01-07", "type": "run", "start_local": "2026-01-07 07:00", "minutes": 28, "distance_mi": 4.5, "hr": [[28, 151]]},
+      {"id": "R-2026-01-09", "type": "run", "start_local": "2026-01-09 07:00", "minutes": 31, "distance_mi": 4.5, "hr": [[31, 151]]},
+      {"id": "R-2026-02-10", "type": "run", "start_local": "2026-02-10 07:00", "minutes": 25, "distance_mi": 4.5, "hr": [[25, 155]]},
+      {"id": "R-2026-02-17", "type": "run", "start_local": "2026-02-17 07:00", "minutes": 22, "distance_mi": 4.5, "hr": [[22, 170]]},
+      {"id": "R-2026-03-03", "type": "run", "start_local": "2026-03-03 07:00", "minutes": 40, "distance_mi": 4.5, "hr": [[40, 140]]},
+      {"id": "R-2026-03-10", "type": "run", "start_local": "2026-03-10 07:00", "minutes": 35, "distance_mi": 4.5, "hr": [[10, 140], [25, 155]]}
+    ],
+    "health_pushes_utc": ["2026-04-20T12:00:00Z"]
+  },
+  "expected": {
+    "daily": {
+      "2026-01-07": {"workout_load": 112.0, "quality_workout": true},
+      "2026-02-10": {"workout_load": 100.0, "quality_workout": false},
+      "2026-02-17": {"workout_load": 110.0, "quality_workout": true}
+    },
+    "weekly": {
+      "2026-01-05": {"load_bar": 100.0, "load_bar_source": "placeholder", "quality_workouts": 3},
+      "2026-01-12": {"load_bar": 110.0, "load_bar_source": "calibrated"},
+      "2026-04-06": {"load_bar": 110.0, "load_bar_source": "calibrated"},
+      "2026-04-13": {"load_bar": 115.0, "load_bar_source": "calibrated"}
+    },
+    "load_bar_history": [
+      {"effective_from_week": "2026-01-12", "value": 110.0, "source_ids": ["R-2026-01-05", "R-2026-01-07", "R-2026-01-09"], "decided_at_utc": "2026-01-09T12:31:00Z"},
+      {"effective_from_week": "2026-04-13", "value": 115.0, "source_ids": ["R-2026-02-10", "R-2026-02-17", "R-2026-03-03", "R-2026-03-10"], "decided_at_utc": "2026-04-09T04:00:00Z"}
+    ]
+  }
+}

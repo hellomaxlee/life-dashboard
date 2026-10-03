@@ -440,8 +440,9 @@ grep -n "metrics recomputed" data/logs/life-dashboard.out.log | tail   # the job
 ```
 
 What to expect:
-- A week's `week_hit` stays `null` from Monday 00:00 until the first push after it
-  (or 12 h with no push, `metrics.week_close_grace_hours`), so a Sunday-night
+- A week's `week_hit` stays `null` from Monday 00:00 until the first Workouts push
+  after it (a Health Metrics push does not count), or 12 h with no such push
+  (`metrics.week_close_grace_hours`), so a Sunday-night
   workout in Monday's 06:00 push still counts and the streak does not flicker to 0
   overnight. The device shows the streak as it stood until then.
 - The load bar is the placeholder 100 until three runs of 4 miles or more with

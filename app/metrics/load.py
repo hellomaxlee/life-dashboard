@@ -16,7 +16,7 @@ from app.metrics.keys import round_half_up
 
 ACUTE_DAYS = 7
 CHRONIC_DAYS = 42
-BALANCE_MIN_DAYS = 14
+BALANCE_MIN_DAYS = 28
 
 
 @dataclass(frozen=True)

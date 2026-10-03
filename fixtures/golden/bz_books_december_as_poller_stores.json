@@ -1,0 +1,29 @@
+{
+  "name": "BZ4: read_at stored as the poller stores it (home midnight in UTC); 31 Dec stays in its year",
+  "comment": [
+    "Poller: 31 Dec 2025 -> 2025-12-31T05:00:00Z; 1 Jan 2026 -> 2026-01-01T05:00:00Z.",
+    "date_added instant 2025-12-31 21:30 Pacific = 2026-01-01T05:30:00Z -> NY 00:30 Jan 1 -> 2026.",
+    "X read_at 2025-12-31T05:00:00Z -> 2025-12-31. Y -> 2026-01-01. Z (fallback) -> 2026-01-01. W raw RFC 822 'Wed, 31 Dec 2025 00:00:00 +0000' -> home tz 12-30 19:00 -> 2025-12-30.",
+    "books_ytd 12-31 = W + X = 2 (only if W counted Dec 30 in 2025; it is 2025 either way); 01-01 = Y + Z = 2, finished true."
+  ],
+  "today_local": "2026-01-02",
+  "now_utc": "2026-01-02T16:00:00Z",
+  "inputs": {
+    "steps": {"2025-12-30": 100},
+    "books": [
+      {"id": "X", "title": "X", "read_at": "2025-12-31T05:00:00Z", "date_added": "2025-11-01T12:00:00Z"},
+      {"id": "Y", "title": "Y", "read_at": "2026-01-01T05:00:00Z", "date_added": "2025-11-01T12:00:00Z"},
+      {"id": "Z", "title": "Z", "read_at": null, "date_added": "2026-01-01T05:30:00Z"},
+      {"id": "W", "title": "W", "read_at": "Wed, 31 Dec 2025 00:00:00 +0000", "date_added": "2025-11-01T12:00:00Z"}
+    ],
+    "health_pushes_utc": ["2026-01-02T12:00:00Z"]
+  },
+  "expected": {
+    "daily": {
+      "2025-12-30": {"books_ytd": 1, "book_finished_today": true},
+      "2025-12-31": {"books_ytd": 2, "book_finished_today": true},
+      "2026-01-01": {"books_ytd": 2, "book_finished_today": true, "wins": ["book"]},
+      "2026-01-02": {"books_ytd": 2, "book_finished_today": false}
+    }
+  }
+}
