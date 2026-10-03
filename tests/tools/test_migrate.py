@@ -137,7 +137,6 @@ def test_tools_migrate_restores_activities_stored_under_the_old_canonical_rule(
         (json.dumps(list(reversed(entries)), sort_keys=True),),
     )
     db.execute("UPDATE activity_sources SET activity_id = 'P-1'")
-    db.execute("UPDATE workout_hr_samples SET activity_id = 'P-1'")
     db.execute("PRAGMA foreign_keys=ON")
     assert replay.main(["--verify", "--scratch", str(tmp_path / "s1.db")]) == 1
     capsys.readouterr()

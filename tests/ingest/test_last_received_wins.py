@@ -8,7 +8,6 @@ import shutil
 from pathlib import Path
 
 from app.db import CODE_SCHEMA_VERSION, MIGRATIONS_DIR, connect, migrate, schema_version
-from tests.conftest import count
 from tests.payloads import post, sleep_payload, wellness_payload, workout, workouts_payload
 from tools import replay
 from tools.replay import checksum, snapshot
@@ -32,6 +31,8 @@ def test_corrected_night_replaces_the_first_report(client, db, settings, tmp_pat
 
 
 def test_a_nap_and_a_night_in_one_payload_both_stay(client, db):
+    """Changed by issue #4 R5: the same night under a second label ("Ring") used to be a
+    third row; one person sleeps one night, so the fullest report of it is kept."""
     night = {
         "date": "2026-09-30",
         "asleep": 7.0,
@@ -44,13 +45,14 @@ def test_a_nap_and_a_night_in_one_payload_both_stay(client, db):
     other = {**night, "asleep": 6.5, "source": "Ring"}
     metric = {"name": "sleep_analysis", "units": "hr", "data": [night, nap, other]}
     post(client, json.dumps({"data": {"metrics": [metric]}}).encode())
-    assert count(db, "sleep_sessions") == 3
+    rows = db.execute("SELECT source, asleep_s FROM sleep_sessions ORDER BY start_utc").fetchall()
+    assert [(r["source"], r["asleep_s"]) for r in rows] == [("Watch", 25200), ("Watch", 3600)]
 
     watch_only = {"name": "sleep_analysis", "units": "hr", "data": [{**night, "asleep": 6.0}]}
     post(client, json.dumps({"data": {"metrics": [watch_only]}}).encode())
 
     rows = db.execute("SELECT source, asleep_s FROM sleep_sessions ORDER BY source").fetchall()
-    assert [(r["source"], r["asleep_s"]) for r in rows] == [("Ring", 23400), ("Watch", 21600)]
+    assert [(r["source"], r["asleep_s"]) for r in rows] == [("Watch", 21600)]
 
 
 def test_wellness_value_with_a_changed_source_label_replaces_the_old_one(client, db):

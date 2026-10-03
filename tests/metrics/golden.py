@@ -110,9 +110,15 @@ def insert_activity(conn: sqlite3.Connection, entry: dict, tz: str) -> None:
             incomplete,
         ),
     )
+    conn.execute(
+        "INSERT INTO activity_sources (external_id, source_app, activity_id, start_utc, end_utc) "
+        "VALUES (?, 'Apple Watch', ?, ?, ?)",
+        (entry["id"], entry["id"], to_utc_iso(start), to_utc_iso(end)),
+    )
     conn.executemany(
-        "INSERT INTO workout_hr_samples (activity_id, ts_utc, bpm_min, bpm_avg, bpm_max, source) "
-        "VALUES (?, ?, ?, ?, ?, 'Apple Watch')",
+        "INSERT INTO workout_hr_samples "
+        "(external_id, source_app, ts_utc, bpm_min, bpm_avg, bpm_max, source) "
+        "VALUES (?, 'Apple Watch', ?, ?, ?, ?, 'Apple Watch')",
         [(entry["id"], ts, bpm - 5, bpm, bpm + 5) for ts, bpm in samples],
     )
 

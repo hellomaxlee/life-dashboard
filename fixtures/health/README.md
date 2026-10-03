@@ -18,6 +18,10 @@ values instead. The day-summed fixtures remain best-effort readings of the docs.
 | `metrics_v2_samples_dst.json` | The segment shape across the 2026-11-01 fall-back (a Deep segment from 01:30 EDT to 01:30 EST is one hour), a late nap on 10-30, and steps stamped in both offsets on 11-01 |
 | `batch_part1.json`, `batch_part2.json` | A 7-day workouts export split across two POSTs (Batch Requests on) |
 | `malformed.json` | Truncated JSON; must still be archived and answered 422 |
+| `workouts_v2_reissued_1.json`, `workouts_v2_reissued_2.json` | Issue #4 R2: the same run from "Apple Watch" (HR) and "Nike Run Club"; in the second push the phone app re-issues its copy under a new id (`REISSUE-P-0001-B`) with the same times. One active activity; the old phone copy is withdrawn by the second push |
+| `workouts_v2_chain.json` | Issue #4 R1: three copies 4 minutes apart from three apps (A 07:00 Watch with HR, B 07:04, C 07:08); A and C are 8 minutes apart, so only the chain through B joins them. One activity in every arrival order |
+| `workouts_v2_window_full.json`, `workouts_v2_window_deleted.json` | Issue #4 R3: Watch workouts Mon 07:00, Wed 18:00 (strength), Fri 07:00; then the same window with Wed deleted in Health. Wed lies inside the second push's span (Mon to Fri) and is withdrawn; reposting the full window brings it back |
+| `metrics_v2_sleep_label_a.json`, `metrics_v2_sleep_label_b.json` | Issue #4 R5: one night (wake day 2026-09-30) reported as "Apple Watch" (23:00 to 06:30, 7.2 h) and later as "Apple Watch\|Oura" (23:10 to 06:40, 6.9 h). One person, one night: the later label's row replaces the first |
 
 What the real archive settled (2026-10-02, shape only, no values copied here): the Health
 Metrics push is ~18 MB of samples, not day sums, whatever the phone's Summarize Data setting

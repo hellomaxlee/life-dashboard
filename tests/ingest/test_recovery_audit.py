@@ -94,7 +94,10 @@ def test_rekeyed_activity_keeps_its_sources_and_heart_rate_samples(client, db):
     assert [a[0] for a in activities(db)] == ["W-1"]
     sources = db.execute("SELECT external_id, activity_id FROM activity_sources ORDER BY 1")
     assert [tuple(r) for r in sources] == [("P-1", "W-1"), ("W-1", "W-1")]
-    samples = db.execute("SELECT DISTINCT activity_id FROM workout_hr_samples").fetchall()
+    samples = db.execute(
+        "SELECT DISTINCT c.activity_id FROM workout_hr_samples s JOIN activity_sources c "
+        "ON (c.external_id, c.source_app) = (s.external_id, s.source_app)"
+    ).fetchall()
     assert [r[0] for r in samples] == ["W-1"]
     assert db.execute("SELECT hr_sample_count FROM activities").fetchone()[0] == 20
 

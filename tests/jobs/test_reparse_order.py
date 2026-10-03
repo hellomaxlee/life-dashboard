@@ -76,14 +76,14 @@ class OtherWriter:
 
 def test_health_ingest_holds_the_write_lock_from_its_first_read(client, settings, monkeypatch):
     other = OtherWriter(settings.storage.db_path)
-    real_find = dedupe.find_matching_activity
+    real_cluster = dedupe.cluster
 
-    def find_after_other_writer(*args, **kwargs):
+    def cluster_after_other_writer(*args, **kwargs):
         if not other.outcomes:
             other.write()
-        return real_find(*args, **kwargs)
+        return real_cluster(*args, **kwargs)
 
-    monkeypatch.setattr(dedupe, "find_matching_activity", find_after_other_writer)
+    monkeypatch.setattr(dedupe, "cluster", cluster_after_other_writer)
 
     resp = post(client, fixture_bytes("workouts_v2_run.json"))
 

@@ -1,6 +1,7 @@
 """Recompute every daily and weekly metrics row from the stored tables.
 
-`recompute` is the one function that touches the database. It reads activities, HR samples,
+`recompute` is the one function that touches the database. It reads active (not withdrawn)
+activities and their HR series through `app.ingest.activities`, and
 sleep, steps, wellness, books, health pushes and the load-bar history, computes every row
 from the first stored day through today, and writes the changed rows and any new
 calibration in one `BEGIN IMMEDIATE` transaction. It rewrites only the keys in
@@ -18,6 +19,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 
 from app.config import Settings
+from app.ingest.activities import HrSampleRow, active_activities_sql, active_hr_samples
 from app.ingest.health import SOURCE as HEALTH_SOURCE
 from app.metrics import books as books_rules
 from app.metrics.calendar import days_between, end_of_day_utc, local_date, week_start, weeks_between
@@ -78,11 +80,11 @@ class RecomputeResult:
     calibrations_added: int
 
 
-def _sample_bpm(row: sqlite3.Row) -> float | None:
-    if row["bpm_avg"] is not None:
-        return float(row["bpm_avg"])
-    if row["bpm_min"] is not None and row["bpm_max"] is not None:
-        return (float(row["bpm_min"]) + float(row["bpm_max"])) / 2
+def _sample_bpm(row: HrSampleRow) -> float | None:
+    if row.bpm_avg is not None:
+        return float(row.bpm_avg)
+    if row.bpm_min is not None and row.bpm_max is not None:
+        return (float(row.bpm_min) + float(row.bpm_max)) / 2
     return None
 
 
@@ -90,14 +92,12 @@ def read_inputs(conn: sqlite3.Connection, settings: Settings) -> Inputs:
     tz = settings.home_tz
     inputs = Inputs()
     samples: dict[str, list[Sample]] = {}
+    for activity_id, series in active_hr_samples(conn).items():
+        samples[activity_id] = [Sample(row.ts_utc, _sample_bpm(row)) for row in series]
     for row in conn.execute(
-        "SELECT activity_id, ts_utc, bpm_min, bpm_avg, bpm_max FROM workout_hr_samples "
-        "ORDER BY activity_id, ts_utc, source"
-    ):
-        samples.setdefault(row["activity_id"], []).append(Sample(row["ts_utc"], _sample_bpm(row)))
-    for row in conn.execute(
-        "SELECT id, type, start_utc, end_utc, distance_m, hr_incomplete FROM activities "
-        "ORDER BY start_utc, id"
+        active_activities_sql(
+            "id, type, start_utc, end_utc, distance_m, hr_incomplete", order="start_utc, id"
+        )
     ):
         inputs.activities.append(
             Activity(
