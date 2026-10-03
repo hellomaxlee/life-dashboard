@@ -310,6 +310,7 @@ async def ingest_health(request: Request) -> Response:
                 "file": archived.path.name,
                 "workouts_seen": stats.workouts_seen,
                 "workouts_merged": stats.workouts_merged,
+                "workouts_withdrawn": stats.workouts_withdrawn,
                 "metrics_rows": stats.metrics_rows,
                 "unknown_metrics": stats.unknown_metrics,
                 "reapplied": stats.reapplied,

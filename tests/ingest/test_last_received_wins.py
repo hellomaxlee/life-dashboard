@@ -90,7 +90,7 @@ def test_migration_002_keeps_the_latest_ingested_value_and_applies_once(tmp_path
     conn.execute(sleep, ("corrected", "2026-09-30T03:00:00Z", "2026-09-30T11:00:00Z", 24840))
     conn.execute(sleep, ("nap", "2026-09-30T18:00:00Z", "2026-09-30T19:00:00Z", 3600))
 
-    assert migrate(conn) == [2]
+    assert migrate(conn) == [2, 3]
 
     rows = conn.execute(
         "SELECT day_local, value, source FROM wellness_daily ORDER BY day_local"
@@ -104,7 +104,7 @@ def test_migration_002_keeps_the_latest_ingested_value_and_applies_once(tmp_path
     after = schema(conn)
     assert migrate(conn) == []
     assert schema(conn) == after
-    assert schema_version(conn) == 2
+    assert schema_version(conn) == 3
     conn.close()
 
 

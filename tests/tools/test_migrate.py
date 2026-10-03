@@ -74,15 +74,15 @@ def test_backup_of_a_db_that_is_behind_works_and_migrates_nothing(behind, tmp_pa
 
 def test_tools_migrate_upgrades_and_is_safe_to_repeat(behind, capsys):
     assert migrate_tool.main([]) == 0
-    assert version(behind) == 2
-    assert "applied 2" in capsys.readouterr().out
+    assert version(behind) == 3
+    assert "applied 2, 3" in capsys.readouterr().out
     assert migrate_tool.main([]) == 0
     assert "nothing to apply" in capsys.readouterr().out
 
 
 def test_service_start_migrates(behind, settings):
     with TestClient(create_app(settings)) as client:
-        assert version(behind) == 2
+        assert version(behind) == 3
         assert post(client, steps_payload({"2026-09-29": 5})).json()["status"] == "ok"
 
 
@@ -90,7 +90,7 @@ def test_running_service_refuses_a_db_whose_schema_is_not_its_own(client, db, se
     assert post(client, steps_payload({"2026-09-28": 1})).json()["status"] == "ok"
     db.execute(
         "INSERT INTO schema_version (version, applied_at_utc, name) "
-        "VALUES (3, '2026-10-02T00:00:00Z', '003_from_newer_code')"
+        "VALUES (4, '2026-10-02T00:00:00Z', '004_from_newer_code')"
     )
     body = steps_payload({"2026-09-29": 2})
 
@@ -134,7 +134,6 @@ def test_tools_migrate_restores_activities_stored_under_the_old_canonical_rule(
         (json.dumps(list(reversed(entries)), sort_keys=True),),
     )
     db.execute("UPDATE activity_sources SET activity_id = 'P-1'")
-    db.execute("UPDATE workout_hr_samples SET activity_id = 'P-1'")
     db.execute("PRAGMA foreign_keys=ON")
     assert replay.main(["--verify", "--scratch", str(tmp_path / "s1.db")]) == 1
     capsys.readouterr()
@@ -153,12 +152,12 @@ def test_migration_file_that_lands_after_start_is_not_applied_by_this_process(
 
     landed = tmp_path / "migrations"
     shutil.copytree(MIGRATIONS_DIR, landed)
-    (landed / "003_arrived_by_git_pull.sql").write_text("CREATE TABLE arrived (x INTEGER);\n")
+    (landed / "004_arrived_by_git_pull.sql").write_text("CREATE TABLE arrived (x INTEGER);\n")
     monkeypatch.setattr(db_module, "MIGRATIONS_DIR", landed)
 
     conn = db_module.open_db(tmp_path / "running.db")
     try:
-        assert db_module.stored_schema_version(conn) == db_module.CODE_SCHEMA_VERSION == 2
+        assert db_module.stored_schema_version(conn) == db_module.CODE_SCHEMA_VERSION == 3
         assert "arrived" not in db_module.table_names(conn)
     finally:
         conn.close()

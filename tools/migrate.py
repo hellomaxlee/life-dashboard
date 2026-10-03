@@ -14,7 +14,7 @@ import sys
 
 from app.config import load_settings
 from app.db import connect, migrate, stored_schema_version
-from app.ingest.store import recanonicalize
+from app.ingest.store import recluster_all
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -29,7 +29,7 @@ def main(argv: list[str] | None = None) -> int:
         applied = migrate(conn)
         conn.execute("BEGIN IMMEDIATE")
         try:
-            changed = recanonicalize(conn, settings)
+            changed = recluster_all(conn, settings)
             conn.execute("COMMIT")
         except Exception:
             conn.execute("ROLLBACK")
@@ -39,7 +39,7 @@ def main(argv: list[str] | None = None) -> int:
         conn.close()
     done = f"applied {', '.join(str(v) for v in applied)}" if applied else "nothing to apply"
     print(f"{settings.storage.db_path}: schema {before} -> {after} ({done})")
-    print(f"normalised {changed} activity record(s) to the canonical-copy rule")
+    print(f"normalised {changed} activity record(s) to the clustering rule")
     return 0
 
 
