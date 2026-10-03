@@ -111,8 +111,8 @@ def _neighbourhood(conn: sqlite3.Connection, copy: Copy, settings: Settings) -> 
     lo = to_utc_iso(from_utc_iso(copy.start_utc) - reach)
     hi = to_utc_iso(from_utc_iso(copy.end_utc) + reach)
     seeds = conn.execute(
-        "SELECT DISTINCT activity_id FROM activity_sources "
-        "WHERE (start_utc <= ? AND end_utc >= ?) OR external_id = ?",
+        "SELECT activity_id FROM activity_sources WHERE start_utc <= ? AND end_utc >= ? "
+        "UNION SELECT activity_id FROM activity_sources WHERE external_id = ?",
         (hi, lo, copy.external_id),
     ).fetchall()
     ids = [s["activity_id"] for s in seeds]
@@ -126,13 +126,20 @@ def _neighbourhood(conn: sqlite3.Connection, copy: Copy, settings: Settings) -> 
     return {(r["external_id"], r["source_app"]): _copy_from_row(conn, r) for r in rows}
 
 
-def _cluster_id(members: list[Copy], everyone: list[Copy]) -> str:
-    """The canonical copy's external id; suffixed with its source app when another copy
-    (from another source) carries the same id, so two clusters never share an id."""
+def _cluster_id(conn: sqlite3.Connection, members: list[Copy], everyone: list[Copy]) -> str:
+    """The canonical copy's external id; suffixed with its source app when any copy stored
+    or being stored from another source carries the same id, so two clusters never share an
+    id. A copy belongs to exactly one cluster, so no other cluster can claim the id."""
     canonical = members[0]
     shared = any(
         c.external_id == canonical.external_id and c.source_app != canonical.source_app
         for c in everyone
+    ) or (
+        conn.execute(
+            "SELECT 1 FROM activity_sources WHERE external_id = ? AND source_app <> ?",
+            canonical.key,
+        ).fetchone()
+        is not None
     )
     return f"{canonical.external_id}|{canonical.source_app}" if shared else canonical.external_id
 
@@ -221,7 +228,7 @@ def _rebuild(
     new_ids: dict[str, list[Copy]] = {}
     for members in clusters:
         canonical = members[0]
-        cid = _cluster_id(members, copies)
+        cid = _cluster_id(conn, members, copies)
         new_ids[cid] = members
         conn.execute(
             "INSERT INTO activities (id, type, start_utc, end_utc, duration_s, merged_from_json, "
@@ -315,38 +322,42 @@ def _activity_ids_of(conn: sqlite3.Connection, copies: list[Copy]) -> set[str]:
 def withdraw_absent(
     conn: sqlite3.Connection, workouts: list[Workout], withdrawn_at: str, settings: Settings
 ) -> int:
-    """A payload is authoritative for each source app over the span of that source's
-    workouts it carries: a stored active copy of the source whose start lies between the
-    payload's earliest and latest start for that source, and whose id the payload does not
-    list, is withdrawn. A payload with no workout from a source withdraws nothing of it.
-    Returns how many copies were withdrawn."""
-    by_source: dict[str, list[Workout]] = {}
-    for w in workouts:
-        by_source.setdefault(w.source_app, []).append(w)
+    """A payload is authoritative, for each source app it carries a workout from, over the
+    span it demonstrably covers: from its earliest to its latest workout start (any source).
+    A stored active copy of such a source that starts inside the span and that the payload
+    does not list is withdrawn. A payload with no workouts withdraws nothing; a source with
+    no workout in the payload loses nothing. Returns how many copies were newly withdrawn.
+
+    `withdrawn_at` is the receipt time of the EARLIEST payload that withdrew the copy since
+    it was last listed. A late recovery applies an older payload on top of newer ones, so
+    keeping the earliest (not the first applied) is what makes recovery equal the history
+    without a failure."""
+    if not workouts:
+        return 0
+    listed = {(w.external_id, w.source_app) for w in workouts}
+    sources = sorted({w.source_app for w in workouts})
+    lo = min(w.start_utc for w in workouts)
+    hi = max(w.start_utc for w in workouts)
+    rows = conn.execute(
+        f"SELECT * FROM activity_sources WHERE source_app IN ({','.join('?' * len(sources))}) "
+        "AND start_utc BETWEEN ? AND ? AND (withdrawn_at IS NULL OR withdrawn_at > ?) "
+        "ORDER BY start_utc, external_id, source_app",
+        (*sources, lo, hi, withdrawn_at),
+    ).fetchall()
     withdrawn = 0
-    for source, group in sorted(by_source.items()):
-        listed = {(w.external_id, w.source_app) for w in group}
-        lo = min(w.start_utc for w in group)
-        hi = max(w.start_utc for w in group)
-        rows = conn.execute(
-            "SELECT * FROM activity_sources WHERE source_app = ? AND start_utc BETWEEN ? AND ? "
-            "AND withdrawn_at IS NULL ORDER BY start_utc, external_id",
-            (source, lo, hi),
-        ).fetchall()
-        for row in rows:
-            if (row["external_id"], row["source_app"]) in listed:
-                continue
-            conn.execute(
-                "UPDATE activity_sources SET withdrawn_at = ? "
-                "WHERE external_id = ? AND source_app = ?",
-                (withdrawn_at, row["external_id"], row["source_app"]),
-            )
-            gone = replace(_copy_from_row(conn, row), withdrawn_at=withdrawn_at)
-            stored = _neighbourhood(conn, gone, settings)
-            stored[gone.key] = gone
-            old_ids = _activity_ids_of(conn, list(stored.values()))
-            _rebuild(conn, list(stored.values()), settings, old_ids)
-            withdrawn += 1
+    for row in rows:
+        if (row["external_id"], row["source_app"]) in listed:
+            continue
+        gone = replace(_copy_from_row(conn, row), withdrawn_at=withdrawn_at)
+        conn.execute(
+            "UPDATE activity_sources SET withdrawn_at = ? WHERE external_id = ? AND source_app = ?",
+            (withdrawn_at, *gone.key),
+        )
+        stored = _neighbourhood(conn, gone, settings)
+        stored[gone.key] = gone
+        copies = list(stored.values())
+        _rebuild(conn, copies, settings, _activity_ids_of(conn, copies))
+        withdrawn += row["withdrawn_at"] is None
     return withdrawn
 
 
@@ -401,15 +412,22 @@ def one_night_per_person(sessions: list[SleepSession]) -> list[SleepSession]:
 def _clipped_by_window(
     conn: sqlite3.Connection, session: SleepSession, window_start_utc: str | None
 ) -> list[str]:
-    """Ids of stored sessions (same wake day, any source) that began before the payload's
-    window and overlap this one: fuller reports of the same night, which the window cut."""
+    """Ids of stored sessions of the same wake day that began before the payload's window and
+    overlap this one (same source), or are the same night (another label): fuller reports
+    of the night the window cut."""
     if window_start_utc is None or session.start_utc < window_start_utc:
         return []
     rows = conn.execute(
-        "SELECT id FROM sleep_sessions WHERE wake_day_local = ? AND start_utc < ? AND end_utc > ?",
+        "SELECT id, source, start_utc, end_utc FROM sleep_sessions "
+        "WHERE wake_day_local = ? AND start_utc < ? AND end_utc > ?",
         (session.wake_day_local, window_start_utc, session.start_utc),
     ).fetchall()
-    return [str(r["id"]) for r in rows]
+    return [
+        str(r["id"])
+        for r in rows
+        if r["source"] == session.source
+        or _same_night(r["start_utc"], r["end_utc"], session.start_utc, session.end_utc)
+    ]
 
 
 def _evict_other_labels(conn: sqlite3.Connection, session: SleepSession, spared: list[str]) -> None:
@@ -444,10 +462,10 @@ def replace_sleep(
     session of the same wake day that began before the window and overlaps it, whatever its
     label; the stored one is the same night, reported whole by an earlier push.
     """
-    sessions = one_night_per_person(sessions)
+    nights = one_night_per_person(sessions)
     keep: set[str] = set()
     fresh: list[SleepSession] = []
-    for session in sessions:
+    for session in nights:
         clipped_by = _clipped_by_window(conn, session, window_start_utc)
         if clipped_by:
             keep.update(clipped_by)

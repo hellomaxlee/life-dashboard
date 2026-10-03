@@ -97,7 +97,8 @@ def cluster(copies: list[Copy], cfg: DedupeConfig) -> list[list[Copy]]:
     if not disabled():
         reach = timedelta(minutes=cfg.start_window_min)
         for i, a in enumerate(ordered):
-            horizon = max(reach, timedelta(seconds=a.duration_s))
+            span = from_utc_iso(a.end_utc) - from_utc_iso(a.start_utc)
+            horizon = max(reach, span, timedelta(seconds=a.duration_s))
             for j in range(i + 1, len(ordered)):
                 b = ordered[j]
                 if from_utc_iso(b.start_utc) - from_utc_iso(a.start_utc) > horizon:
