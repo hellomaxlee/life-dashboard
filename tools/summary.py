@@ -1,6 +1,7 @@
 """Write, inspect, or price the daily summary.
 
-python -m tools.summary --date YYYY-MM-DD            write the day's summary (no call if stored)
+python -m tools.summary --date YYYY-MM-DD            write the line shown on that day (it
+                                                     describes the day before; no call if stored)
 python -m tools.summary --date YYYY-MM-DD --force    regenerate, calling the model again
 python -m tools.summary --date YYYY-MM-DD --dry-run  print the exact request body and the cap
                                                      check; nothing is called or written
@@ -12,7 +13,6 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from zoneinfo import ZoneInfo
 
 from app.config import load_settings
 from app.db import SchemaMismatch, connect_live
@@ -57,14 +57,16 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def dry_run(conn, settings, day: str) -> int:
-    hour = now_utc().astimezone(ZoneInfo(settings.home_tz)).hour
-    payload = build_payload(conn, settings, day, hour)
+    payload = build_payload(conn, settings, day)
     recent = memory.recent_before(conn, day)
     request = build_request(payload, recent, settings, None)
     print(json.dumps(request, indent=1, sort_keys=True))
     print(spend.cap_check(conn, settings, request).describe())
     key = "present" if settings.anthropic_api_key else "absent (model unavailable, fallback runs)"
-    print(f"api key: {key}; cell: {payload.cell.name}; lens: {payload.lens}")
+    print(
+        f"api key: {key}; shown on {day}, describes {payload.data['describes']}; "
+        f"cell: {payload.cell.name}; lens: {payload.lens}"
+    )
     return 0
 
 

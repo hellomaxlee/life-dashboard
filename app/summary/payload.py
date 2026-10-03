@@ -1,13 +1,19 @@
 """The grounded payload: every number the summary may say, read from the metrics tables.
 
-Reads only `daily_metrics.metrics_json` (today and yesterday), `weekly_metrics.metrics_json`
-(this week's Monday and last week's), the title of a book finished today from `books`, and
-the day's workout minutes from `activities` when the engine did not write `workout_minutes`.
-Everything else in the payload is a label derived in code (cell, lens, dot word, weekday);
-labels carry no numbers. `numbers(payload)` is the set the grounding gate checks against.
+The line shown on day D describes D - 1, the latest complete day (health pushes cover whole
+days ending yesterday; ruling 2026-10-02). `build_payload(conn, settings, shown_day)` reads
+only: the described day's `daily_metrics` row, the `weekly_metrics` rows for the described
+day's week and the two weeks before it, the title of a book whose effective date
+(`app.metrics.books.effective_date`, home timezone) is the described day, and the described
+day's workout minutes from `activities` when the engine did not write `workout_minutes`.
+Everything else is a label derived in code (cell, lens, dot word, weekday, week relation);
+labels carry no numbers. `numbers()` is the set the grounding gate checks against.
+
+Values are shaped to what the device shows: sleep truncated to one decimal like the
+renderer (6.97 is 6.9, never 7.0), loads whole, balance to one decimal.
 
 Day type `travel` and `race-week` and season `peak` / `off` need a signal the data does not
-carry: they are read from an optional `day_flags` list in the day's metrics row and never
+carry: they are read from an optional `day_flags` list in the described day's row and never
 inferred. `cell.inferred` names every label that was defaulted.
 """
 
@@ -21,6 +27,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from app.config import Settings
+from app.metrics.books import effective_date
 from app.timeutil import from_utc_iso, local_day, to_utc_iso
 
 LENSES = (
@@ -66,9 +73,17 @@ class Payload:
     def text(self) -> str:
         return json.dumps(self.data, sort_keys=True, indent=1)
 
+    @property
+    def book_title(self) -> str | None:
+        return self.data.get("day", {}).get("book_title")
+
 
 def lens_for(day: date) -> str:
     return LENSES[day.toordinal() % len(LENSES)]
+
+
+def described_day(shown_day: str) -> str:
+    return (date.fromisoformat(shown_day) - timedelta(days=1)).isoformat()
 
 
 def _row_json(conn: sqlite3.Connection, table: str, key: str, value: str) -> dict[str, Any] | None:
@@ -82,15 +97,28 @@ def _row_json(conn: sqlite3.Connection, table: str, key: str, value: str) -> dic
     return parsed if isinstance(parsed, dict) else None
 
 
-def _num(value: Any, digits: int | None) -> float | int | None:
+def _finite(value: Any) -> float | None:
     if isinstance(value, bool) or not isinstance(value, int | float):
         return None
     if value != value or value in (float("inf"), float("-inf")):
         return None
-    if digits is None:
-        return int(round(value))
-    rounded = round(float(value), digits)
-    return int(rounded) if rounded == int(rounded) and digits == 0 else rounded
+    return float(value)
+
+
+def _num(value: Any, digits: int) -> float | int | None:
+    number = _finite(value)
+    if number is None:
+        return None
+    if digits == 0:
+        return int(round(number))
+    return round(number, digits)
+
+
+def _truncated(value: Any) -> float | None:
+    number = _finite(value)
+    if number is None or number < 0:
+        return None
+    return int(number * 10 + 1e-6) / 10
 
 
 def _flag(value: Any) -> bool | None:
@@ -104,13 +132,13 @@ def _flags(row: dict[str, Any] | None) -> set[str]:
     return {str(item).strip().lower() for item in raw if isinstance(item, str)}
 
 
-def _book_title(conn: sqlite3.Connection, day_local: str) -> str | None:
-    row = conn.execute(
-        "SELECT title FROM books WHERE substr(COALESCE(read_at, date_added), 1, 10) = ? "
-        "ORDER BY title LIMIT 1",
-        (day_local,),
-    ).fetchone()
-    return str(row["title"]) if row is not None else None
+def _book_title(conn: sqlite3.Connection, settings: Settings, day_local: str) -> str | None:
+    target = date.fromisoformat(day_local)
+    rows = conn.execute("SELECT title, read_at, date_added FROM books ORDER BY title").fetchall()
+    for row in rows:
+        if effective_date(row["read_at"], row["date_added"], settings) == target:
+            return str(row["title"])
+    return None
 
 
 def _workout_minutes(conn: sqlite3.Connection, day_local: str, tz: str) -> int | None:
@@ -131,33 +159,38 @@ def _workout_minutes(conn: sqlite3.Connection, day_local: str, tz: str) -> int |
 def _day_block(row: dict[str, Any] | None, book_title: str | None) -> dict[str, Any]:
     row = row or {}
     wins = row.get("wins")
-    block: dict[str, Any] = {
+    return {
         "quality_workout": _flag(row.get("quality_workout")),
         "workout_count": _num(row.get("workout_count"), 0),
         "workout_load": _num(row.get("workout_load"), 0),
         "workout_minutes": _num(row.get("workout_minutes"), 0),
-        "sleep_hours": _num(row.get("sleep_hours"), 1),
+        "sleep_hours": _truncated(row.get("sleep_hours")),
         "sleep_win": _flag(row.get("sleep_win")),
         "steps": _num(row.get("steps"), 0),
-        "book_finished_today": _flag(row.get("book_finished_today")),
+        "book_finished": _flag(row.get("book_finished_today")),
         "book_title": book_title,
         "wins": [str(w) for w in wins if isinstance(w, str)] if isinstance(wins, list) else [],
     }
-    return block
 
 
-def _week_block(this_week: dict[str, Any] | None, last_week: dict[str, Any] | None, target: int):
+def _week_block(
+    this_week: dict[str, Any] | None,
+    last_week: dict[str, Any] | None,
+    target: int,
+    relation: str,
+) -> dict[str, Any]:
     this_week = this_week or {}
     last_week = last_week or {}
     dots = _num(this_week.get("quality_workouts"), 0)
     return {
+        "relation": relation,
         "quality_workouts": dots,
         "target": target,
         "dots_word": _ordinal(dots),
         "week_hit": _flag(this_week.get("week_hit")),
         "weeks_hit_streak": _num(this_week.get("weeks_hit_streak"), 0),
-        "last_week_quality_workouts": _num(last_week.get("quality_workouts"), 0),
-        "last_week_hit": _flag(last_week.get("week_hit")),
+        "previous_week_quality_workouts": _num(last_week.get("quality_workouts"), 0),
+        "previous_week_hit": _flag(last_week.get("week_hit")),
     }
 
 
@@ -182,27 +215,43 @@ def _wellness_fact(row: dict[str, Any] | None) -> dict[str, Any] | None:
     if not isinstance(fact, dict) or fact.get("metric") not in WELLNESS_METRICS:
         return None
     digits = 1 if fact["metric"] == "vo2_max" else 0
-    value, baseline = _num(fact.get("value"), digits), _num(fact.get("baseline"), digits)
-    if value is None or baseline is None:
+    value = _num(fact.get("value"), digits)
+    if value is None:
         return None
     return {
         "metric": fact["metric"],
         "value": value,
-        "baseline": baseline,
+        "baseline": _num(fact.get("baseline"), digits),
         "direction": str(fact.get("direction", "")),
     }
 
 
+def has_health_data(row: dict[str, Any] | None) -> bool:
+    """Evidence the day's health push arrived. `workout_count: 0` is not evidence: the
+    engine writes it on the rollover row before any push."""
+    if not row:
+        return False
+    if _finite(row.get("sleep_hours")) is not None or _finite(row.get("steps")) is not None:
+        return True
+    return (_finite(row.get("workout_count")) or 0) > 0 or row.get("quality_workout") is True
+
+
 def classify(
-    today: dict[str, Any] | None,
-    week: dict[str, Any],
-    streak_ever_hit: bool,
+    day_row: dict[str, Any] | None,
+    week: dict[str, Any] | None,
+    previous_week: dict[str, Any] | None,
+    week_before: dict[str, Any] | None,
 ) -> Cell:
-    """The fixture-matrix cell for a day, from its metrics and the week's state."""
+    """The fixture-matrix cell for the described day.
+
+    Streak (Ingrid, 2026-10-02): alive when the described week's streak is above zero;
+    broken-last-week only when the previous week closed with `week_hit` false and the week
+    before it carried a streak above zero; otherwise never-started (neutral, no break wording).
+    """
     inferred: list[str] = []
-    flags = _flags(today)
-    workouts = today.get("workout_count") if today else None
-    worked = bool(today and (today.get("quality_workout") or (workouts or 0) > 0))
+    flags = _flags(day_row)
+    row = day_row or {}
+    worked = row.get("quality_workout") is True or (_finite(row.get("workout_count")) or 0) > 0
     if "travel" in flags:
         day_type = "travel"
     elif "race-week" in flags or "race_week" in flags:
@@ -211,22 +260,20 @@ def classify(
         day_type = "train" if worked else "rest"
         inferred.append("day_type")
 
-    has_health = today is not None and any(
-        today.get(k) is not None for k in ("sleep_hours", "steps", "workout_count")
-    )
-    if not has_health:
+    if not has_health_data(day_row):
         completeness = "health-delayed"
-    elif worked and not today.get("quality_workout") and today.get("workout_load") is None:
+    elif worked and row.get("quality_workout") is not True and row.get("workout_load") is None:
         completeness = "workout-without-hr"
-    elif today.get("sleep_hours") is None:
+    elif _finite(row.get("sleep_hours")) is None:
         completeness = "sleep-missing"
     else:
         completeness = "all-sources"
 
-    streak = week.get("weeks_hit_streak") or 0
+    streak = _finite((week or {}).get("weeks_hit_streak")) or 0
+    before = _finite((week_before or {}).get("weeks_hit_streak")) or 0
     if streak > 0:
         streak_state = "alive"
-    elif streak_ever_hit:
+    elif (previous_week or {}).get("week_hit") is False and before > 0:
         streak_state = "broken-last-week"
     else:
         streak_state = "never-started"
@@ -241,46 +288,35 @@ def classify(
     return Cell(day_type, completeness, streak_state, season, tuple(inferred))
 
 
-def _ever_hit(conn: sqlite3.Connection, before_monday: str) -> bool:
-    row = conn.execute(
-        "SELECT metrics_json FROM weekly_metrics WHERE week_start_local < ?", (before_monday,)
-    ).fetchall()
-    for r in row:
-        try:
-            if json.loads(r["metrics_json"]).get("week_hit") is True:
-                return True
-        except (TypeError, ValueError, AttributeError):
-            continue
-    return False
-
-
-def build_payload(
-    conn: sqlite3.Connection,
-    settings: Settings,
-    day_local: str,
-    now_local_hour: int | None = None,
-) -> Payload:
-    day = date.fromisoformat(day_local)
+def build_payload(conn: sqlite3.Connection, settings: Settings, shown_day: str) -> Payload:
+    shown = date.fromisoformat(shown_day)
+    day = shown - timedelta(days=1)
     monday = day - timedelta(days=day.weekday())
-    last_monday = monday - timedelta(days=7)
-    yesterday = day - timedelta(days=1)
+    shown_monday = shown - timedelta(days=shown.weekday())
+    relation = "this week" if monday == shown_monday else "last week"
 
-    today_row = _row_json(conn, "daily_metrics", "day_local", day_local)
-    yesterday_row = _row_json(conn, "daily_metrics", "day_local", yesterday.isoformat())
+    day_row = _row_json(conn, "daily_metrics", "day_local", day.isoformat())
     week_row = _row_json(conn, "weekly_metrics", "week_start_local", monday.isoformat())
-    last_week_row = _row_json(conn, "weekly_metrics", "week_start_local", last_monday.isoformat())
+    previous = _row_json(
+        conn, "weekly_metrics", "week_start_local", (monday - timedelta(days=7)).isoformat()
+    )
+    before = _row_json(
+        conn, "weekly_metrics", "week_start_local", (monday - timedelta(days=14)).isoformat()
+    )
 
-    title = _book_title(conn, day_local) if (today_row or {}).get("book_finished_today") else None
-    today = _day_block(today_row, title)
-    if today["workout_minutes"] is None and (today["workout_count"] or 0) > 0:
-        today["workout_minutes"] = _workout_minutes(conn, day_local, settings.home_tz)
-    week = _week_block(week_row, last_week_row, settings.week_target)
-    cell = classify(today_row, week, _ever_hit(conn, monday.isoformat()))
+    finished = (day_row or {}).get("book_finished_today") is True
+    title = _book_title(conn, settings, day.isoformat()) if finished else None
+    block = _day_block(day_row, title)
+    if block["workout_minutes"] is None and (block["workout_count"] or 0) > 0:
+        block["workout_minutes"] = _workout_minutes(conn, day.isoformat(), settings.home_tz)
+    week = _week_block(week_row, previous, settings.week_target, relation)
+    cell = classify(day_row, week_row, previous, before)
 
     data: dict[str, Any] = {
-        "day": day_local,
+        "shown_on": shown_day,
+        "describes": day.isoformat(),
+        "describes_relation": "yesterday",
         "weekday": day.strftime("%A"),
-        "time_of_day": _time_of_day(now_local_hour),
         "cell": {
             "day_type": cell.day_type,
             "completeness": cell.completeness,
@@ -288,30 +324,20 @@ def build_payload(
             "season": cell.season,
             "inferred": list(cell.inferred),
         },
-        "lens": lens_for(day),
-        "today": today,
-        "yesterday": {
-            "quality_workout": _flag((yesterday_row or {}).get("quality_workout")),
-            "workout_load": _num((yesterday_row or {}).get("workout_load"), 0),
-        },
+        "lens": lens_for(shown),
+        "day": block,
         "week": week,
-        "load": _load_block(today_row),
+        "load": _load_block(day_row),
         "books": {
-            "ytd": _num((today_row or {}).get("books_ytd"), 0),
+            "ytd": _num((day_row or {}).get("books_ytd"), 0),
             "target": settings.books.target_per_year,
         },
-        "targets": {"sleep_hours": round(settings.sleep_target_hours, 1)},
+        "targets": {"sleep_hours": _truncated(settings.sleep_target_hours)},
     }
-    fact = _wellness_fact(today_row)
+    fact = _wellness_fact(day_row)
     if fact is not None:
         data["wellness_fact"] = fact
-    return Payload(day_local, lens_for(day), cell, data)
-
-
-def _time_of_day(hour: int | None) -> str:
-    if hour is None:
-        return "morning"
-    return "morning" if hour < 12 else "evening"
+    return Payload(shown_day, lens_for(shown), cell, data)
 
 
 def _walk_numbers(value: Any) -> set[float]:

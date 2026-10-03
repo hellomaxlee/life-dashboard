@@ -60,17 +60,17 @@ def test_job_writes_todays_line_and_a_second_run_does_not_call(db, jobs_settings
 
 def test_cli_writes_then_reports_stored(db, settings, capsys):
     seed(db, golden_cases()[0])
-    assert summary_tool.main(["--date", "2026-09-30"]) == 0
+    assert summary_tool.main(["--date", "2026-10-01"]) == 0
     out = capsys.readouterr().out
-    assert out.startswith("2026-09-30 [fallback] Third dot this week, load 118.")
+    assert out.startswith("2026-10-01 [fallback] Yesterday made the third dot this week, load 118.")
     assert "attempt model: unavailable: no api key" in out
-    assert summary_tool.main(["--date", "2026-09-30"]) == 0
+    assert summary_tool.main(["--date", "2026-10-01"]) == 0
     assert "[stored]" in capsys.readouterr().out
 
 
 def test_cli_dry_run_prints_the_request_and_cap_check_and_writes_nothing(db, settings, capsys):
     seed(db, golden_cases()[0])
-    assert summary_tool.main(["--date", "2026-09-30", "--dry-run"]) == 0
+    assert summary_tool.main(["--date", "2026-10-01", "--dry-run"]) == 0
     out = capsys.readouterr().out
     body_text, _, tail = out.rpartition("\n}\n")
     body = json.loads(body_text + "\n}")
@@ -80,6 +80,7 @@ def test_cli_dry_run_prints_the_request_and_cap_check_and_writes_nothing(db, set
     assert "call allowed" in tail
     assert "api key: absent" in tail
     assert "cell: train / all-sources / alive / base" in tail
+    assert "shown on 2026-10-01, describes 2026-09-30" in tail
     assert db.execute("SELECT COUNT(*) FROM summary_lines").fetchone()[0] == 0
     assert run.DEVICE_KEY not in json.loads(
         db.execute(

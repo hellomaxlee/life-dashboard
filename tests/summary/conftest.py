@@ -68,9 +68,14 @@ def seed(conn: sqlite3.Connection, case: dict) -> None:
         )
 
 
-def payload_for(conn: sqlite3.Connection, settings, case: dict, hour: int = 21) -> Payload:
+def shown_day(case: dict) -> str:
+    """A golden case's `day` is the day the line describes; it is shown the morning after."""
+    return (date.fromisoformat(case["day"]) + timedelta(days=1)).isoformat()
+
+
+def payload_for(conn: sqlite3.Connection, settings, case: dict) -> Payload:
     seed(conn, case)
-    return build_payload(conn, settings, case["day"], hour)
+    return build_payload(conn, settings, shown_day(case))
 
 
 def reply(

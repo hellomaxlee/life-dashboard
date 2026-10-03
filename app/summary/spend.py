@@ -4,8 +4,9 @@ The cap check runs BEFORE a call: month-to-date (the home-timezone calendar mont
 moment of the call) plus the worst case for the call about to be made must stay under
 `summary.monthly_cap_usd`. The worst case prices every input token at the cache-write rate
 (the dearest an input token can be) and assumes the full `max_tokens` of output. Input is
-counted locally at CHARS_PER_TOKEN characters per token, a deliberate under-estimate of
-characters per token so the token count errs high; no network call is made to count.
+counted locally at CHARS_PER_TOKEN (2.0) characters per token until a real usage readback
+calibrates it, a deliberate under-estimate so the token count errs high; no network call is
+made to count.
 """
 
 from __future__ import annotations
@@ -19,7 +20,7 @@ from zoneinfo import ZoneInfo
 from app.config import Settings
 from app.timeutil import local_day, now_utc, to_utc_iso
 
-CHARS_PER_TOKEN = 3.0
+CHARS_PER_TOKEN = 2.0
 MTOK = 1_000_000
 
 

@@ -3,11 +3,11 @@
   "cases": [
     {
       "line": "Don't let the streak die!",
-      "reason": "ban: 'don't let the streak'"
+      "reason": "ban: 'don't break the chain'"
     },
     {
       "line": "Don't let the streak die.",
-      "reason": "ban: 'don't let the streak'"
+      "reason": "ban: 'don't break the chain'"
     },
     {
       "line": "Third dot this week, load 118. Well done!",
@@ -74,6 +74,18 @@
       "line": "One dot last week. Next week is a clean sheet.",
       "case": 3,
       "reason": "hard-days: 'next week' after a broken week"
+    },
+    {
+      "line": "Four dots this week, load 118. Steady.",
+      "reason": "grounding: four not in payload"
+    },
+    {
+      "line": "You crushed it, load 118.",
+      "reason": "ban: 'crush'"
+    },
+    {
+      "line": "Keep the chain going, load 118.",
+      "reason": "ban: 'keep the streak'"
     }
   ]
 }

@@ -132,7 +132,7 @@ is no separate process to supervise. Config: `[scheduler]` and `[backup]` in
 | `metrics_recompute` | 60 s after start, then every `metrics.recompute_minutes` (15 min) | recomputes every `daily_metrics` / `weekly_metrics` row from the stored tables; picks up whatever the last push brought; section 17 |
 | `metrics_rollover` | `metrics.rollover_time` (00:05 America/New_York) | the same recompute, so the new day's and (on Monday) the new week's rows exist when the renderer looks them up |
 | `goodreads_poll` | `pull.goodreads` (06:30 America/New_York), **only while `GOODREADS_RSS_URL` is set in `.env`**; plus once, three minutes after start, when no parsed feed arrived in the last 24 h | fetches the `read` shelf RSS, archives it, upserts `books`; section 17 |
-| `daily_summary` | `summary.time` (06:50 America/New_York), misfire grace 12 h | writes today's one-line summary into `daily_metrics` (model if a key is set and the cap allows, rule-based copy otherwise); a day that already has a line is not regenerated; section 17 |
+| `daily_summary` | `summary.time` (06:50 America/New_York), misfire grace 12 h | writes the line shown today, describing yesterday (the latest complete day), into today's `daily_metrics` row (model if a key is set and the cap allows, rule-based copy otherwise); a day that already has a line is not regenerated; section 18 |
 
 A job never overlaps itself, opens its own db connection per run, and an
 exception is logged (`job <id> failed` plus traceback in the err log), not fatal.
@@ -396,10 +396,14 @@ Catch-up: when the service starts and no parsed feed arrived in the last 24 h
 grace) the job runs once three minutes after start, then settles on 06:30.
 Because an unchanged shelf adds no raw row, a restart more than a day after the
 last shelf change also triggers that one poll; it costs one 300 KB fetch.
+
 ## 18. Summary (the daily line)
 
 The `daily_summary` job runs at `summary.time` (06:50 home time) and writes one
-sentence for the day into `daily_metrics.summary_device_line` (plus an optional
+sentence about yesterday, the latest complete day (health pushes cover whole days
+ending yesterday), into today's `daily_metrics.summary_device_line`, which the
+device shows all day. `--date D` means "the line shown on D" and describes D - 1
+(plus an optional
 `summary_web_line` and `summary_source`: `model` or `fallback`). Health data
 stays home: the model receives daily aggregates only (the payload is the exact
 set of numbers it may use), never raw samples or sub-day timestamps, and a test
@@ -418,9 +422,13 @@ grep -n "summary .* model unavailable" data/logs/life-dashboard.err.log | tail  
 Model: `summary.model` in `config.toml` (`claude-opus-5-5`), key `ANTHROPIC_API_KEY`
 in `.env`. No key → every day is rule-based copy and no call is attempted. Cap:
 `summary.monthly_cap_usd` (3). Before each call, month-to-date plus the worst
-case for that call (about $0.016) must stay under the cap; otherwise the day
+case for that call (about $0.022) must stay under the cap; otherwise the day
 falls back and the attempt is recorded as `cap: ...` in `summary_lines.attempts_json`.
 Read `--spend` before and after any round that calls the model.
+
+`tools.replay --verify` never compares the three `summary_*` keys: they are
+authored output, not a function of the raw archive. `--snapshot`/`--diff` keep
+them.
 
 A line the gate rejects (invented number, ban list, a named source twice in a
 week, too similar to a recent line) is regenerated once with the reason, then
