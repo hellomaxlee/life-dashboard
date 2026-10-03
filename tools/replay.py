@@ -16,6 +16,10 @@ live's last recompute (`metrics_state`) and compares them too; when live holds a
 newer than that recompute, or the engine never ran, they are left out and a note says so.
 --snapshot and --diff always include them.
 
+The summary's keys (`summary_device_line`, `summary_web_line`, `summary_source`) are authored
+output, not a function of the raw archive (the model's words differ run to run): --verify
+never compares them. --snapshot and --diff, which compare live with live, keep them.
+
 Replay order is raw_archive.id order (the order payloads were applied) whenever a db with
 raw_archive rows is available. Only payloads that were parsed are replayed. Files on disk
 with no row are reported as unrecorded and never applied. With no db at all (rebuilding from
@@ -39,6 +43,7 @@ from app.ingest import claude_usage, goodreads, health
 from app.ingest.health import archive_raw, raw_suffix, received_at_from_filename
 from app.metrics.engine import last_run, recompute
 from app.metrics.keys import DAILY_KEYS, WEEKLY_KEYS
+from app.summary.run import SUMMARY_KEYS
 from app.timeutil import from_utc_iso
 
 DATA_TABLES = (
@@ -54,6 +59,7 @@ DATA_TABLES = (
 )
 DERIVED_TABLES = ("load_bar_history",)
 DERIVED_KEYS = {"daily_metrics": DAILY_KEYS, "weekly_metrics": WEEKLY_KEYS}
+AUTHORED_KEYS = {"daily_metrics": SUMMARY_KEYS}
 PROVENANCE_COLUMNS = {"activity_sources": {"raw_archive_id"}}
 SCRATCH_DB = REPO_ROOT / "data" / "replay" / "scratch.db"
 INGESTERS = {
@@ -81,22 +87,30 @@ def _without_derived(row: dict[str, object], keys: frozenset[str]) -> dict[str, 
 
 
 def dump_table(
-    conn: sqlite3.Connection, table: str, derived: bool = True
+    conn: sqlite3.Connection, table: str, derived: bool = True, authored: bool = True
 ) -> list[dict[str, object]]:
     order = ", ".join(f'"{c}"' for c in _primary_key(conn, table))
     rows = conn.execute(f'SELECT * FROM "{table}" ORDER BY {order}').fetchall()
     skip = PROVENANCE_COLUMNS.get(table, set())
     dumped = [{k: v for k, v in dict(r).items() if k not in skip} for r in rows]
-    if derived or table not in DERIVED_KEYS:
+    strip: frozenset[str] = frozenset()
+    if not derived:
+        strip |= DERIVED_KEYS.get(table, frozenset())
+    if not authored:
+        strip |= AUTHORED_KEYS.get(table, frozenset())
+    if not strip:
         return dumped
-    stripped = (_without_derived(row, DERIVED_KEYS[table]) for row in dumped)
+    stripped = (_without_derived(row, strip) for row in dumped)
     return [row for row in stripped if row is not None]
 
 
-def snapshot(conn: sqlite3.Connection, derived: bool = False) -> dict[str, list[dict[str, object]]]:
-    """The data tables. With `derived` the metrics engine's keys and tables are included."""
+def snapshot(
+    conn: sqlite3.Connection, derived: bool = False, authored: bool = True
+) -> dict[str, list[dict[str, object]]]:
+    """The data tables. With `derived` the metrics engine's keys and tables are included;
+    without `authored` the summary's keys are left out."""
     tables = DATA_TABLES + DERIVED_TABLES if derived else DATA_TABLES
-    return {table: dump_table(conn, table, derived) for table in tables}
+    return {table: dump_table(conn, table, derived, authored) for table in tables}
 
 
 def checksum(snap: dict[str, list[dict[str, object]]]) -> str:
@@ -253,8 +267,8 @@ def verify(settings: Settings, scratch_db: Path) -> tuple[list[str], list[str]]:
             if clock is not None:
                 recompute(scratch, settings, clock[0], from_utc_iso(clock[1]))
             lines = diff(
-                snapshot(live, derived=clock is not None),
-                snapshot(scratch, derived=clock is not None),
+                snapshot(live, derived=clock is not None, authored=False),
+                snapshot(scratch, derived=clock is not None, authored=False),
             )
         finally:
             scratch.close()

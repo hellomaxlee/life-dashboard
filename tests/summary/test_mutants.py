@@ -77,6 +77,30 @@ MUTANTS = (
         ),
     ),
     Mutant(
+        "gate ignores number words",
+        "app/summary/gate.py",
+        "for token, value, kind in counted_numbers(text):",
+        "for token, value, kind in []:",
+        (
+            "test_invented_number_words_fail_grounding[Four dots",
+            "test_hated_lines_fail_with_the_named_reason[Four dots",
+        ),
+    ),
+    Mutant(
+        "ban list matches only the bare word, not its inflections",
+        "app/summary/gate.py",
+        '("crush", r"\\bcrush\\w*"),',
+        '("crush", r"\\bcrush\\b"),',
+        ("test_ban_list_catches_inflections[You crushed it.]",),
+    ),
+    Mutant(
+        "replay --verify compares the summary's keys",
+        "tools/replay.py",
+        "strip |= AUTHORED_KEYS.get(table, frozenset())",
+        "strip |= frozenset()",
+        ("test_verify_stays_green_after_a_summary",),
+    ),
+    Mutant(
         "similarity gate threshold off",
         "app/summary/gate.py",
         "if score > threshold:",

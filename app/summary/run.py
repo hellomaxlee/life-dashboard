@@ -1,4 +1,7 @@
-"""write_summary: build the payload, check the cap, call the model (or not), gate the line,
+"""write_summary(conn, settings, D): the line shown on day D. It describes D - 1, the latest
+complete day, and is stored under D's `daily_metrics` row (ruling 2026-10-02).
+
+Build the payload, check the cap, call the model (or not), gate the line,
 regenerate once, fall back, store. Idempotent per day: a stored line is returned without a
 call unless `force`.
 
@@ -15,7 +18,6 @@ import sqlite3
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Protocol
-from zoneinfo import ZoneInfo
 
 import anthropic
 
@@ -32,6 +34,7 @@ log = logging.getLogger(__name__)
 DEVICE_KEY = "summary_device_line"
 WEB_KEY = "summary_web_line"
 SOURCE_KEY = "summary_source"
+SUMMARY_KEYS = frozenset({DEVICE_KEY, WEB_KEY, SOURCE_KEY})
 MAX_MODEL_ATTEMPTS = 2
 
 
@@ -159,8 +162,7 @@ def write_summary(
                 stored.attempts,
             )
 
-    hour = moment.astimezone(ZoneInfo(settings.home_tz)).hour
-    payload = build_payload(conn, settings, day_local, hour)
+    payload = build_payload(conn, settings, day_local)
     recent = memory.recent_before(conn, day_local)
     threshold = settings.summary.similarity_threshold
     attempts: list[dict] = []

@@ -17,6 +17,10 @@ from tests.summary.conftest import golden_cases, payload_for, seed
 THRESHOLD = 0.5
 
 
+def shown(day: str) -> str:
+    return (date.fromisoformat(day) + timedelta(days=1)).isoformat()
+
+
 def with_lens(payload: Payload, lens: str) -> Payload:
     data = dict(payload.data, lens=lens)
     return Payload(payload.day_local, lens, payload.cell, data)
@@ -67,7 +71,7 @@ def test_last_resort_when_every_candidate_collides_still_shows_a_line(db, settin
     recent = Recent(similarity_lines=tuple(candidates(payload)))
     result = fallback_line(payload, recent, THRESHOLD)
     assert result.last_resort
-    assert result.line.startswith("No workout, 7.4 h of sleep.")
+    assert result.line.startswith("No workout yesterday, 7.4 h of sleep.")
     assert "similarity not checked" in result.gate.reason
     assert result.line != ULTIMATE_LINE
 
@@ -117,7 +121,7 @@ def test_classification_reads_flags_and_infers_only_what_the_data_supports(db, s
 def test_payload_rounds_to_what_the_line_may_say(db, settings):
     payload = payload_for(db, settings, golden_cases()[0])
     assert payload.data["load"] == {"trimp": 118, "acute": 410, "chronic": 380, "balance": 1.1}
-    assert payload.data["today"]["sleep_hours"] == 7.4
+    assert payload.data["day"]["sleep_hours"] == 7.4
     assert payload.data["week"]["dots_word"] == "third"
     assert "wellness_fact" not in payload.data
     assert payload.data["books"] == {"ytd": 3, "target": 12}
@@ -135,17 +139,17 @@ def test_payload_takes_workout_minutes_from_activities_when_the_engine_did_not_w
         "INSERT INTO activities (id, type, start_utc, end_utc, duration_s) "
         "VALUES ('w1', 'run', '2026-10-02T22:00:00Z', '2026-10-02T22:52:00Z', 3120)"
     )
-    payload = payload_mod.build_payload(db, settings, "2026-10-02", 21)
-    assert payload.data["today"]["workout_minutes"] == 52
+    payload = payload_mod.build_payload(db, settings, "2026-10-03")
+    assert payload.data["day"]["workout_minutes"] == 52
     assert 52.0 in payload.numbers()
 
 
 def test_missing_rows_classify_as_health_delayed_and_never_crash(db, settings):
-    payload = payload_mod.build_payload(db, settings, "2026-11-11", 7)
+    payload = payload_mod.build_payload(db, settings, "2026-11-11")
     assert payload.cell.completeness == "health-delayed"
     assert payload.cell.streak_state == "never-started"
     assert fallback_line(payload, Recent(), THRESHOLD).line.startswith(
-        "Health data has not arrived"
+        "Yesterday's health data has not arrived"
     )
 
 
@@ -158,6 +162,6 @@ def test_malformed_metrics_json_is_treated_as_missing(db, settings):
         (json.dumps({"sleep_hours": "seven", "steps": True, "workout_load": float("nan")}),),
     )
     for day in ("2026-11-12", "2026-11-13"):
-        payload = payload_mod.build_payload(db, settings, day, 7)
-        assert payload.data["today"]["sleep_hours"] is None
+        payload = payload_mod.build_payload(db, settings, shown(day))
+        assert payload.data["day"]["sleep_hours"] is None
         assert fallback_line(payload, Recent(), THRESHOLD).gate.ok
