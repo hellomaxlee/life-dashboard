@@ -5,7 +5,9 @@ from __future__ import annotations
 
 from app.summary.payload import Payload
 
-MAX_TOKENS = 300
+# Thinking is always on for the pinned model and counts against max_tokens; 300 ended every
+# real call at stop_reason max_tokens before any text (first live call, 2026-10-03).
+MAX_TOKENS = 2000
 EFFORT = "low"
 DEVICE_LINE_MAX_CHARS = 110
 
