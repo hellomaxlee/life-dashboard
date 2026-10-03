@@ -339,11 +339,13 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.maxlee.life-dashboar
 curl -s http://127.0.0.1:8080/healthz
 ```
 
-`tools.migrate` is safe to repeat. Besides the schema it rewrites merged
-activities to the current canonical-copy rule (the copy with the most
-heart-rate samples names the activity); run it once after pulling the commit
-that introduced that rule, or `tools.replay --verify` reports those activities
-as differences. If step 3 or 4 fails: do not start the service; restore the
+`tools.migrate` is safe to repeat. Besides the schema it re-clusters every
+stored workout copy into activities by the current rule (notes.txt § Dedupe:
+clustering owns activities) and rewrites each activity from its canonical copy;
+run it once after pulling a commit that changes that rule (the issue #4 commit,
+migration 005, is one), or `tools.replay --verify` reports those activities as
+differences. After migration 005 the metrics engine ignores withdrawn workouts
+(deleted in Health); nothing else is asked of the operator. If step 3 or 4 fails: do not start the service; restore the
 backup from step 1 (section 12, `--overwrite-live`) and check out the previous
 commit. Starting the service without step 3 also migrates the schema (it does
 so at start), but it does not normalise old activities and gives you no chance
