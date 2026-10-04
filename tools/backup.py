@@ -446,10 +446,11 @@ def verify(
                 recorded.close()
             scratch = replay.replay(restored_raw, workdir / "replay.db", settings, plan=plan)
             try:
-                replayed = snapshot(scratch)
+                replayed = snapshot(scratch, authored=False)
             finally:
                 scratch.close()
-            problems.extend(f"raw replay vs backup: {line}" for line in diff(replayed, restored))
+            unauthored = _read(restored_db, lambda conn: snapshot(conn, authored=False))
+            problems.extend(f"raw replay vs backup: {line}" for line in diff(replayed, unauthored))
             notes.extend(plan.notes())
     return problems
 

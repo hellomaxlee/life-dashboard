@@ -227,6 +227,77 @@ def test_overdue_backup_is_caught_up_soon_after_start(client, jobs_settings):
     fresh.shutdown(wait=False)
 
 
+def test_summary_is_caught_up_after_a_start_past_its_time(db, jobs_settings, monkeypatch):
+    opener = lambda: open_db(jobs_settings.storage.db_path)  # noqa: E731
+    tz = ZoneInfo(jobs_settings.home_tz)
+    early = datetime(2026, 10, 2, 6, 0, tzinfo=tz)
+    within_grace = datetime(2026, 10, 2, 9, 0, tzinfo=tz)
+    beyond_grace = datetime(2026, 10, 2, 21, 30, tzinfo=tz)
+
+    def first_run(now: datetime) -> datetime | None:
+        """The catch-up run build_scheduler asked for, or None when it left it to the cron."""
+        scheduler = jobs.build_scheduler(jobs_settings, opener, now)
+        scheduler.start(paused=True)
+        try:
+            due = scheduler.get_job(jobs.SUMMARY_JOB).next_run_time
+            return None if (due.hour, due.minute) == (6, 50) else due
+        finally:
+            scheduler.shutdown(wait=False)
+
+    assert not jobs.summary_overdue(jobs_settings, opener, early)
+    assert first_run(early) is None
+    for late in (within_grace, beyond_grace):
+        assert jobs.summary_overdue(jobs_settings, opener, late)
+        assert first_run(late) == late + jobs.SUMMARY_CATCHUP_DELAY
+
+    monkeypatch.setattr(jobs, "now_utc", lambda: within_grace.astimezone(UTC))
+    assert jobs.run_daily_summary(jobs_settings, opener) == "fallback"
+    assert db.execute("SELECT COUNT(*) FROM summary_lines").fetchone()[0] == 1
+    for late in (within_grace, beyond_grace):
+        assert not jobs.summary_overdue(jobs_settings, opener, late)
+        assert first_run(late) is None
+    assert jobs.run_daily_summary(jobs_settings, opener) == "stored"
+    assert jobs.summary_overdue(jobs_settings, opener, within_grace + timedelta(days=1))
+
+
+def test_summary_catch_up_respects_the_monthly_cap(db, jobs_settings, monkeypatch):
+    from app.summary import run as summary_run
+
+    class NeverCalled:
+        class messages:  # noqa: N801
+            @staticmethod
+            def create(**kwargs):
+                raise AssertionError("the model was called over the cap")
+
+    capped = replace(
+        jobs_settings,
+        anthropic_api_key="test-key-never-sent",
+        summary=replace(jobs_settings.summary, monthly_cap_usd=0.0),
+    )
+    monkeypatch.setattr(summary_run, "make_client", lambda settings: NeverCalled())
+    now = datetime(2026, 10, 2, 9, 0, tzinfo=ZoneInfo(capped.home_tz))
+    monkeypatch.setattr(jobs, "now_utc", lambda: now.astimezone(UTC))
+    scheduler = jobs.build_scheduler(capped, lambda: open_db(capped.storage.db_path), now)
+    assert scheduler.get_job(jobs.SUMMARY_JOB).next_run_time == now + jobs.SUMMARY_CATCHUP_DELAY
+
+    scheduler.get_job(jobs.SUMMARY_JOB).func()
+
+    assert scheduler.job_stats[jobs.SUMMARY_JOB] == JobStats(runs=1)
+    line = db.execute("SELECT source, attempts_json FROM summary_lines").fetchone()
+    assert line["source"] == "fallback"
+    assert json.loads(line["attempts_json"])[0]["result"].startswith("cap:")
+    assert db.execute("SELECT COUNT(*) FROM model_spend").fetchone()[0] == 0
+
+
+def test_summary_catch_up_runs_when_the_db_cannot_say(jobs_settings, caplog):
+    def broken():
+        raise sqlite3.OperationalError("locked")
+
+    late = datetime(2026, 10, 2, 9, 0, tzinfo=ZoneInfo(jobs_settings.home_tz))
+    assert jobs.summary_overdue(jobs_settings, broken, late)
+    assert "cannot read today's line" in caplog.text
+
+
 def test_scheduler_is_off_unless_settings_enable_it(client, jobs_settings):
     assert jobs_settings.scheduler.enabled is False
     assert client.app.state.scheduler is None

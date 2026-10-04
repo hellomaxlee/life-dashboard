@@ -17,7 +17,7 @@ def test_status_page_before_and_after_push(client):
     bad = post_fixture(client, "malformed.json")
     assert bad.status_code == 422
     page = client.get("/").text
-    assert "Last push:" in page
+    assert "Last health push:" in page
     assert "EDT" in page or "EST" in page
     assert "A1B2C3D4-0003-4000-8000-000000000003" in page
     assert "malformed" in page

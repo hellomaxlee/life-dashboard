@@ -6,6 +6,7 @@ only: the described day's `daily_metrics` row, the `weekly_metrics` rows for the
 day's week and the two weeks before it, the title of a book whose effective date
 (`app.metrics.books.effective_date`, home timezone) is the described day, and the described
 day's workout minutes from `activities` when the engine did not write `workout_minutes`.
+`targets.load_bar` is the described week's `load_bar` as the engine stored it.
 Everything else is a label derived in code (cell, lens, dot word, weekday, week relation);
 labels carry no numbers. `numbers()` is the set the grounding gate checks against.
 
@@ -332,7 +333,10 @@ def build_payload(conn: sqlite3.Connection, settings: Settings, shown_day: str) 
             "ytd": _num((day_row or {}).get("books_ytd"), 0),
             "target": settings.books.target_per_year,
         },
-        "targets": {"sleep_hours": _truncated(settings.sleep_target_hours)},
+        "targets": {
+            "sleep_hours": _truncated(settings.sleep_target_hours),
+            "load_bar": _num((week_row or {}).get("load_bar"), 0),
+        },
     }
     fact = _wellness_fact(day_row)
     if fact is not None:

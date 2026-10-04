@@ -36,14 +36,16 @@ def _table(headers: list[str], rows: list[list[object]]) -> str:
 
 def render_status(conn: sqlite3.Connection, settings: Settings) -> str:
     last = conn.execute(
-        "SELECT received_at_utc FROM raw_archive ORDER BY received_at_utc DESC, id DESC LIMIT 1"
-    ).fetchone()
-    if last is None:
+        "SELECT source, MAX(received_at_utc) AS at FROM raw_archive GROUP BY source ORDER BY source"
+    ).fetchall()
+    if not last:
         last_line = "<p>No push received yet.</p>"
     else:
-        utc = last["received_at_utc"]
-        local = utc_iso_to_local_display(utc, settings.home_tz)
-        last_line = f"<p>Last push: <b>{escape(utc)}</b> ({escape(local)})</p>"
+        last_line = "".join(
+            f"<p>Last {escape(r['source'])} push: <b>{escape(r['at'])}</b> "
+            f"({escape(utc_iso_to_local_display(r['at'], settings.home_tz))})</p>"
+            for r in last
+        )
 
     counts = [
         [name, conn.execute(f'SELECT COUNT(*) AS n FROM "{name}"').fetchone()["n"]]

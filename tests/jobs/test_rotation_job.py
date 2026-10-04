@@ -16,7 +16,13 @@ from app.config import DeviceConfig, load_settings
 from app.db import open_db
 from app.jobs import rotation as rotation_job
 from app.jobs import scheduler as jobs
-from app.jobs.rotation import HOLDING, ROTATION_JOB, DeviceRotation, device_adapter
+from app.jobs.rotation import (
+    HOLDING,
+    ROTATION_JOB,
+    SEND_ERRORS,
+    DeviceRotation,
+    device_adapter,
+)
 from app.main import create_app
 from app.render.adapters.pixoo import PixooAdapter, PixooError
 from app.render.celebrate import sparkle_clip
@@ -302,8 +308,8 @@ def test_with_a_host_the_job_is_registered_and_sends_through_the_pixoo_adapter(d
     assert scheduler.job_stats[ROTATION_JOB] == jobs.JobStats(runs=1)
     assert {str(request.url) for request in seen} == {f"http://{HOST}/post"}
     commands = [json.loads(request.content)["Command"] for request in seen]
-    assert commands[0] == "Draw/GetHttpGifId"
-    assert commands[1:] == ["Draw/SendHttpGif"] * (len(seen) - 1) and len(seen) >= 2
+    assert commands[:2] == ["Draw/ResetHttpGifId", "Draw/GetHttpGifId"]
+    assert commands[2:] == ["Draw/SendHttpGif"] * (len(seen) - 2) and len(seen) >= 3
 
 
 def test_the_real_adapter_is_built_for_the_host_with_short_timeouts(jobs_settings):
@@ -361,8 +367,8 @@ def test_the_job_comes_back_after_a_restart_and_starts_from_the_first_screen(
         assert running.job_stats[ROTATION_JOB] == jobs.JobStats(runs=1)
         today = local_day(datetime.now(UTC), settings.home_tz)
         week = render_screen("week", view_from_db(db, settings, today), NOON)
-        assert seen[0] == {"Command": "Draw/GetHttpGifId"}
-        assert len(seen) == 1 + len(week.frames)
+        assert seen[:2] == [{"Command": "Draw/ResetHttpGifId"}, {"Command": "Draw/GetHttpGifId"}]
+        assert len(seen) == 2 + len(week.frames)
     assert schedulers[0] is not schedulers[1]
 
 
@@ -468,3 +474,33 @@ def test_every_win_belongs_to_the_day_the_today_screen_shows(db, jobs_settings):
     later = view_from_db(db, jobs_settings, "2026-10-02")
     assert later.day_shown == "2026-10-01"
     assert list(sequence_names(later)) == ["week", "today", "books"], "today's book waits a day"
+
+
+def test_a_device_that_stays_off_is_logged_once_not_every_tick(caplog):
+    stats: dict[str, jobs.JobStats] = {}
+    errors = iter(["timed out", "timed out", "timed out", "refused"])
+
+    def tick() -> None:
+        raise PixooError(next(errors))
+
+    run = jobs.guarded(ROTATION_JOB, tick, stats, quiet=SEND_ERRORS)
+    for _ in range(4):
+        run()
+    assert stats[ROTATION_JOB].failures == 4
+    lines = [r for r in caplog.records if f"job {ROTATION_JOB} failed" in r.getMessage()]
+    assert [("timed out" in r.getMessage(), r.exc_info) for r in lines] == [
+        (True, None),
+        (False, None),
+    ]
+
+    def boom() -> None:
+        raise PixooError("boom")
+
+    jobs.guarded("other", boom, {})()
+    assert caplog.records[-1].exc_info is not None
+
+
+def test_interval_jobs_run_once_after_a_sleep_instead_of_logging_a_miss(db, jobs_settings):
+    scheduler = jobs.build_scheduler(with_device(jobs_settings), opener(jobs_settings))
+    grace = {job.id: job.misfire_grace_time for job in scheduler.get_jobs()}
+    assert all(seconds is not None and seconds >= 6 for seconds in grace.values()), grace

@@ -54,6 +54,7 @@ STREAK_Y = 28
 SLEEP_BAR_HOURS = 10
 LINE_WIDTH = 60
 PAGE_MS = 2000
+TITLE_GAP = 3
 SUMMARY_MAX_CHARS = 110
 SUMMARY_LINE_YS = (45, 54)
 PAGE_PIP_Y = 63
@@ -265,7 +266,11 @@ def render_today(view: DayView, now: datetime | None = None) -> Clip:
     day = date.fromisoformat(view.day_shown or view.day_local)
     title = "TODAY" if view.day_shown in (None, view.day_local) else "YESTERDAY"
     draw_text(frame, LEFT, 2, title, LABEL, SMALL)
-    draw_text_right(frame, RIGHT, 2, f"{_WEEKDAYS[day.weekday()]} {day.day}", TEXT, SMALL)
+    weekday = _WEEKDAYS[day.weekday()]
+    stamp = f"{weekday} {day.day}"
+    if LEFT + text_width(title, SMALL) + TITLE_GAP > RIGHT + 1 - text_width(stamp, SMALL):
+        stamp = weekday
+    draw_text_right(frame, RIGHT, 2, stamp, TEXT, SMALL)
 
     draw_bitmap(frame, LEFT, 11, MOON, VIOLET)
     target_x = LEFT + int(view.sleep_target_hours / SLEEP_BAR_HOURS * 60)
@@ -431,6 +436,9 @@ def wrap_lines(text: str) -> list[str]:
             continue
         if current:
             lines.append(current)
+        bare = word.rstrip(_TRAILING)
+        if bare and text_width(bare, BODY) <= LINE_WIDTH < text_width(word, BODY):
+            word = bare
         while text_width(word, BODY) > LINE_WIDTH:
             cut = len(word) - 1
             while cut > 1 and text_width(word[:cut], BODY) > LINE_WIDTH:
@@ -461,7 +469,7 @@ def _draw_page_pips(frame: Frame, page: int, pages: int) -> None:
 def render_books(view: DayView) -> Clip:
     """Books this year on a shelf, and the day's one-line summary in pages underneath."""
     base = _books_base(view)
-    pages = wrap_pages(view.summary_line or NO_SUMMARY) or [(NO_SUMMARY,)]
+    pages = wrap_pages(view.summary_line or NO_SUMMARY) or wrap_pages(NO_SUMMARY)
     frames: list[Frame] = []
     for number, page in enumerate(pages):
         frame = base.copy()

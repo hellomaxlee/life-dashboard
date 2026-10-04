@@ -192,7 +192,7 @@ def view_from_metrics(
         workout_load=_number(daily.get(WORKOUT_LOAD)),
         load_bar=_number(weekly.get(WEEK_LOAD_BAR)),
         book_finished=daily.get(BOOK_FINISHED) is True,
-        sleep_hours=sleep if sleep is not None else _sleep(stored_sleep_hours),
+        sleep_hours=sleep if SLEEP_HOURS in daily else _sleep(stored_sleep_hours),
         sleep_target_hours=settings.sleep_target_hours,
         steps=steps if steps is not None else _whole(stored_steps),
         as_of_utc=_utc_iso(as_of_utc),

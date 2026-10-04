@@ -45,8 +45,8 @@ MUTANTS = (
     Mutant(
         "ban list ignores exclamation marks",
         "app/summary/gate.py",
-        'if "!" in line:',
-        'if "!" in line and False:',
+        'if "!" in fold(line):',
+        'if "!" in fold(line) and False:',
         ("test_hated_lines_fail_with_the_named_reason[Third dot this week, load 118. Well don",),
     ),
     Mutant(
@@ -92,6 +92,54 @@ MUTANTS = (
         '("crush", r"\\bcrush\\w*"),',
         '("crush", r"\\bcrush\\b"),',
         ("test_ban_list_catches_inflections[You crushed it.]",),
+    ),
+    Mutant(
+        "gate ignores a number word that stands away from a counted noun",
+        "app/summary/gate.py",
+        "if item.soft or (item.digits and not item.ordinal_digit):",
+        "if True:",
+        (
+            "test_ungrounded_number_forms_fail_grounding[Five this week",
+            "test_ungrounded_number_forms_fail_grounding[Twice this week]",
+        ),
+    ),
+    Mutant(
+        "gate reads digits only when nothing is glued in front",
+        "app/summary/gate.py",
+        "            found.extend(_glued_digits(token))",
+        "            pass",
+        ("test_ungrounded_number_forms_fail_grounding[x2 last week]",),
+    ),
+    Mutant(
+        "streak-anxiety bans match only 'the'",
+        "app/summary/gate.py",
+        'DETERMINER = r"(?:the|your|this|that|a|my|our)"',
+        'DETERMINER = r"(?:the)"',
+        (
+            "test_streak_anxiety_and_nagging_families_are_banned[Don't break your streak.]",
+            "test_streak_anxiety_and_nagging_families_are_banned[Keep your streak alive.]",
+        ),
+    ),
+    Mutant(
+        "ban list reads the line unfolded",
+        "app/summary/gate.py",
+        'return " ".join(WORD.findall(fold(text).lower()))',
+        'return " ".join(WORD.findall(text.lower()))',
+        ("test_streak_anxiety_and_nagging_families_are_banned[",),
+    ),
+    Mutant(
+        "attribution is case-sensitive again",
+        "app/summary/gate.py",
+        "    re.IGNORECASE,\n)\nSOURCE_SPEAKS",
+        "    0,\n)\nSOURCE_SPEAKS",
+        ("test_attribution_to_a_named_person_is_rejected[In the words of Seneca",),
+    ),
+    Mutant(
+        "an unexpected exception from the model call escapes",
+        "app/summary/run.py",
+        "    except Exception as exc:\n        log.exception(",
+        "    except ZeroDivisionError as exc:\n        log.exception(",
+        ("test_any_exception_from_the_call_falls_back_and_never_blanks[TypeError]",),
     ),
     Mutant(
         "replay --verify compares the summary's keys",

@@ -6,14 +6,15 @@ regenerate once, fall back, store. Idempotent per day: a stored line is returned
 call unless `force`.
 
 The model is "unavailable" when there is no API key, when the cap check refuses the call,
-when the SDK raises, and when the response's stop_reason is not end_turn; every one of those
-ends in rule-based copy, never an empty line.
+when the call raises anything at all, and when the response's stop_reason is not end_turn;
+every one of those ends in rule-based copy, never an empty line.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import re
 import sqlite3
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -36,6 +37,9 @@ WEB_KEY = "summary_web_line"
 SOURCE_KEY = "summary_source"
 SUMMARY_KEYS = frozenset({DEVICE_KEY, WEB_KEY, SOURCE_KEY})
 MAX_MODEL_ATTEMPTS = 2
+API_BASE_URL = "https://api.anthropic.com"
+FILLER = re.compile(r"^(?:sure|certainly|of course|okay|ok)[\s,.]*$", re.IGNORECASE)
+LABEL = re.compile(r"^here(?:'s|\s+is|\s+are)\b[^:]{0,40}:\s*", re.IGNORECASE)
 
 
 class MessagesClient(Protocol):
@@ -65,7 +69,9 @@ class SummaryResult:
 def make_client(settings: Settings) -> anthropic.Anthropic | None:
     if not settings.anthropic_api_key:
         return None
-    return anthropic.Anthropic(api_key=settings.anthropic_api_key, timeout=30, max_retries=1)
+    return anthropic.Anthropic(
+        api_key=settings.anthropic_api_key, base_url=API_BASE_URL, timeout=30, max_retries=1
+    )
 
 
 def build_request(payload: Payload, recent: Recent, settings: Settings, rejection: str | None):
@@ -91,9 +97,11 @@ def _usage_of(response: Any) -> spend.Usage:
 
 
 def call_model(client: MessagesClient, request: dict) -> ModelReply | str:
-    """One call. Returns the reply, or a string naming why the model is unavailable."""
+    """One call. Returns the reply, or a string naming why the model is unavailable.
+
+    Nothing raised by the call or by reading its response escapes: the caller falls back."""
     try:
-        response = client.messages.create(**request)
+        return _reply_of(client.messages.create(**request))
     except anthropic.AuthenticationError as exc:
         return f"authentication error: {exc.__class__.__name__}"
     except anthropic.RateLimitError as exc:
@@ -102,6 +110,14 @@ def call_model(client: MessagesClient, request: dict) -> ModelReply | str:
         return f"api status {getattr(exc, 'status_code', '?')}: {exc.__class__.__name__}"
     except anthropic.APIConnectionError as exc:
         return f"connection error: {exc.__class__.__name__}"
+    except anthropic.APIError as exc:
+        return f"api error: {exc.__class__.__name__}"
+    except Exception as exc:
+        log.exception("summary: the model call raised outside the SDK's error types")
+        return f"unexpected error: {exc.__class__.__name__}"
+
+
+def _reply_of(response: Any) -> ModelReply:
     blocks = getattr(response, "content", []) or []
     text = "\n".join(b.text for b in blocks if getattr(b, "type", "") == "text")
     return ModelReply(
@@ -113,7 +129,13 @@ def call_model(client: MessagesClient, request: dict) -> ModelReply | str:
 
 
 def split_reply(text: str) -> tuple[str, str | None]:
+    """(device line, web line). A leading label or preamble ("Here is the line:") is not the
+    line; when nothing follows it the device line is empty and the gate rejects it."""
     lines = [ln.strip().strip('"').strip() for ln in text.splitlines() if ln.strip()]
+    while lines and (lines[0].endswith(":") or FILLER.match(lines[0])):
+        lines = lines[1:]
+    if lines:
+        lines[0] = LABEL.sub("", lines[0]).strip('"').strip()
     if not lines:
         return "", None
     return lines[0], (lines[1] if len(lines) > 1 else None)

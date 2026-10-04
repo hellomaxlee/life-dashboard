@@ -25,11 +25,13 @@ from app.ingest import goodreads
 from app.ingest.claude_usage import read_usage_file
 from app.jobs.rotation import (
     ROTATION_JOB,
+    SEND_ERRORS,
     ClipAdapter,
     DeviceRotation,
     device_adapter,
 )
 from app.metrics.job import RECOMPUTE_JOB, ROLLOVER_JOB, run_recompute
+from app.summary import memory
 from app.summary.run import write_summary
 from app.timeutil import from_utc_iso, local_day, now_utc
 from tools import backup
@@ -43,6 +45,7 @@ CORE_JOBS = frozenset(
     {USAGE_JOB, BACKUP_JOB, BACKUP_CHECK_JOB, SUMMARY_JOB, RECOMPUTE_JOB, ROLLOVER_JOB}
 )
 SUMMARY_MISFIRE_GRACE_S = 12 * 3600
+SUMMARY_CATCHUP_DELAY = timedelta(minutes=4)
 RECOMPUTE_FIRST_DELAY = timedelta(seconds=60)
 BACKUP_MISFIRE_GRACE_S = 18 * 3600
 BACKUP_OVERDUE = timedelta(hours=26)
@@ -64,8 +67,15 @@ class JobStats:
     last_error: str | None = None
 
 
-def guarded(name: str, fn: Callable[[], object], stats: dict[str, JobStats]) -> Callable[[], None]:
-    """Wrap a job so an exception is logged and counted, never raised into the scheduler."""
+def guarded(
+    name: str,
+    fn: Callable[[], object],
+    stats: dict[str, JobStats],
+    quiet: tuple[type[Exception], ...] = (),
+) -> Callable[[], None]:
+    """Wrap a job so an exception is logged and counted, never raised into the scheduler.
+    A `quiet` exception is one line with no traceback, and only when it differs from the
+    last failure, so a device that is switched off does not fill the log."""
     record = stats.setdefault(name, JobStats())
 
     def run() -> None:
@@ -75,8 +85,12 @@ def guarded(name: str, fn: Callable[[], object], stats: dict[str, JobStats]) -> 
             record.last_error = None
         except Exception as exc:
             record.failures += 1
-            record.last_error = f"{type(exc).__name__}: {exc}"
-            log.exception("job %s failed", name)
+            error = f"{type(exc).__name__}: {exc}"
+            if not isinstance(exc, quiet):
+                log.exception("job %s failed", name)
+            elif error != record.last_error:
+                log.error("job %s failed: %s (repeats are not logged)", name, error)
+            record.last_error = error
 
     return run
 
@@ -202,6 +216,25 @@ def run_daily_summary(settings: Settings, open_conn: OpenConn) -> str:
     return result.source
 
 
+def summary_overdue(settings: Settings, open_conn: OpenConn, now: datetime) -> bool:
+    """True when today's summary time has passed and today has no stored line, or the db
+    cannot say. A start after 06:50 would otherwise show no line until tomorrow."""
+    tz = ZoneInfo(settings.home_tz)
+    hour, minute = parse_hh_mm(settings.summary.time)
+    local = now.astimezone(tz)
+    if (local.hour, local.minute) < (hour, minute):
+        return False
+    try:
+        conn = open_conn()
+        try:
+            return memory.stored_line(conn, local_day(now, settings.home_tz)) is None
+        finally:
+            conn.close()
+    except Exception:
+        log.exception("%s: cannot read today's line; writing it soon", SUMMARY_JOB)
+        return True
+
+
 def stop_scheduler(scheduler: BackgroundScheduler) -> bool:
     """Shut the scheduler down, letting running jobs finish for at most SHUTDOWN_WAIT_S.
 
@@ -248,6 +281,7 @@ def build_scheduler(
         guarded(USAGE_JOB, watcher.tick, stats),
         IntervalTrigger(seconds=settings.scheduler.usage_poll_seconds, timezone=tz),
         id=USAGE_JOB,
+        misfire_grace_time=settings.scheduler.usage_poll_seconds,
     )
 
     hour, minute = parse_hh_mm(settings.backup.time)
@@ -262,6 +296,7 @@ def build_scheduler(
         guarded(BACKUP_CHECK_JOB, lambda: backup_if_overdue(settings, now_utc()), stats),
         IntervalTrigger(seconds=int(BACKUP_CHECK_EVERY.total_seconds()), timezone=tz),
         id=BACKUP_CHECK_JOB,
+        misfire_grace_time=int(BACKUP_CHECK_EVERY.total_seconds()),
         next_run_time=moment + BACKUP_CATCHUP_DELAY,
     )
 
@@ -282,16 +317,21 @@ def build_scheduler(
                 **first_run,
             )
     summary_hour, summary_minute = parse_hh_mm(settings.summary.time)
+    first_summary = {}
+    if summary_overdue(settings, open_conn, moment):
+        first_summary = {"next_run_time": moment + SUMMARY_CATCHUP_DELAY}
     scheduler.add_job(
         guarded(SUMMARY_JOB, lambda: run_daily_summary(settings, open_conn), stats),
         CronTrigger(hour=summary_hour, minute=summary_minute, timezone=tz),
         id=SUMMARY_JOB,
         misfire_grace_time=SUMMARY_MISFIRE_GRACE_S,
+        **first_summary,
     )
     scheduler.add_job(
         guarded(RECOMPUTE_JOB, lambda: run_recompute(settings, open_conn), stats),
         IntervalTrigger(minutes=settings.metrics.recompute_minutes, timezone=tz),
         id=RECOMPUTE_JOB,
+        misfire_grace_time=settings.metrics.recompute_minutes * 60,
         next_run_time=moment + RECOMPUTE_FIRST_DELAY,
     )
     roll_hour, roll_minute = parse_hh_mm(settings.metrics.rollover_time)
@@ -309,7 +349,7 @@ def build_scheduler(
             log.exception("%s not registered: bad [device] config", ROTATION_JOB)
         else:
             rotation = DeviceRotation(settings, open_conn, adapter)
-            tick = guarded(ROTATION_JOB, rotation.tick, stats)
+            tick = guarded(ROTATION_JOB, rotation.tick, stats, quiet=SEND_ERRORS)
 
             def run_rotation() -> None:
                 """One slot, then move the next run to when its hold is up, so no run

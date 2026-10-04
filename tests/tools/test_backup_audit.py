@@ -43,6 +43,20 @@ def test_verify_is_repeatable_on_an_untouched_backup(good, settings):
     assert backup.verify(good, settings) == []
 
 
+def test_a_day_with_a_summary_line_still_verifies(client, db, settings, tmp_path):
+    post_fixture(client, "metrics_v2_days.json")
+    day = db.execute("SELECT day_local FROM steps_daily LIMIT 1").fetchone()[0]
+    line = json.dumps({"summary_device_line": "Rest day.", "summary_source": "rules"})
+    db.execute(
+        "INSERT INTO daily_metrics VALUES (?, ?) ON CONFLICT (day_local) DO UPDATE SET "
+        "metrics_json = json_patch(metrics_json, excluded.metrics_json)",
+        (day, line),
+    )
+    db.commit()
+    made = backup.create_backup(settings, tmp_path / "with-summary").path
+    assert backup.verify(made, settings) == []
+
+
 def test_reading_a_backup_does_not_change_it(good, settings):
     assert backup.integrity(good / backup.DB_NAME) == "ok"
     backup.data_checksum(good / backup.DB_NAME)

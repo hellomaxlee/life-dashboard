@@ -17,6 +17,7 @@ only).
 from __future__ import annotations
 
 import ast
+import ipaddress
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -26,7 +27,9 @@ SCAN_DIRS = ("app", "tools")
 
 ALLOWED_HOSTS = frozenset({"www.goodreads.com", "goodreads.com", "api.anthropic.com"})
 LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "0.0.0.0"})
-LAN_PREFIX = "192.168."
+LAN_NETWORKS = tuple(
+    ipaddress.ip_network(net) for net in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16")
+)
 
 BANNED_IMPORTS = (
     ("requests",),
@@ -81,8 +84,18 @@ def host_from_url(url: str) -> str | None:
     return netloc.split(":", 1)[0].lower()
 
 
+def is_lan_address(host: str) -> bool:
+    """A literal IPv4 address in a private range, the Pixoo adapter's `require_lan_host`
+    rule. A hostname that merely starts like one ("192.168.evil.example.com") is not."""
+    try:
+        address = ipaddress.IPv4Address(host)
+    except ValueError:
+        return False
+    return any(address in network for network in LAN_NETWORKS)
+
+
 def host_allowed(host: str) -> bool:
-    return host in ALLOWED_HOSTS or host in LOOPBACK_HOSTS or host.startswith(LAN_PREFIX)
+    return host in ALLOWED_HOSTS or host in LOOPBACK_HOSTS or is_lan_address(host)
 
 
 def looks_like_host(value: str) -> bool:
@@ -277,6 +290,19 @@ def test_allowlisted_and_lan_hosts_pass(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     assert scan_tree(tmp_path) == []
+
+
+def test_a_hostname_that_starts_like_a_lan_address_is_not_a_lan_host(tmp_path: Path) -> None:
+    for host in ("192.168.evil.example.com", "192.168.1.5.example.com", "10.evil.example.com"):
+        assert not host_allowed(host), host
+        violations = _scan_one(
+            tmp_path / host, "app", f'import httpx\n\nhttpx.get("https://{host}/x")\n'
+        )
+        assert [(v.kind, v.detail) for v in violations] == [("url", host)]
+    for host in ("192.168.1.171", "10.0.0.7", "172.16.4.2"):
+        assert host_allowed(host), host
+    for host in ("172.32.0.1", "192.169.1.1", "8.8.8.8", "192.168.1"):
+        assert not host_allowed(host), host
 
 
 def _scan_one(tmp_path: Path, folder: str, source: str) -> list[Violation]:

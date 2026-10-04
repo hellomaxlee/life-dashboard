@@ -9,6 +9,9 @@ Protocol as understood: every command is a JSON POST to the device's `/post` pat
 `Draw/GetHttpGifId` returns the next animation id; each frame then goes as one
 `Draw/SendHttpGif` with PicNum (frame count), PicOffset (frame index), PicWidth 64, PicSpeed
 (ms) and PicData (base64 of 64*64*3 raw RGB bytes). A reply's `error_code` is 0 on success.
+`Draw/ResetHttpGifId` goes out before the first clip and then every RESET_EVERY clips:
+community clients report the panel stops answering after about 300 animations without it,
+which a rotation reaches in half an hour.
 
 Assumptions to check on hardware:
 - an animation holds fewer than 60 frames. A clip over frame.MAX_CLIP_FRAMES is refused
@@ -26,6 +29,7 @@ from __future__ import annotations
 
 import base64
 import ipaddress
+import json
 import time
 from dataclasses import dataclass
 
@@ -35,6 +39,7 @@ from app.config import Settings
 from app.render.frame import MAX_CLIP_FRAMES, SIZE, Clip
 
 TIMEOUT_S = 5.0
+RESET_EVERY = 32
 LAN_NETWORKS = tuple(
     ipaddress.IPv4Network(net) for net in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16")
 )
@@ -62,8 +67,9 @@ def require_lan_host(host: str) -> str:
 
 
 class PixooAdapter:
-    """`timeout_s` bounds each phase of one command; `send_budget_s`, when set, bounds a whole
-    clip: once it is spent, the remaining frames are not sent and the send raises."""
+    """`timeout_s` bounds each phase of one command and twice that bounds its whole reply, so
+    a device that drips bytes cannot hold a command open; `send_budget_s`, when set, bounds a
+    whole clip: once it is spent, the remaining frames are not sent and the send raises."""
 
     def __init__(
         self,
@@ -74,14 +80,22 @@ class PixooAdapter:
     ) -> None:
         self.host = require_lan_host(host)
         self._client = client or httpx.Client(timeout=timeout_s, trust_env=False)
+        self._command_budget_s = 2 * timeout_s
         self._send_budget_s = send_budget_s
+        self._since_reset: int | None = None
 
     def _command(self, body: dict[str, object]) -> dict[str, object]:
         url = f"http://{self.host}/post"
+        deadline = time.monotonic() + self._command_budget_s
         try:
-            response = self._client.post(url, json=body)
-            response.raise_for_status()
-            reply = response.json()
+            with self._client.stream("POST", url, json=body) as response:
+                response.raise_for_status()
+                chunks = []
+                for chunk in response.iter_bytes():
+                    chunks.append(chunk)
+                    if time.monotonic() >= deadline:
+                        raise httpx.ReadTimeout("reply took over the command budget")
+            reply = json.loads(b"".join(chunks))
         except (httpx.HTTPError, ValueError) as exc:
             raise PixooError(f"{body.get('Command')}: {exc}") from exc
         if not isinstance(reply, dict) or reply.get("error_code") != 0:
@@ -95,6 +109,10 @@ class PixooAdapter:
             raise PixooError(f"clip has {count} frames; the device limit is {MAX_CLIP_FRAMES}")
         budget = self._send_budget_s
         deadline = None if budget is None else time.monotonic() + budget
+        if self._since_reset is None or self._since_reset >= RESET_EVERY:
+            self._command({"Command": "Draw/ResetHttpGifId"})
+            self._since_reset = 0
+        self._since_reset += 1
         reply = self._command({"Command": "Draw/GetHttpGifId"})
         pic_id = reply.get("PicId")
         if isinstance(pic_id, bool) or not isinstance(pic_id, int):

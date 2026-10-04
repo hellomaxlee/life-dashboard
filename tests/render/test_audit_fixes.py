@@ -10,11 +10,14 @@ import httpx
 import pytest
 
 from app.render.adapters.pixoo import PixooAdapter
+from app.render.celebrate import earned_wins
+from app.render.font import BODY, SMALL, text_width
 from app.render.frame import Clip, new_frame
 from app.render.rotation import render_screen
 from app.render.screens import (
     as_of_label,
     fit_summary,
+    render_books,
     render_today,
     render_week,
     wrap_lines,
@@ -307,7 +310,7 @@ def test_adapter_sends_each_frame_its_own_duration():
     client = httpx.Client(transport=httpx.MockTransport(handler))
     frame = new_frame()
     PixooAdapter(HOST, client).send(Clip((frame,) * 3, (100, 250, 1200)))
-    assert [b["PicSpeed"] for b in bodies[1:]] == [100, 250, 1200]
+    assert [b["PicSpeed"] for b in bodies[2:]] == [100, 250, 1200]
 
 
 def test_party_is_earned_at_the_target_not_only_above(settings):
@@ -408,3 +411,43 @@ def test_today_screen_is_headed_yesterday_only_when_it_shows_the_day_before(
     drawn.clear()
     render_today(sunday)
     assert [item[0] for item in drawn if item[2] == 2] == ["TODAY", "SUN 4"]
+
+
+def test_a_null_sleep_row_is_not_overridden_by_a_stored_session(settings):
+    daily = {"sleep_hours": None, "sleep_win": False}
+    view = view_from_metrics("2026-10-06", daily, {}, settings, stored_sleep_hours=7.5)
+    assert view.sleep_hours is None
+    assert "sleep" not in earned_wins(view)
+    interim = view_from_metrics("2026-10-06", {}, {}, settings, stored_sleep_hours=7.5)
+    assert interim.sleep_hours == 7.5
+
+
+def test_a_word_one_mark_too_wide_drops_the_mark_instead_of_splitting(settings):
+    from app.render.screens import LINE_WIDTH
+
+    lines = wrap_lines("sleep unrecorded; the walking counts")
+    assert lines[:2] == ["sleep", "unrecorded"]
+    assert lines[2].startswith("the")
+    assert all(text_width(line, BODY) <= LINE_WIDTH for line in lines)
+    assert wrap_lines("rest day; walk")[0] == "rest day;"
+
+
+def test_a_summary_with_no_drawable_character_wraps_the_placeholder(settings):
+    view, _ = load(WEEK_41, settings)
+    for line in ("😀🎉", "中文"):
+        clip = render_books(replace(view, summary_line=line))
+        assert (
+            clip.frames[0].tobytes()
+            == render_books(replace(view, summary_line=None)).frames[0].tobytes()
+        )
+        assert clip.frames[0].crop((62, 45, 64, 62)).getbbox() is None
+
+
+@pytest.mark.parametrize("day", ["2026-09-28", "2026-09-30", "2026-10-13", "2026-10-03"])
+def test_the_yesterday_header_never_touches_the_date(day, settings):
+    view, now = load(WEEK_41, settings)
+    frame = render_today(replace(view, day_local="2026-12-25", day_shown=day), now).frames[0]
+    title_end = 2 + text_width("YESTERDAY", SMALL)
+    gap = frame.crop((title_end, 0, title_end + 3, 9))
+    assert gap.getbbox() is None
+    assert frame.crop((title_end + 3, 0, 64, 9)).getbbox() is not None

@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import base64
 import json
+import time
 from pathlib import Path
 
 import httpx
 import pytest
 
 from app.render.adapters.pixoo import (
+    RESET_EVERY,
     PixooAdapter,
     PixooError,
     pixoo_from_settings,
@@ -40,10 +42,11 @@ def test_still_frame_goes_as_one_send_http_gif(settings):
     seen: list[httpx.Request] = []
     report = PixooAdapter(HOST, fake_device(seen)).send(clip)
     assert (report.pic_id, report.frames_sent) == (7, 1)
-    assert [str(r.url) for r in seen] == [f"http://{HOST}/post"] * 2
+    assert [str(r.url) for r in seen] == [f"http://{HOST}/post"] * 3
     assert all(r.method == "POST" for r in seen)
-    assert json.loads(seen[0].content) == {"Command": "Draw/GetHttpGifId"}
-    body = json.loads(seen[1].content)
+    assert json.loads(seen[0].content) == {"Command": "Draw/ResetHttpGifId"}
+    assert json.loads(seen[1].content) == {"Command": "Draw/GetHttpGifId"}
+    body = json.loads(seen[2].content)
     data = base64.b64decode(body.pop("PicData"))
     assert body == {
         "Command": "Draw/SendHttpGif",
@@ -64,7 +67,7 @@ def test_clip_sends_each_frame_with_its_offset_and_duration(settings):
     seen: list[httpx.Request] = []
     report = PixooAdapter(HOST, fake_device(seen)).send(clip)
     assert report.frames_sent == 16
-    bodies = [json.loads(r.content) for r in seen[1:]]
+    bodies = [json.loads(r.content) for r in seen[2:]]
     assert [b["PicOffset"] for b in bodies] == list(range(16))
     assert {b["PicNum"] for b in bodies} == {16}
     assert {b["PicSpeed"] for b in bodies} == {250}
@@ -78,9 +81,34 @@ def test_paged_books_clip_goes_whole_with_its_page_durations(settings):
     seen: list[httpx.Request] = []
     report = PixooAdapter(HOST, fake_device(seen)).send(books)
     assert report.frames_sent == len(books.frames)
-    bodies = [json.loads(r.content) for r in seen[1:]]
+    bodies = [json.loads(r.content) for r in seen[2:]]
     assert [b["PicSpeed"] for b in bodies] == [2000] * len(books.frames)
     assert base64.b64decode(bodies[-1]["PicData"]) == books.frames[-1].tobytes()
+
+
+def test_gif_id_is_reset_before_the_first_clip_and_every_32_after(settings):
+    view, now = load(WEEK_41, settings)
+    clip = rotation(view, now)["week"]
+    seen: list[httpx.Request] = []
+    adapter = PixooAdapter(HOST, fake_device(seen))
+    for _ in range(2 * RESET_EVERY + 1):
+        adapter.send(clip)
+    commands = [json.loads(r.content)["Command"] for r in seen]
+    sends = [commands[: i + 1].count("Draw/SendHttpGif") for i, c in enumerate(commands)]
+    resets_after = [sends[i] for i, c in enumerate(commands) if c == "Draw/ResetHttpGifId"]
+    assert RESET_EVERY == 32
+    assert resets_after == [0, 32, 64]
+
+
+def test_a_failed_reset_is_tried_again_on_the_next_clip(settings):
+    view, now = load(WEEK_41, settings)
+    clip = rotation(view, now)["week"]
+    seen: list[httpx.Request] = []
+    adapter = PixooAdapter(HOST, fake_device(seen, fail_on="Draw/ResetHttpGifId"))
+    for _ in range(2):
+        with pytest.raises(PixooError, match="Draw/ResetHttpGifId"):
+            adapter.send(clip)
+    assert [json.loads(r.content)["Command"] for r in seen] == ["Draw/ResetHttpGifId"] * 2
 
 
 def test_device_error_raises(settings):
@@ -119,11 +147,11 @@ def test_send_budget_stops_a_slow_clip_between_frames(settings):
     seen: list[httpx.Request] = []
     with pytest.raises(PixooError, match="send budget at frame 0 of 16"):
         PixooAdapter(HOST, fake_device(seen), send_budget_s=0).send(clip)
-    assert len(seen) == 1
+    assert len(seen) == 2
     assert PixooAdapter(HOST, fake_device([]), send_budget_s=60).send(clip).frames_sent == 16
 
 
-def test_disabled_by_default_and_only_the_rotation_job_calls_it(settings):
+def test_disabled_by_default_and_only_the_rotation_job_and_the_hand_check_call_it(settings):
     assert settings.device.pixoo_host == ""
     assert pixoo_from_settings(settings) is None
     users = []
@@ -134,4 +162,26 @@ def test_disabled_by_default_and_only_the_rotation_job_calls_it(settings):
                 name in text for name in ("PixooAdapter", "pixoo_from_settings", "adapters.pixoo")
             ):
                 users.append(str(path.relative_to(REPO_ROOT)))
-    assert users == ["app/jobs/rotation.py"]
+    assert sorted(users) == ["app/jobs/rotation.py", "tools/pixoo_check.py"]
+
+
+def test_a_reply_that_drips_past_the_command_budget_fails_the_send(settings):
+    view, now = load(WEEK_41, settings)
+    clip = rotation(view, now)["week"]
+
+    class Drip(httpx.SyncByteStream):
+        def __iter__(self):
+            for byte in b'{"error_code": 0, "PicId": 1}':
+                time.sleep(0.01)
+                yield bytes([byte])
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, stream=Drip())
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    slow = PixooAdapter(HOST, client, timeout_s=0.02)
+    started = time.monotonic()
+    with pytest.raises(PixooError, match="Draw/ResetHttpGifId: reply took over"):
+        slow.send(clip)
+    assert time.monotonic() - started < 0.2
+    assert PixooAdapter(HOST, client, timeout_s=5).send(clip).frames_sent == 1

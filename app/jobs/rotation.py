@@ -18,7 +18,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Protocol
 
 from app.config import Settings
-from app.render.adapters.pixoo import PixooAdapter
+from app.render.adapters.pixoo import PixooAdapter, PixooError
 from app.render.frame import Clip
 from app.render.rotation import hold_ms, render_screen, sequence_names
 from app.render.view_db import view_from_db
@@ -29,6 +29,7 @@ MIN_SCREEN_SECONDS = 3
 MIN_SEND_BUDGET_S = 7.5
 DEVICE_TIMEOUT_S = 2.0
 HOLDING = "holding"
+SEND_ERRORS = (PixooError,)
 
 
 class ClipAdapter(Protocol):

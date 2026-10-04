@@ -8,7 +8,8 @@ until one passes the same gate the model's line must pass. The last resort is th
 clause alone, checked for everything but similarity, so the display never blanks.
 
 Situations: train (a dot), rest (no workout), nodot (a session without heart-rate data:
-the work happened, the record did not score it), missing (health data not arrived).
+the work happened, the record did not score it), under (a scored workout below the load
+bar: the nodot thoughts that do not blame the record), missing (health data not arrived).
 No thought refers to a time of day or tells him what he feels (Ingrid, 2026-10-02).
 """
 
@@ -201,6 +202,20 @@ THOUGHTS: dict[str, dict[str, tuple[str, ...]]] = {
 }
 
 
+RECORD_ONLY_THOUGHTS = frozenset(
+    {
+        "The work was yours; the record was not.",
+        "You control the effort, not the sensor.",
+        "The habit was kept; the record missed it.",
+        "The pattern held even where the data did not.",
+        "A missing number is easy to take personally.",
+        "The work held up even when the record did not.",
+        "A missed reading is not a missed effort.",
+        "Adaptation does not need a heart-rate trace.",
+    }
+)
+
+
 @dataclass(frozen=True)
 class FallbackResult:
     line: str
@@ -262,6 +277,15 @@ def fact_options(payload: Payload) -> list[str]:
                 core = [f"yesterday made the {word} dot {week['relation']}, {tail}."]
             else:
                 core = [f"yesterday earned a dot, {tail}."]
+        elif (day.get("workout_count") or 0) > 0:
+            session = f"{_count(int(day['workout_count']), 'workout').lower()} yesterday"
+            workout_load = day.get("workout_load")
+            core = [f"{session}, no dot."]
+            if workout_load is not None:
+                core[:0] = [
+                    f"{session}, load {workout_load}, under the bar, no dot.",
+                    f"{session}, load {workout_load}, no dot.",
+                ]
         elif (
             cell.streak_state == "broken-last-week"
             and week.get("previous_week_quality_workouts") is not None
@@ -289,7 +313,16 @@ def _situation(payload: Payload) -> str:
         return "missing"
     if payload.cell.completeness == "workout-without-hr":
         return "nodot"
-    return "train" if payload.data["day"].get("quality_workout") else "rest"
+    day = payload.data["day"]
+    if day.get("quality_workout"):
+        return "train"
+    return "under" if (day.get("workout_count") or 0) > 0 else "rest"
+
+
+def thoughts_for(lens: str, situation: str) -> tuple[str, ...]:
+    if situation == "under":
+        return tuple(t for t in THOUGHTS[lens]["nodot"] if t not in RECORD_ONLY_THOUGHTS)
+    return THOUGHTS[lens][situation]
 
 
 def web_fact(payload: Payload) -> str | None:
@@ -313,7 +346,7 @@ def web_fact(payload: Payload) -> str | None:
 
 def candidates(payload: Payload) -> list[str]:
     fact = fact_clause(payload)
-    thoughts = THOUGHTS[payload.lens][_situation(payload)]
+    thoughts = thoughts_for(payload.lens, _situation(payload))
     start = date.fromisoformat(payload.day_local).toordinal() % len(thoughts)
     ordered = thoughts[start:] + thoughts[:start]
     return [f"{fact} {thought}" for thought in ordered]

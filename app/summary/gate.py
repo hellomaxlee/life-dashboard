@@ -3,22 +3,36 @@ names the reason. The same gate judges the model's line and the fallback's.
 
 Rules, in order:
   length      the device line is 1 to 110 characters, no control characters
-  grounding   every number token (digits, optional decimals, thousands commas removed) equals
-              a number in the payload: "7.4" is 7.4, "118" is 118 or 118.0, "7" is 7.0.
-              Number words count: a cardinal or ordinal one..twenty / first..twentieth
-              ("a"/"an" never count) next to a counted noun (dot, workout, book, hour, week,
-              session, mile, day, night; "quality", "more" and the like may sit between) is
-              a number. A dot/workout/session/book/hour/week count must equal a payload value
-              of that kind ("third dot" is the week's dot count 3); a day/night/mile count any
-              payload number. Digits next to a counted noun are typed the same way.
-  ban         stems (crush*, grind*, guilt*, disappoint*, hustl*, beast*, lazy/lazi*, shame*,
-              slack*), streak-anxiety phrases (don't break/let the chain/streak, keep the
-              chain/streak, break/broke the chain, streak die*), no excuse(s), should
-              have/should've, you fail/failed/failing, stay/stayed hard, no day(s) off, you
-              need/have/had/got to, you must, just do it, don't miss, only N left/more/to go,
-              any "!", any emoji or symbol character, a second exclamatory clause
-  names       an attributed quote ("as [the] X said/says/wrote/taught/put it"), a modern
-              name, or an ancient source named when one was already named in the last 7 days
+  grounding   every number token (digits, optional decimals, a bare ".5", thousands commas
+              removed, digits glued to letters as in "x2"; "VO2" and "Z1".."Z5" are names)
+              equals a number in the payload: "7.4" is 7.4, "118" is 118 or 118.0, "7" is 7.0.
+              Number words count like digits wherever they stand: zero, two..nineteen, the
+              tens, hundred, thousand, million, dozen, half, twice, thrice, and compounds of
+              them ("twenty-one", "a hundred"). "one" and the ordinal words (first, second,
+              ...) count only next to a counted noun, so "one step at a time" and "at first"
+              are not numbers; "a"/"an" never count. A digit ordinal ("1st") must sit next to
+              a counted noun. Counted nouns: dot, workout, session, book, hour, week, minute,
+              mile, day, night; "quality", "more" and the like may sit between, punctuation
+              may not. A dot/workout/session/book/hour/week/minute count must equal a payload
+              value of that kind ("third dot" is the week's dot count 3), and in "N of M
+              dots" both are typed; a day/night/mile count any payload number. Vulgar
+              fractions, superscripts and other non-ASCII numerals are rejected outright.
+  ban         matched after NFKC folding (fullwidth and compatibility forms, curly
+              apostrophes, zero-width characters). Stems (crush*, grind*, guilt*,
+              disappoint*, hustl*, beast*, lazy/lazi*, shame*, slack*), streak-anxiety
+              phrases with any determiner (don't break/let/lose the|your|this|a chain/streak,
+              keep/protect/save the streak, break/broke the chain, streak die*, streak on the
+              line/at stake/at risk), no [more] excuse(s), should/could have, you
+              fail/failed/failing, you missed/skipped, stay/stayed hard, no day(s) off, you
+              need/have/had/got to, you gotta, you better, you must, just do it, don't miss,
+              try/work/push harder, do better, only/just N [noun] left/more/to go, any "!",
+              any emoji or symbol character, a second exclamatory clause
+  names       an attributed quote in any case ("as [the] X said/says/noted/wrote/taught/put
+              it", "in the words of", "to quote", an ancient source followed by a speech
+              verb), a modern name, a capitalised two-word name followed by
+              says/said/would/noted/wrote and the like (an ancient source with "would" is a
+              paraphrase and passes), or an ancient source named when one was already named
+              in the last 7 days
   hard-days   in the week after a broken week only: no "streak", no "next week"
   wellness    HRV, resting heart rate, VO2 max, daylight only when the payload has a fact
   opening     the first three words do not open any of the last 14 lines
@@ -43,16 +57,37 @@ RECENT_OPENING_LINES = 14
 RECENT_SIMILARITY_LINES = 30
 SOURCE_WINDOW_DAYS = 7
 
+DETERMINER = r"(?:the|your|this|that|a|my|our)"
+CHAIN = r"(?:chain|streak)"
+COUNT_WORD = (
+    r"(?:\d+|a\s+few|a\s+couple|another|one|two|three|four|five|six|seven|eight|nine|ten|"
+    r"eleven|twelve)"
+)
+
 BANS: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
     (label, re.compile(pattern))
     for label, pattern in (
         (
             "don't break the chain",
-            r"\b(?:don't|dont|do not|never)\s+(?:break|let)\s+the\s+(?:chain|streak)\b",
+            r"\b(?:don't|dont|do not|never|can't|cant|cannot)\s+"
+            rf"(?:break|let|lose|drop|end|ruin|snap|waste|blow)\s+{DETERMINER}\s+{CHAIN}\b",
         ),
-        ("keep the streak", r"\bkeep(?:s|ing)?\s+the\s+(?:chain|streak)\b"),
-        ("break the chain", r"\b(?:break(?:s|ing)?|broke|broken)\s+the\s+chain\b"),
-        ("streak die", r"\bstreak\s+(?:die|dies|died|dying)\b"),
+        (
+            "keep the streak",
+            r"\b(?:keep(?:s|ing)?|kept|protect(?:s|ed|ing)?|sav(?:e|es|ed|ing)|"
+            r"guard(?:s|ed|ing)?|defend(?:s|ed|ing)?|preserv(?:e|es|ed|ing)|"
+            rf"maintain(?:s|ed|ing)?|extend(?:s|ed|ing)?)\s+{DETERMINER}\s+{CHAIN}\b",
+        ),
+        (
+            "break the chain",
+            rf"\b(?:break(?:s|ing)?|broke|broken)\s+{DETERMINER}\s+chain\b",
+        ),
+        ("streak die", r"\bstreak(?:'s)?\s+(?:is\s+|will\s+)?(?:die|dies|died|dying)\b"),
+        (
+            "streak on the line",
+            rf"\b{CHAIN}(?:'s)?\s+(?:is\s+|was\s+)?"
+            r"(?:on\s+the\s+line|at\s+stake|at\s+risk|in\s+danger|in\s+jeopardy)\b",
+        ),
         ("crush", r"\bcrush\w*"),
         ("grind", r"\bgrind\w*"),
         ("guilt", r"\bguilt\w*"),
@@ -62,18 +97,33 @@ BANS: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
         ("lazy", r"\bla(?:zy|zi\w*)\b"),
         ("shame", r"\bshame\w*"),
         ("slacked", r"\bslack\w*"),
-        ("no excuses", r"\bno\s+excuses?\b"),
-        ("should have", r"\bshould(?:'ve|\s+have)\b"),
+        ("no excuses", r"\bno\s+(?:more\s+)?excuses?\b"),
+        ("should have", r"\b(?:should|could)(?:'ve|\s+have|\s+of|a)\b"),
         ("you failed", r"\byou(?:'ve|'re|\s+are|\s+have)?\s+(?:fail|failed|failing)\b"),
+        (
+            "you missed",
+            r"\byou(?:'ve|\s+have|\s+had)?\s+(?:just\s+)?(?:miss|missed|skip|skipped)\b",
+        ),
         ("stay hard", r"\bstay(?:s|ed|ing)?\s+hard\b"),
         ("no days off", r"\bno\s+days?\s+off\b"),
-        ("you need to", r"\byou\s+(?:need|needed|have|had|got)\s+to\b"),
+        (
+            "you need to",
+            r"\byou(?:'ve|'d)?\s+(?:(?:need|needed|have|had|got|ought)\s+to|gotta|better|"
+            r"had\s+better)\b",
+        ),
         ("you must", r"\byou\s+must\b"),
         ("just do it", r"\bjust\s+do\s+it\b"),
         ("don't miss", r"\b(?:don't|dont|do not)\s+miss\b"),
         (
+            "try harder",
+            r"\b(?:try|tries|tried|trying|work|works|working|push|pushes|pushing|train|"
+            r"training|go|going|dig|digging)\s+harder\b",
+        ),
+        ("do better", r"\b(?:do|did|doing)\s+better\b"),
+        (
             "only N left",
-            r"\bonly\s+(?:\d+|one|two|three|four|a few|another)\s+(?:more|left|to go)\b",
+            rf"\b(?:only|just)\s+{COUNT_WORD}\s+(?:\w+\s+){{0,2}}?"
+            r"(?:more|left|to\s+go|remaining|short)\b",
         ),
     )
 )
@@ -116,11 +166,26 @@ MODERN_NAMES = (
     "atomic habits",
     "kipchoge",
     "kobe",
+    "steve jobs",
+    "dalai lama",
+)
+SPEECH_VERBS = (
+    r"(?:said|says|put\s+it|puts\s+it|wrote|writes|taught|teaches|noted|notes|observed|"
+    r"observes|reminds\s+us|reminded\s+us|tells\s+us|told\s+us|would\s+say|liked\s+to\s+say)"
 )
 ATTRIBUTION = re.compile(
-    r"\b[Aa]s\s+(?:the\s+)?(?:[A-Z][\w'-]*\s+){0,3}[A-Z][\w'-]*\s+(?:once\s+)?"
-    r"(?:said|says|put it|puts it|wrote|writes|taught|teaches|reminds us)\b"
+    rf"\bas\s+(?:[\w'-]+\s+){{1,4}}?(?:once\s+|often\s+)?{SPEECH_VERBS}\b"
+    r"|\bin\s+the\s+words\s+of\b|\bto\s+quote\b|\bquoting\b",
+    re.IGNORECASE,
 )
+SOURCE_SPEAKS = re.compile(
+    rf"\b(?:{'|'.join(ANCIENT_SOURCES)})\s+(?:once\s+|often\s+)?{SPEECH_VERBS}\b"
+)
+NAMED_SPEAKER = re.compile(
+    r"\b((?:[A-Z][a-z'-]+\s+){1,3}[A-Z][a-z'-]+)\s+(?:once\s+|often\s+)?"
+    r"(said|says|would|noted|notes|wrote|writes|taught|teaches|called|calls|believed|believes)\b"
+)
+NAME_OPENERS = frozenset({"the", "a", "an", "your", "my", "our", "this", "that", "and", "but"})
 WELLNESS_WORDS = (
     "hrv",
     "heart rate variability",
@@ -132,22 +197,37 @@ WELLNESS_WORDS = (
 HARD_DAY_WORDS = ("streak", "next week")
 EXCLAMATORY_OPENERS = re.compile(r"^(?:what\s+an?\b|how\s+\w+\b|such\s+an?\b|so\s+\w+\s*$)")
 
-NUMBER = re.compile(r"(?<![A-Za-z0-9.])(\d+(?:\.\d+)?)(?![0-9.]*[0-9])")
 THOUSANDS = re.compile(r"(?<=\d),(?=\d{3}\b)")
 WORD = re.compile(r"[a-z0-9']+")
-TOKEN = re.compile(r"\d+(?:\.\d+)?|[a-z']+")
+TOKEN = re.compile(r"[a-z][a-z0-9']*|\d+(?:\.\d+)?|\.\d+|[^\sa-z0-9'-]")
+DIGITS = re.compile(r"\d+")
+APOSTROPHES = str.maketrans({"’": "'", "‘": "'", "ʼ": "'", "′": "'", "`": "'"})
+LETTER_DIGIT_NAMES = frozenset({"vo2", "z1", "z2", "z3", "z4", "z5"})
+ORDINAL_SUFFIXES = frozenset({"st", "nd", "rd", "th"})
 
 CARDINALS = (
     "zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen "
-    "fifteen sixteen seventeen eighteen nineteen twenty"
+    "fifteen sixteen seventeen eighteen nineteen"
 ).split()
 ORDINAL_WORDS = (
     "zeroth first second third fourth fifth sixth seventh eighth ninth tenth eleventh twelfth "
-    "thirteenth fourteenth fifteenth sixteenth seventeenth eighteenth nineteenth twentieth"
+    "thirteenth fourteenth fifteenth sixteenth seventeenth eighteenth nineteenth"
 ).split()
-NUMBER_WORDS = {w: i for i, w in enumerate(CARDINALS) if i} | {
-    w: i for i, w in enumerate(ORDINAL_WORDS) if i
+TENS = "twenty thirty forty fifty sixty seventy eighty ninety".split()
+TENS_ORDINALS = (
+    "twentieth thirtieth fortieth fiftieth sixtieth seventieth eightieth ninetieth".split()
+)
+UNIT_WORDS = {w: float(i) for i, w in enumerate(CARDINALS)} | {
+    w: float(20 + 10 * i) for i, w in enumerate(TENS)
 }
+SCALE_WORDS = {"hundred": 100.0, "thousand": 1000.0, "million": 1_000_000.0, "dozen": 12.0}
+ORDINAL_VALUES = (
+    {w: float(i) for i, w in enumerate(ORDINAL_WORDS)}
+    | {w: float(20 + 10 * i) for i, w in enumerate(TENS_ORDINALS)}
+    | {"hundredth": 100.0, "thousandth": 1000.0}
+)
+LONE_WORDS = {"half": 0.5, "twice": 2.0, "thrice": 3.0}
+UNCOUNTED = "uncounted"
 NOUN_KINDS = {
     "dot": "dots",
     "dots": "dots",
@@ -161,6 +241,8 @@ NOUN_KINDS = {
     "hours": "hours",
     "week": "weeks",
     "weeks": "weeks",
+    "minute": "minutes",
+    "minutes": "minutes",
     "day": None,
     "days": None,
     "night": None,
@@ -191,8 +273,53 @@ class GateResult:
         return "; ".join(self.reasons) if self.reasons else "pass"
 
 
+@dataclass(frozen=True)
+class Claim:
+    """One number the line states. `soft` is "one" or an ordinal word: a number only next to
+    a counted noun. `digits` are grounded by `ungrounded_numbers` and typed here only next
+    to a counted noun. `ordinal_digit` is "1st": a number that must sit next to one."""
+
+    text: str
+    value: float
+    soft: bool = False
+    digits: bool = False
+    ordinal_digit: bool = False
+
+
+def fold(text: str) -> str:
+    """NFKC with one apostrophe and no zero-width characters: what the ban list reads."""
+    folded = unicodedata.normalize("NFKC", text).translate(APOSTROPHES)
+    return "".join(c for c in folded if unicodedata.category(c) != "Cf")
+
+
+def odd_numerals(text: str) -> list[str]:
+    """Vulgar fractions, superscripts, circled and roman numerals: never grounded."""
+    return [c for c in text if unicodedata.category(c) in ("No", "Nl")]
+
+
+def _tokens(text: str) -> list[str]:
+    return TOKEN.findall(THOUSANDS.sub("", fold(text).lower()))
+
+
+def _is_digits(token: str) -> bool:
+    return token[0].isdigit() or (token[0] == "." and len(token) > 1)
+
+
+def _glued_digits(token: str) -> list[str]:
+    """The digits of a letter-led token such as "x2"; none for a name such as "vo2"."""
+    if not token[0].isalpha() or token in LETTER_DIGIT_NAMES:
+        return []
+    return DIGITS.findall(token)
+
+
 def number_tokens(text: str) -> list[str]:
-    return NUMBER.findall(THOUSANDS.sub("", text))
+    found: list[str] = []
+    for token in _tokens(text):
+        if _is_digits(token):
+            found.append(token)
+        else:
+            found.extend(_glued_digits(token))
+    return found
 
 
 def ungrounded_numbers(text: str, allowed: frozenset[float]) -> list[str]:
@@ -211,6 +338,8 @@ def typed_numbers(payload: Payload, kind: str | None) -> frozenset[float]:
     """The payload values a count of `kind` may equal; any payload number when untyped."""
     if kind is None:
         return payload.numbers()
+    if kind == UNCOUNTED:
+        return frozenset()
     d = payload.data
     paths = {
         "dots": (
@@ -227,6 +356,11 @@ def typed_numbers(payload: Payload, kind: str | None) -> frozenset[float]:
         "books": (("books", "ytd"), ("books", "target")),
         "hours": (("day", "sleep_hours"), ("targets", "sleep_hours")),
         "weeks": (("week", "weeks_hit_streak"),),
+        "minutes": (
+            ("day", "workout_minutes"),
+            ("wellness_fact", "value"),
+            ("wellness_fact", "baseline"),
+        ),
     }[kind]
     values = (_get(d, *path) for path in paths)
     return frozenset(
@@ -234,22 +368,113 @@ def typed_numbers(payload: Payload, kind: str | None) -> frozenset[float]:
     )
 
 
-def counted_numbers(text: str) -> list[tuple[str, float, str | None]]:
-    """(token, value, kind) for every number word or digit sitting next to a counted noun."""
-    tokens = TOKEN.findall(THOUSANDS.sub("", text.lower().replace("’", "'")))
-    found: list[tuple[str, float, str | None]] = []
-    for i, tok in enumerate(tokens):
-        if tok in NUMBER_WORDS:
-            value = float(NUMBER_WORDS[tok])
-        elif tok[0].isdigit():
-            value = float(tok)
-        else:
+def _word_run(tokens: list[str], start: int) -> tuple[Claim, int] | None:
+    """The number-word compound starting at `start` ("twenty one", "two hundred and five",
+    "twenty first") and the index after it."""
+    total = current = 0.0
+    last: str | None = None
+    words: list[str] = []
+    i = start
+    while i < len(tokens):
+        tok = tokens[i]
+        if tok in UNIT_WORDS or tok in ORDINAL_VALUES and tok not in SCALE_WORDS:
+            value = UNIT_WORDS.get(tok, ORDINAL_VALUES.get(tok, 0.0))
+            fits = (
+                last is None
+                or last == "scale"
+                or (last == "tens" and 0 < value < 10)
+                or (last == "and" and value < 100)
+            )
+            if not fits:
+                break
+            if tok in ORDINAL_VALUES:
+                if value >= 100:
+                    current = max(current, 1.0) * value
+                else:
+                    current += value
+                words.append(tok)
+                i += 1
+                return Claim(" ".join(words), total + current, soft=True), i
+            current += value
+            last = "tens" if value >= 20 else "unit"
+        elif tok in SCALE_WORDS:
+            if last == "and":
+                break
+            scale = SCALE_WORDS[tok]
+            if scale >= 1000:
+                total += max(current, 1.0) * scale
+                current = 0.0
+            else:
+                current = max(current, 1.0) * scale
+            last = "scale"
+        elif (
+            tok == "and" and last == "scale" and i + 1 < len(tokens) and tokens[i + 1] in UNIT_WORDS
+        ):
+            last = "and"
+            i += 1
             continue
-        j = i + 1
-        while j < len(tokens) and j <= i + 2 and tokens[j] in BETWEEN:
-            j += 1
-        if j < len(tokens) and tokens[j] in NOUN_KINDS:
-            found.append((tok, value, NOUN_KINDS[tokens[j]]))
+        else:
+            break
+        words.append(tok)
+        i += 1
+    if not words:
+        return None
+    return Claim(" ".join(words), total + current, soft=words == ["one"]), i
+
+
+def _items(tokens: list[str]) -> list[Claim | str]:
+    """Tokens with every number (digits, number words) folded into a Claim."""
+    items: list[Claim | str] = []
+    i = 0
+    while i < len(tokens):
+        tok = tokens[i]
+        if _is_digits(tok):
+            ordinal = i + 1 < len(tokens) and tokens[i + 1] in ORDINAL_SUFFIXES
+            items.append(Claim(tok, float(tok), digits=True, ordinal_digit=ordinal))
+            i += 2 if ordinal else 1
+            continue
+        if tok in LONE_WORDS:
+            items.append(Claim(tok, LONE_WORDS[tok]))
+            i += 1
+            continue
+        run = _word_run(tokens, i)
+        if run is not None:
+            items.append(run[0])
+            i = run[1]
+            continue
+        items.append(tok)
+        i += 1
+    return items
+
+
+def _kind_after(items: list[Claim | str], index: int) -> str | None:
+    """The kind of the counted noun the number at `index` sits next to, or UNCOUNTED.
+    In "two of three dots" the first number takes the second's noun."""
+    j = index + 1
+    while j < len(items) and j <= index + 2 and items[j] in BETWEEN:
+        j += 1
+    if j < len(items) and isinstance(items[j], str) and items[j] in NOUN_KINDS:
+        return NOUN_KINDS[items[j]]
+    if j + 1 < len(items) and items[j] == "of" and isinstance(items[j + 1], Claim):
+        return _kind_after(items, j + 1)
+    return UNCOUNTED
+
+
+def counted_numbers(text: str) -> list[tuple[str, float, str | None]]:
+    """(token, value, kind) for every number word, and for digits next to a counted noun.
+    Kind is the counted noun's kind, None for any payload number, UNCOUNTED for a digit
+    ordinal with no noun to count."""
+    items = _items(_tokens(text))
+    found: list[tuple[str, float, str | None]] = []
+    for i, item in enumerate(items):
+        if not isinstance(item, Claim):
+            continue
+        kind = _kind_after(items, i)
+        if kind == UNCOUNTED:
+            if item.soft or (item.digits and not item.ordinal_digit):
+                continue
+            kind = UNCOUNTED if item.ordinal_digit else None
+        found.append((item.text, item.value, kind))
     return found
 
 
@@ -271,7 +496,7 @@ def _exclamatory(clause: str) -> bool:
 
 
 def normalize(text: str) -> str:
-    return " ".join(WORD.findall(text.lower().replace("’", "'")))
+    return " ".join(WORD.findall(fold(text).lower()))
 
 
 def opening_words(text: str, count: int = 3) -> tuple[str, ...]:
@@ -315,7 +540,7 @@ def check_length(line: str) -> list[str]:
 
 def check_grounding(line: str, payload: Payload) -> list[str]:
     text = without_title(line, payload)
-    bad = ungrounded_numbers(text, payload.numbers())
+    bad = odd_numerals(text) + ungrounded_numbers(text, payload.numbers())
     for token, value, kind in counted_numbers(text):
         if value not in typed_numbers(payload, kind) and token not in bad:
             bad.append(token)
@@ -327,7 +552,7 @@ def check_ban(line: str) -> list[str]:
     for label, pattern in BANS:
         if pattern.search(lowered):
             return [f"ban: '{label}'"]
-    if "!" in line:
+    if "!" in fold(line):
         return ["ban: exclamation mark"]
     emoji = [c for c in line if _is_emoji(c)]
     if emoji:
@@ -339,12 +564,19 @@ def check_ban(line: str) -> list[str]:
 
 
 def check_names(line: str, recent_sources: tuple[str, ...]) -> list[str]:
-    if ATTRIBUTION.search(line):
-        return ["names: attributed quote"]
     lowered = normalize(line)
+    if ATTRIBUTION.search(fold(line)) or SOURCE_SPEAKS.search(lowered):
+        return ["names: attributed quote"]
     for name in MODERN_NAMES:
         if re.search(rf"\b{re.escape(normalize(name))}\b", lowered):
             return [f"names: living or modern person {name!r}"]
+    for speaker in NAMED_SPEAKER.finditer(fold(line)):
+        words = normalize(speaker.group(1)).split()
+        while words and words[0] in NAME_OPENERS:
+            words = words[1:]
+        paraphrase = speaker.group(2) == "would" and " ".join(words) in ANCIENT_SOURCES
+        if len(words) >= 2 and not paraphrase:
+            return [f"names: named person {' '.join(words)!r}"]
     named = ancient_sources_in(line)
     if named and recent_sources:
         return [f"names: {named[0]!r} named, a source was already named in the last 7 days"]
