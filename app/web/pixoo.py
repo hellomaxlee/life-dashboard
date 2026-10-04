@@ -12,8 +12,8 @@ that falls below one PWM step goes dark. Toggling either redraws from the cached
 nothing is fetched or rendered again. `gamma=1` on the frame endpoint exists for parity with
 /preview and so a test can prove the shipped tables equal the emulator pixel for pixel.
 
-The hold rule follows `app.jobs.rotation`: a screen stays for `device.screen_seconds`, or the
-clip's own length if that is longer, and the clip loops while it is held. No external
+The sequence and its holds are `app.render.rotation`'s, the same the device job sends: Week,
+Today, one sparkle per earned small win, Books; a clip loops while it is held. No external
 scripts, fonts, or assets; everything is inline and the page works on the LAN only.
 """
 
@@ -31,7 +31,7 @@ from app.render.adapters.file import png_bytes
 from app.render.celebrate import CELEBRATION_ORDER, Celebration, celebrations_for
 from app.render.frame import Clip
 from app.render.gamma import led_gamma, led_lut
-from app.render.rotation import ROTATION_ORDER, render_screen
+from app.render.rotation import ROTATION_ORDER, WIN_NAMES, render_screen, rotation_sequence
 from app.render.view import DayView
 from app.timeutil import to_utc_iso, utc_iso_to_local_display
 from app.web.nav import NAV_STYLE, nav_html
@@ -53,14 +53,9 @@ DEFAULT_BRIGHTNESS = 100
 NAMES = ROTATION_ORDER + CELEBRATION_ORDER
 
 
-def hold_ms(clip: Clip, dwell_s: int) -> int:
-    """How long the device keeps a screen: the dwell, or the clip's length if longer."""
-    return max(dwell_s * 1000, clip.total_ms)
-
-
 def _clip(view: DayView, now: datetime, name: str) -> tuple[Clip, bool]:
     """(clip, earned) for one screen or celebration; a rotation screen is always earned."""
-    if name in ROTATION_ORDER:
+    if name in ROTATION_ORDER or name in WIN_NAMES:
         return render_screen(name, view, now), True
     found: Celebration = next(c for c in celebrations_for(view) if c.name == name)
     return found.clip, found.earned
@@ -89,17 +84,15 @@ def rotation_payload(
     view: DayView, now: datetime, fixture: str | None, dwell_s: int
 ) -> dict[str, object]:
     source = _source(view, fixture)
-    screens = []
-    for name in ROTATION_ORDER:
-        clip, _ = _clip(view, now, name)
-        screens.append(
-            {
-                "name": name,
-                "frames": _frames(name, clip, source),
-                "total_ms": clip.total_ms,
-                "hold_ms": hold_ms(clip, dwell_s),
-            }
-        )
+    screens = [
+        {
+            "name": name,
+            "frames": _frames(name, clip, source),
+            "total_ms": clip.total_ms,
+            "hold_ms": hold,
+        }
+        for name, clip, hold in rotation_sequence(view, now, dwell_s)
+    ]
     celebrations = []
     for celebration in celebrations_for(view):
         celebrations.append(
@@ -145,7 +138,7 @@ def pixoo_frame(
     fixture: str | None = None,
     gamma: int = 0,
 ) -> Response:
-    if name not in NAMES:
+    if name not in NAMES and name not in WIN_NAMES:
         raise HTTPException(status_code=404, detail="unknown screen")
     if gamma not in (0, 1):
         raise HTTPException(status_code=422, detail="gamma must be 0 or 1")
@@ -538,12 +531,14 @@ _SCRIPT = r"""
       if (!screen.pixels) { await loadClip(screen); }
     }
     for (const c of state.rotation.celebrations) { await loadClip(c); }
-    const earned = state.rotation.celebrations.filter(function (c) { return c.earned; });
-    if (earned.length && wanted === null) { playCelebration(earned[earned.length - 1].name); }
+    const party = state.rotation.celebrations.find(function (c) {
+      return c.earned && c.name === 'party';
+    });
+    if (party && wanted === null) { playCelebration(party.name); }
   }
 
   function startScreen() {
-    const match = /screen=([a-z]+)/.exec(location.hash);
+    const match = /screen=([a-z-]+)/.exec(location.hash);
     return match ? match[1] : null;
   }
 

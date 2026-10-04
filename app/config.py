@@ -104,7 +104,7 @@ class BackupConfig:
 @dataclass(frozen=True)
 class DeviceConfig:
     pixoo_host: str = ""
-    screen_seconds: int = 20
+    screen_seconds: int = 6
 
 
 @dataclass(frozen=True)
@@ -348,7 +348,7 @@ def load_settings(config_path: Path | None = None) -> Settings:
         ),
         device=DeviceConfig(
             pixoo_host=str(raw.get("device", {}).get("pixoo_host", "")).strip(),
-            screen_seconds=int(raw.get("device", {}).get("screen_seconds", 20)),
+            screen_seconds=int(raw.get("device", {}).get("screen_seconds", 6)),
         ),
         anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY", "").strip(),
         metrics=_metrics(raw),

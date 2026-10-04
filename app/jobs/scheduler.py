@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
+from apscheduler.jobstores.base import JobLookupError
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
@@ -22,7 +23,12 @@ from apscheduler.triggers.interval import IntervalTrigger
 from app.config import Settings
 from app.ingest import goodreads
 from app.ingest.claude_usage import read_usage_file
-from app.jobs.rotation import ROTATION_JOB, ClipAdapter, DeviceRotation, device_adapter
+from app.jobs.rotation import (
+    ROTATION_JOB,
+    ClipAdapter,
+    DeviceRotation,
+    device_adapter,
+)
 from app.metrics.job import RECOMPUTE_JOB, ROLLOVER_JOB, run_recompute
 from app.summary.run import write_summary
 from app.timeutil import from_utc_iso, local_day, now_utc
@@ -303,8 +309,21 @@ def build_scheduler(
             log.exception("%s not registered: bad [device] config", ROTATION_JOB)
         else:
             rotation = DeviceRotation(settings, open_conn, adapter)
+            tick = guarded(ROTATION_JOB, rotation.tick, stats)
+
+            def run_rotation() -> None:
+                """One slot, then move the next run to when its hold is up, so no run
+                overlaps a slow send. The interval is only the fallback cadence."""
+                try:
+                    tick()
+                finally:
+                    try:
+                        scheduler.modify_job(ROTATION_JOB, next_run_time=rotation.due())
+                    except JobLookupError:
+                        pass
+
             scheduler.add_job(
-                guarded(ROTATION_JOB, rotation.tick, stats),
+                run_rotation,
                 IntervalTrigger(seconds=settings.device.screen_seconds, timezone=tz),
                 id=ROTATION_JOB,
                 next_run_time=moment,

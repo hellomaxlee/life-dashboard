@@ -128,7 +128,7 @@ is no separate process to supervise. Config: `[scheduler]` and `[backup]` in
 | `claude_usage_watch` | every `scheduler.usage_poll_seconds` (30 s) | stats `data/claude_usage.json`; reads it only if mtime or size changed, and at most once per `scheduler.usage_min_read_seconds` (900 s) |
 | `nightly_backup` | `backup.time` (03:15 America/New_York) | `tools.backup` nightly: `data/backups/life-<utc stamp>/`, keeps the newest `backup.keep` (14) |
 | `backup_overdue_check` | two minutes after start, then every hour | takes a backup if none is newer than 26 hours; otherwise does nothing |
-| `device_rotation` | every `device.screen_seconds` (20 s), **only while `device.pixoo_host` is set** | sends the next screen (Week, Today, Books, wrapping) to the Pixoo; section 15 |
+| `device_rotation` | after each screen's hold (fallback: every `device.screen_seconds`), **only while `device.pixoo_host` is set** | sends the next screen (Week, Today, a sparkle per earned small win, Books, wrapping) to the Pixoo once the last one's hold is up; section 15 |
 | `metrics_recompute` | 60 s after start, then every `metrics.recompute_minutes` (15 min) | recomputes every `daily_metrics` / `weekly_metrics` row from the stored tables; picks up whatever the last push brought; section 17 |
 | `metrics_rollover` | `metrics.rollover_time` (00:05 America/New_York) | the same recompute, so the new day's and (on Monday) the new week's rows exist when the renderer looks them up |
 | `goodreads_poll` | `pull.goodreads` (06:30 America/New_York), **only while `GOODREADS_RSS_URL` is set in `.env`**; plus once, three minutes after start, when no parsed feed arrived in the last 24 h | fetches the `read` shelf RSS, archives it, upserts `books`; section 17 |
@@ -286,18 +286,19 @@ adapter is built, and nothing is sent anywhere. To turn the display on once it i
 
 1. Give the Pixoo a DHCP reservation in the router (as in section 7) and note its IP.
 2. In `config.toml`: `pixoo_host = "192.168.1.50"` (the literal IP; a hostname or any
-   address outside 10/8, 172.16/12, 192.168/16 is refused). Leave `screen_seconds = 20`.
+   address outside 10/8, 172.16/12, 192.168/16 is refused). Leave `screen_seconds = 6`.
 3. `launchctl kickstart -k gui/$(id -u)/com.maxlee.life-dashboard`
 
 ```sh
 grep -n "device_rotation" data/logs/life-dashboard.err.log | tail   # failures and refusals
 ```
 
-What it does: the first screen goes out at start, then one screen every `screen_seconds`,
-Week, Today, Books, wrapping, each rendered for today's America/New_York day from a fresh
-db connection. A restart begins again at Week. A clip longer than the dwell (Books pages
-are 2 s each, about 14 s at most) keeps its screen until it has played once; that tick logs
-nothing and sends nothing. `screen_seconds` under 15 or a bad host logs
+What it does: the first screen goes out at start, then Week, Today, one sparkle for each
+small win the day earned, Books, wrapping, each rendered for today's America/New_York day
+from a fresh db connection. A still stays `screen_seconds`; Books (pages are 2 s each, about
+14 s at most) stays until it has played through; a sparkle plays three times (4.2 s). After
+each screen the job moves its own next run to the end of that hold; a failed send waits one
+dwell and then tries the next screen. A restart begins again at Week. `screen_seconds` under 3 or a bad host logs
 `device_rotation not registered: bad [device] config` and the rest of the service runs.
 
 When something fails (device off, timeout, refused clip, one screen's renderer raising):

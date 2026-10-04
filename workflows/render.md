@@ -103,8 +103,11 @@ Until then `tests/render/test_snapshots.py` fails for that fixture by design; no
 
 `GET /pixoo` is the display as a Pixoo-64 on a desk: a dark bezel, a 64x64 matrix drawn as
 round LEDs with black gaps and a soft glow, and the rotation running live the way the device
-job runs it (Week → Today → Books, each held for `device.screen_seconds` or the clip's own
-length if longer, the clip looping while held). `/preview` stays the engineering view; the
+job runs it: Week → Today → one sparkle per small win the day earned (workout, sleep, book)
+→ Books, repeating. A still holds for `device.screen_seconds` (6 s). Anything animated holds
+for whole plays and is never replaced part way: Books until its summary has paged through
+(2 s a page; twice if one pass is shorter than the dwell), each sparkle three plays (4.2 s). The workout sparkle reads "WORKOUT DONE / SMALL WIN", and once the week's target is met
+it stays in the sequence every day through Sunday. The week-complete party is not in the sequence. `/preview` stays the engineering view; the
 three pages link each other on their first line.
 
 Rendering never moves into the browser. The page fetches `/pixoo/rotation.json` (screens in

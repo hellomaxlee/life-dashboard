@@ -33,7 +33,12 @@ from app.render.view import DayView, valid_count
 
 Win = Literal["sleep", "workout", "book"]
 
-WIN_LABELS: dict[str, str] = {"sleep": "RESTED", "workout": "DOT EARNED", "book": "BOOK DONE"}
+WIN_LABELS: dict[str, tuple[str, ...]] = {
+    "sleep": ("RESTED",),
+    "workout": ("WORKOUT DONE",),
+    "book": ("BOOK DONE",),
+}
+WIN_ORDER: tuple[Win, ...] = ("workout", "sleep", "book")
 SPARKLE_FRAMES = 20
 SPARKLE_FRAME_MS = 70
 PARTY_FRAMES = 56
@@ -82,9 +87,11 @@ def _win_icon(frame: Frame, win: str, grow: float) -> None:
 def sparkle_clip(win: Win = "workout", seed: int = 11) -> Clip:
     """The small-win clip, about 1.4 s. `win` picks the icon and the label."""
     rng = random.Random(seed)
+    lines = WIN_LABELS[win]
+    star_floor = 46 - 7 * (len(lines) - 1)
     stars = []
     while len(stars) < 14:
-        x, y = rng.randrange(4, SIZE - 4), rng.randrange(4, 46)
+        x, y = rng.randrange(4, SIZE - 4), rng.randrange(4, star_floor)
         if abs(x - SIZE // 2) < 12 and abs(y - 26) < 12:
             continue
         stars.append((x, y, rng.randrange(6), rng.random()))
@@ -101,7 +108,8 @@ def sparkle_clip(win: Win = "workout", seed: int = 11) -> Clip:
             step = (tick + phase) % 6
             size = (0, 1, 2, 1, 0, -1)[step]
             draw_twinkle(frame, x, y, size, hue(colour_at + tick * 0.02))
-        draw_text_centered(frame, 50, WIN_LABELS[win], TEXT, SMALL)
+        for row, line in enumerate(lines):
+            draw_text_centered(frame, 57 - 7 * (len(lines) - row), line, TEXT, SMALL)
         draw_text_centered(frame, 57, "SMALL WIN", LABEL, SMALL)
         frames.append(frame)
     return Clip(tuple(frames), (SPARKLE_FRAME_MS,) * SPARKLE_FRAMES, poster_index=8)
@@ -219,13 +227,22 @@ class Celebration:
     earned: bool
 
 
+def earned_wins(view: DayView) -> list[Win]:
+    """Every small win the view itself shows, in WIN_ORDER: a quality workout, a night at the
+    sleep target, a finished book. Once the week's target is met the workout win stays for
+    the rest of that week, workout or not."""
+    earned = {
+        "workout": view.today_dot is True or week_complete(view),
+        "sleep": sleep_met(view),
+        "book": view.book_finished,
+    }
+    return [win for win in WIN_ORDER if earned[win]]
+
+
 def earned_win(view: DayView) -> Win | None:
-    """The small win the view itself shows: a quality workout, else a night at the sleep target."""
-    if view.today_dot is True:
-        return "workout"
-    if sleep_met(view):
-        return "sleep"
-    return None
+    """The first earned small win, or None."""
+    wins = earned_wins(view)
+    return wins[0] if wins else None
 
 
 def week_complete(view: DayView) -> bool:

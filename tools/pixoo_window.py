@@ -119,7 +119,15 @@ def main(argv: list[str] | None = None) -> int:
     caption = tk.Label(root, bg="#141210", fg="#a8a39b", font=("Menlo", 11))
     caption.pack(pady=(10, 20))
 
-    state = {"screen": 0, "frame": 0, "elapsed": 0, "paused": False, "overlay": None, "job": None}
+    state = {
+        "screen": 0,
+        "frame": 0,
+        "elapsed": 0,
+        "step_ms": 0,
+        "paused": False,
+        "overlay": None,
+        "job": None,
+    }
     cache: dict[tuple[str, int], ImageTk.PhotoImage] = {}
 
     def show(name: str, index: int) -> None:
@@ -170,15 +178,16 @@ def main(argv: list[str] | None = None) -> int:
                 return
         elif not state["paused"]:
             screen = current()
-            ms = screen["frames"][state["frame"]]["ms"]
-            state["elapsed"] += ms
+            state["elapsed"] += state["step_ms"]
             state["frame"] = (state["frame"] + 1) % len(screen["frames"])
             if state["elapsed"] >= screen["hold_ms"]:
                 next_screen()
         screen = current()
         show(screen["name"], state["frame"])
         caption.configure(text=describe())
-        schedule(screen["frames"][state["frame"]]["ms"] if not state["paused"] else 250)
+        left = max(1, screen["hold_ms"] - state["elapsed"])
+        state["step_ms"] = min(screen["frames"][state["frame"]]["ms"], left)
+        schedule(state["step_ms"] if not state["paused"] else 250)
 
     def play(name: str) -> None:
         clip = next(c for c in rotation.celebrations if c["name"] == name)
@@ -206,7 +215,8 @@ def main(argv: list[str] | None = None) -> int:
     root.bind("<Key>", on_key)
     show(current()["name"], 0)
     caption.configure(text=describe())
-    schedule(current()["frames"][0]["ms"])
+    state["step_ms"] = min(current()["frames"][0]["ms"], current()["hold_ms"])
+    schedule(state["step_ms"])
     earned = [c for c in rotation.celebrations if c["earned"]]
     if earned:
         play(earned[-1]["name"])

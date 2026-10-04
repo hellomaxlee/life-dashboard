@@ -19,8 +19,15 @@ from app.jobs import scheduler as jobs
 from app.jobs.rotation import HOLDING, ROTATION_JOB, DeviceRotation, device_adapter
 from app.main import create_app
 from app.render.adapters.pixoo import PixooAdapter, PixooError
+from app.render.celebrate import sparkle_clip
 from app.render.frame import Clip
-from app.render.rotation import ROTATION_ORDER, render_screen, rotation_clips
+from app.render.rotation import (
+    ROTATION_ORDER,
+    render_screen,
+    rotation_clips,
+    rotation_sequence,
+    sequence_names,
+)
 from app.render.view_db import view_from_db
 from app.timeutil import local_day
 
@@ -145,11 +152,13 @@ def test_an_adapter_error_costs_one_slot_and_the_next_tick_shows_the_next_screen
     run = jobs.guarded(ROTATION_JOB, rotation.tick, stats)
 
     run()
+    clock.now = rotation.due()
     run()
     assert adapter.sent == []
     assert stats[ROTATION_JOB] == jobs.JobStats(2, 2, "PixooError: Draw/GetHttpGifId: timed out")
     assert f"job {ROTATION_JOB} failed" in caplog.text
 
+    clock.now = rotation.due()
     run()
     view = view_from_db(db, jobs_settings, "2026-10-02")
     assert same(adapter.sent[0], render_screen("books", view, NOON))
@@ -196,14 +205,57 @@ def test_a_clip_longer_than_the_dwell_keeps_its_screen_until_it_has_played_once(
     assert rotation.tick() == "week"
 
 
-def test_the_default_dwell_outlasts_the_longest_books_clip(db, jobs_settings):
+def test_the_default_dwell_is_a_few_seconds_and_books_still_pages_through(db, jobs_settings):
     longest = "".join("ab "[i % 3] for i in range(400))
     set_day(db, "2026-10-02", summary_device_line=longest)
     view = view_from_db(db, jobs_settings, "2026-10-02")
-    worst_ms = max(clip.total_ms for _, clip in rotation_clips(view, NOON))
-    assert worst_ms > 8000
-    assert load_settings().device.screen_seconds * 1000 >= worst_ms
-    assert load_settings().device.screen_seconds == DeviceConfig().screen_seconds == 20
+    dwell = load_settings().device.screen_seconds
+    assert dwell == DeviceConfig().screen_seconds == 6
+    holds = {name: hold for name, _, hold in rotation_sequence(view, NOON, dwell)}
+    books = dict(rotation_clips(view, NOON))["books"]
+    assert books.total_ms > 8000
+    assert holds == {"week": 6000, "today": 6000, "books": books.total_ms}
+
+
+def test_each_earned_small_win_gets_its_own_slot_between_today_and_books(db, jobs_settings):
+    set_day(
+        db,
+        "2026-10-02",
+        quality_workout=True,
+        sleep_hours=7.5,
+        book_finished_today=True,
+        summary_device_line="Short.",
+    )
+    settings = with_device(jobs_settings, seconds=6)
+    clock, adapter = Clock(), FakeAdapter()
+    rotation = DeviceRotation(settings, opener(settings), adapter, clock)
+    shown = []
+    for _ in range(40):
+        result = rotation.tick()
+        if result != HOLDING:
+            shown.append((result, (clock.now - NOON).total_seconds()))
+        clock.now += timedelta(seconds=1)
+    assert shown[:7] == [
+        ("week", 0),
+        ("today", 6),
+        ("win-workout", 12),
+        ("win-sleep", 17),
+        ("win-book", 22),
+        ("books", 27),
+        ("week", 33),
+    ]
+    assert same(adapter.sent[2], sparkle_clip("workout"))
+    assert same(adapter.sent[4], sparkle_clip("book"))
+
+    db.execute(
+        "UPDATE daily_metrics SET metrics_json = ? WHERE day_local = '2026-10-02'",
+        (json.dumps({"quality_workout": False, "sleep_hours": 6.0, "steps": 4000}),),
+    )
+    db.commit()
+    quiet = DeviceRotation(settings, opener(settings), FakeAdapter(), Clock())
+    assert [quiet.tick() for _ in range(1)] == ["week"]
+    view = view_from_db(db, settings, "2026-10-02")
+    assert [name for name, _, _ in rotation_sequence(view, NOON, 6)] == ["week", "today", "books"]
 
 
 def test_without_a_host_nothing_is_registered_built_or_sent(db, jobs_settings, monkeypatch):
@@ -240,7 +292,11 @@ def test_with_a_host_the_job_is_registered_and_sends_through_the_pixoo_adapter(d
         assert job.max_instances == 1 and job.coalesce
         assert job.next_run_time == NOON
         assert job.misfire_grace_time == 20
+        before = datetime.now(UTC)
         job.func()
+        booked = scheduler.get_job(ROTATION_JOB)
+        wait = booked.next_run_time - before
+        assert timedelta(seconds=19) < wait < timedelta(seconds=25), "one 20 s dwell for a still"
     finally:
         scheduler.shutdown(wait=False)
     assert scheduler.job_stats[ROTATION_JOB] == jobs.JobStats(runs=1)
@@ -256,15 +312,12 @@ def test_the_real_adapter_is_built_for_the_host_with_short_timeouts(jobs_setting
     assert adapter.host == HOST
     assert adapter._client.timeout == httpx.Timeout(2.0)
     assert adapter._send_budget_s == 10
-    worst_stall_s = adapter._send_budget_s + 3 * 2.0
-    assert worst_stall_s < 20
-    assert rotation_job.MIN_SCREEN_SECONDS / 2 + 3 * rotation_job.DEVICE_TIMEOUT_S < (
-        rotation_job.MIN_SCREEN_SECONDS
-    )
+    short = device_adapter(with_device(jobs_settings, seconds=rotation_job.MIN_SCREEN_SECONDS))
+    assert short._send_budget_s == rotation_job.MIN_SEND_BUDGET_S == 7.5
 
 
 @pytest.mark.parametrize(
-    ("host", "seconds"), [("8.8.8.8", 20), ("pixoo.local", 20), (HOST, 14), (HOST, 0)]
+    ("host", "seconds"), [("8.8.8.8", 20), ("pixoo.local", 20), (HOST, 2), (HOST, 0)]
 )
 def test_a_bad_device_config_registers_no_job_and_stops_nothing(
     jobs_settings, caplog, host, seconds
@@ -311,3 +364,107 @@ def test_the_job_comes_back_after_a_restart_and_starts_from_the_first_screen(
         assert seen[0] == {"Command": "Draw/GetHttpGifId"}
         assert len(seen) == 1 + len(week.frames)
     assert schedulers[0] is not schedulers[1]
+
+
+def test_a_week_finished_early_keeps_the_workout_win_until_the_week_ends(db, jobs_settings):
+    db.execute(
+        "INSERT INTO weekly_metrics VALUES ('2026-09-28', ?)",
+        (json.dumps({"quality_workouts": 3, "weeks_hit_streak": 5}),),
+    )
+    rest_day = {"quality_workout": False, "workout_count": 0, "sleep_hours": 6.0, "steps": 4000}
+    for day in ("2026-10-01", "2026-10-04", "2026-10-05"):
+        set_day(db, day, **rest_day)
+
+    def names(day: str) -> list[str]:
+        return list(sequence_names(view_from_db(db, jobs_settings, day)))
+
+    assert names("2026-10-01") == ["week", "today", "win-workout", "books"]
+    assert names("2026-10-04") == ["week", "today", "win-workout", "books"], "Sunday still plays"
+    assert names("2026-10-05") == ["week", "today", "books"], "Monday starts a new week"
+
+    db.execute(
+        "UPDATE weekly_metrics SET metrics_json = ? WHERE week_start_local = '2026-09-28'",
+        (json.dumps({"quality_workouts": 2, "weeks_hit_streak": 5}),),
+    )
+    assert names("2026-10-01") == ["week", "today", "books"]
+
+
+def test_a_failed_tick_waits_one_dwell_and_never_retries_every_second(db, jobs_settings):
+    settings = with_device(jobs_settings, seconds=6)
+    clock, adapter = Clock(), FakeAdapter(fail_on_sends=(1,))
+    rotation = DeviceRotation(settings, opener(settings), adapter, clock)
+    with pytest.raises(PixooError):
+        rotation.tick()
+    assert rotation.due() == NOON + timedelta(seconds=6)
+    attempts = 0
+    for _ in range(5):
+        clock.now += timedelta(seconds=1)
+        if rotation.tick() != HOLDING:
+            attempts += 1
+    assert attempts == 0
+
+
+def test_holds_are_whole_plays_and_due_is_exact(db, jobs_settings):
+    set_day(db, "2026-10-02", quality_workout=True, sleep_hours=6.0, summary_device_line="x" * 40)
+    settings = with_device(jobs_settings, seconds=6)
+    view = view_from_db(db, settings, "2026-10-02")
+    slots = {name: (clip, hold) for name, clip, hold in rotation_sequence(view, NOON, 6)}
+    assert list(slots) == ["week", "today", "win-workout", "books"]
+    books, books_hold = slots["books"]
+    assert (len(books.frames), books.total_ms, books_hold) == (2, 4000, 8000), "two full passes"
+    assert slots["win-workout"][1] == 4200
+
+    clock = Clock()
+    rotation = DeviceRotation(settings, opener(settings), FakeAdapter(), clock)
+    for name, offset_ms in (("week", 6000), ("today", 12000), ("win-workout", 16200)):
+        assert rotation.tick() == name
+        assert rotation.due() == NOON + timedelta(milliseconds=offset_ms)
+        clock.now = rotation.due()
+
+
+def test_a_sequence_that_shrinks_restarts_at_week_instead_of_skipping_it(db, jobs_settings):
+    set_day(db, "2026-10-02", quality_workout=True, sleep_hours=7.5, book_finished_today=True)
+    settings = with_device(jobs_settings, seconds=6)
+    clock = Clock()
+    rotation = DeviceRotation(settings, opener(settings), FakeAdapter(), clock)
+    shown = []
+    for _ in range(4):
+        shown.append(rotation.tick())
+        clock.now = rotation.due()
+    assert shown == ["week", "today", "win-workout", "win-sleep"]
+    db.execute(
+        "UPDATE daily_metrics SET metrics_json = ? WHERE day_local = '2026-10-02'",
+        (json.dumps({"quality_workout": False, "sleep_hours": 6.0, "steps": 4000}),),
+    )
+    db.commit()
+    for _ in range(3):
+        shown.append(rotation.tick())
+        clock.now = rotation.due()
+    assert shown[4:] == ["week", "today", "books"]
+
+
+def test_every_win_belongs_to_the_day_the_today_screen_shows(db, jobs_settings):
+    set_day(db, "2026-10-01", quality_workout=True, sleep_hours=7.5, book_finished_today=True)
+    set_day(db, "2026-10-02", quality_workout=False, workout_count=0)
+    friday = view_from_db(db, jobs_settings, "2026-10-02")
+    assert friday.day_shown == "2026-10-01"
+    assert list(sequence_names(friday)) == [
+        "week",
+        "today",
+        "win-workout",
+        "win-sleep",
+        "win-book",
+        "books",
+    ]
+    db.execute(
+        "UPDATE daily_metrics SET metrics_json = ? WHERE day_local = '2026-10-02'",
+        (json.dumps({"quality_workout": False, "workout_count": 0, "book_finished_today": True}),),
+    )
+    db.execute(
+        "UPDATE daily_metrics SET metrics_json = ? WHERE day_local = '2026-10-01'",
+        (json.dumps({"quality_workout": False, "sleep_hours": 6.0, "steps": 4000}),),
+    )
+    db.commit()
+    later = view_from_db(db, jobs_settings, "2026-10-02")
+    assert later.day_shown == "2026-10-01"
+    assert list(sequence_names(later)) == ["week", "today", "books"], "today's book waits a day"

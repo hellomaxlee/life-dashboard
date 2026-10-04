@@ -96,7 +96,8 @@ def view_from_db(conn: sqlite3.Connection, settings: Settings, day_local: str) -
 
     Health pushes cover whole days ending yesterday, so the requested day usually has no
     sleep, steps or workout yet. The Today screen's day facts then come from the day before,
-    when that day has them, and `day_shown` names it so the screen is headed YESTERDAY.
+    when that day has them, and `day_shown` names it so the screen is headed YESTERDAY. The
+    finished-book flag moves with them, so every small win belongs to the day shown.
     Nothing else falls back: week, streak, books, summary and Claude stay the requested day's.
     """
     day_local = date.fromisoformat(day_local).isoformat()
@@ -119,6 +120,7 @@ def view_from_db(conn: sqlite3.Connection, settings: Settings, day_local: str) -
         workout_count=prior.workout_count,
         workout_load=prior.workout_load,
         load_bar=prior.load_bar,
+        book_finished=prior.book_finished,
     )
 
 

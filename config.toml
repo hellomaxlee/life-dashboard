@@ -91,6 +91,6 @@ wellness_priority = ["hrv_ms", "resting_hr", "daylight_min"]
 # Pixoo-64 on the LAN. Empty = no device; nothing is ever pushed. Not yet purchased.
 [device]
 pixoo_host = ""
-# Seconds between rotation screens (15 or more). A clip longer than this keeps its screen
-# until it has played once.
-screen_seconds = 20
+# Seconds a still screen stays up (3 or more). The Books screen stays until its summary has
+# paged through once; each small-win sparkle plays for about 4 seconds.
+screen_seconds = 6

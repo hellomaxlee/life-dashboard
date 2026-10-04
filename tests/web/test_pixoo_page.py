@@ -17,13 +17,13 @@ from fastapi.testclient import TestClient
 from PIL import Image, ImageChops
 
 from app.main import create_app
-from app.render.celebrate import celebrations_for
+from app.render.celebrate import celebrations_for, sparkle_clip
 from app.render.frame import Clip, new_frame
 from app.render.gamma import led_gamma, led_lut
-from app.render.rotation import ROTATION_ORDER
+from app.render.rotation import hold_ms, rotation_sequence
 from app.timeutil import local_day
-from app.web.pixoo import BRIGHTNESS_STEPS, hold_ms
-from tests.render import WEEK_41, WEEK_COMPLETE, load, rotation
+from app.web.pixoo import BRIGHTNESS_STEPS
+from tests.render import WEEK_41, WEEK_COMPLETE, load
 
 PAGES = ("/", "/preview", "/pixoo")
 EXTERNAL = ("http://", "https://", "<script src", "<link ", "@import", "url(")
@@ -53,12 +53,15 @@ def test_pixoo_page_is_self_contained_and_links_the_other_pages(client):
     assert "<script" not in client.get("/preview").text
 
 
-def test_rotation_json_lists_three_screens_with_valid_frames(client, settings):
+def test_rotation_json_lists_the_sequence_with_valid_frames(client, settings):
     body = client.get(f"/pixoo/rotation.json?fixture={WEEK_41}").json()
     view, now = load(WEEK_41, settings)
-    clips = rotation(view, now)
-    assert [s["name"] for s in body["screens"]] == list(ROTATION_ORDER)
-    assert body["dwell_ms"] == settings.device.screen_seconds * 1000 == 20000
+    sequence = rotation_sequence(view, now, settings.device.screen_seconds)
+    clips = {name: clip for name, clip, _ in sequence}
+    holds = {name: hold for name, _, hold in sequence}
+    names = [s["name"] for s in body["screens"]]
+    assert names == ["week", "today", "win-workout", "win-sleep", "books"]
+    assert body["dwell_ms"] == settings.device.screen_seconds * 1000 == 6000
     assert body["source"] == {"fixture": WEEK_41}
     assert body["day_local"] == view.day_local and body["as_of_local"] == "2026-09-30 18:10 EDT"
     for screen in body["screens"]:
@@ -67,13 +70,16 @@ def test_rotation_json_lists_three_screens_with_valid_frames(client, settings):
         assert [f["ms"] for f in screen["frames"]] == list(clip.durations_ms)
         assert all(f["ms"] > 0 for f in screen["frames"])
         assert screen["total_ms"] == clip.total_ms == sum(f["ms"] for f in screen["frames"])
-        assert screen["hold_ms"] == max(body["dwell_ms"], clip.total_ms)
+        assert screen["hold_ms"] == holds[screen["name"]]
         for index, frame in enumerate(screen["frames"]):
             assert "gamma" not in frame["url"] and "brightness" not in frame["url"]
             image = _png(client.get(frame["url"]))
             assert image.size == (64, 64)
             assert ImageChops.difference(image, clip.frames[index]).getbbox() is None
-    assert len(body["screens"][2]["frames"]) > 1, "Books pages are separate frames"
+    assert len(body["screens"][-1]["frames"]) > 1, "Books pages are separate frames"
+    assert holds["week"] == holds["today"] == 6000
+    assert holds["books"] == clips["books"].total_ms > 6000, "the whole message pages through"
+    assert holds["win-workout"] == holds["win-sleep"] == 4200
     expected = {c.name: c for c in celebrations_for(view)}
     assert [c["name"] for c in body["celebrations"]] == ["sparkle", "party"]
     for celebration in body["celebrations"]:
@@ -114,9 +120,15 @@ def test_shipped_luts_are_the_gamma_emulator_with_brightness_before_the_curve(cl
 def test_hold_is_the_dwell_or_the_clip_length_if_longer(settings):
     short = Clip((new_frame(),) * 4, (1000,) * 4)
     long = Clip((new_frame(),) * 5, (5000,) * 5)
-    assert hold_ms(short, settings.device.screen_seconds) == 20000
-    assert hold_ms(long, settings.device.screen_seconds) == 25000
-    assert hold_ms(long, 30) == 30000
+    still = Clip((new_frame(),), (8000,))
+    assert hold_ms("week", still, settings.device.screen_seconds) == 6000, "a still: the dwell"
+    assert hold_ms("week", short, settings.device.screen_seconds) == 8000, "two whole plays"
+    assert hold_ms("books", long, settings.device.screen_seconds) == 25000, "one whole play"
+    assert hold_ms("books", long, 30) == 50000
+    sparkle = sparkle_clip("book")
+    assert sparkle.total_ms == 1400
+    assert hold_ms("win-book", sparkle, settings.device.screen_seconds) == 4200
+    assert hold_ms("win-book", sparkle, 45) == 4200, "a sparkle never waits out the dwell"
 
 
 def test_rotation_json_dwell_follows_device_config(settings):
@@ -124,7 +136,11 @@ def test_rotation_json_dwell_follows_device_config(settings):
     with TestClient(create_app(slow)) as client:
         body = client.get(f"/pixoo/rotation.json?fixture={WEEK_41}").json()
     assert body["dwell_ms"] == 45000
-    assert all(s["hold_ms"] == 45000 for s in body["screens"])
+    holds = {s["name"]: (s["hold_ms"], s["total_ms"], len(s["frames"])) for s in body["screens"]}
+    assert holds["week"][0] == holds["today"][0] == 45000
+    books_hold, books_total, pages = holds["books"]
+    assert pages > 1 and books_hold >= 45000 and books_hold % books_total == 0
+    assert holds["win-workout"][0] == 4200
 
 
 def test_date_and_fixture_selection(client, settings):

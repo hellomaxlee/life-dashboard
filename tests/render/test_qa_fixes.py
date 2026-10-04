@@ -253,7 +253,9 @@ def test_celebrations_are_marked_sample_unless_earned(settings, client, capsys):
     ]
     four = replace(two_dots, week_dots=4, today_dot=None, sleep_hours=6.0)
     sparkle, party = celebrations_for(four)
-    assert (sparkle.earned, party.earned) == (False, True)
+    assert (sparkle.earned, party.earned) == (True, True), "a finished week keeps the workout win"
+    short = replace(two_dots, week_dots=2, today_dot=None, sleep_hours=6.0)
+    assert [c.earned for c in celebrations_for(short)] == [False, False]
     assert party.clip.poster.tobytes() == party_clip(4, 3).poster.tobytes()
     assert party.clip.poster.tobytes() != party_clip(3, 3).poster.tobytes()
 
