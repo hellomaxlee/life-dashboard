@@ -126,6 +126,10 @@ class PixooAdapter:
             raise PixooError(f"{body.get('Command')}: device replied {reply!r}")
         return reply
 
+    def set_brightness(self, percent: int) -> None:
+        """0 to 100. Accepted by the panel (ReturnCode 0); the effect is judged by eye."""
+        self._command({"Command": "Channel/SetBrightness", "Brightness": percent})
+
     def send(self, clip: Clip) -> SendReport:
         """Push a clip as one animation. Raises PixooError if it is too long or a command fails."""
         count = len(clip.frames)

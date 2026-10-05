@@ -115,7 +115,7 @@ def test_system_prompt_is_byte_identical_across_days(db, settings):
     seed(db, case(1))
     first = FakeClient(reply(GOOD))
     write_summary(db, settings, SHOWN, client=first, now=NOW)
-    second = FakeClient(reply("No workout, 7.4 h of sleep. The day did its own quiet work."))
+    second = FakeClient(reply("7.4 h of sleep yesterday. The day did its own quiet work."))
     write_summary(db, settings, "2026-10-02", client=second, now=NOW)
     assert first.requests[0]["system"] == second.requests[0]["system"]
     assert first.requests[0]["messages"] != second.requests[0]["messages"]
@@ -131,7 +131,7 @@ def test_gate_failure_regenerates_once_with_the_reason_then_falls_back(db, setti
     retry = client.requests[1]["messages"][0]["content"]
     assert "rejected: grounding: 124 not in payload" in retry
     assert_fell_back(db, result)
-    assert result.line.startswith("Yesterday made the third dot this week, load 118.")
+    assert result.line.endswith(" Yesterday made the third dot this week, load 118.")
     assert [a["result"] for a in result.attempts[:2]] == ["grounding: 124 not in payload"] * 2
     assert stored_metrics(db, SHOWN)[run.DEVICE_KEY] == result.line
 
@@ -279,7 +279,7 @@ def test_recent_lines_feed_the_prompt_and_the_gate(db, settings):
     write_summary(db, settings, SHOWN, client=client, now=NOW)
     content = client.requests[0]["messages"][0]["content"]
     assert "- Second dot, load 110. A line from yesterday." in content
-    assert "Ancient sources named in the last seven days: none." in content
+    assert "Named in the last 14 lines, so not offered today: none." in content
 
 
 def test_morning_run_describes_yesterdays_dot_in_the_fallback(db, settings):
@@ -290,4 +290,5 @@ def test_morning_run_describes_yesterdays_dot_in_the_fallback(db, settings):
     )
     result = write_summary(db, settings, SHOWN, now=NOW)
     assert_fell_back(db, result)
-    assert result.line.startswith("Yesterday made the third dot this week, load 118.")
+    assert result.line.endswith(" Yesterday made the third dot this week, load 118.")
+    assert not result.line.startswith("Yesterday"), "the thought leads"

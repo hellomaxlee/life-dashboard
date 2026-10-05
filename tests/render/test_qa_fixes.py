@@ -42,7 +42,7 @@ def test_every_clip_fits_the_device_frame_limit(combo, settings):
 
     view, now = load(combo, settings)
     clips = rotation_clips(view, now) + [(c.name, c.clip) for c in celebrations_for(view)]
-    assert [name for name, _ in clips] == ["week", "today", "books", "sparkle", "party"]
+    assert [name for name, _ in clips] == ["today", "week", "month", "books", "sparkle", "party"]
     assert MAX_CLIP_FRAMES == 59
     for name, clip in clips:
         assert len(clip.frames) <= MAX_CLIP_FRAMES, f"{name}: {len(clip.frames)} frames"
@@ -78,15 +78,17 @@ def test_only_a_word_longer_than_a_line_is_split():
     assert "".join(lines).replace(" ", "") == "RestSupercalifragilisticday"
 
 
-def test_summary_over_110_chars_is_cut_at_a_word_with_an_ellipsis():
+def test_summary_over_220_chars_is_cut_at_a_word_with_an_ellipsis():
     from app.render.screens import SUMMARY_MAX_CHARS, fit_summary, wrap_pages
 
-    assert SUMMARY_MAX_CHARS == 110
-    assert fit_summary(LINE_109) == LINE_109
-    assert fit_summary(LINE_109 + ".") == LINE_109 + "."
-    long = LINE_109 + " And then some more words that will not fit."
+    assert SUMMARY_MAX_CHARS == 220
+    line_219 = f"{LINE_109} {LINE_109}"
+    assert len(line_219) == 219
+    assert fit_summary(line_219) == line_219
+    assert fit_summary(line_219 + ".") == line_219 + "."
+    long = line_219 + " And then some more words that will not fit."
     cut = fit_summary(long)
-    assert len(cut) <= 110
+    assert len(cut) <= 220
     assert cut.endswith("...")
     assert long.startswith(cut[:-3])
     assert long[len(cut) - 3] in " .,;:"
@@ -308,7 +310,7 @@ def test_pixoo_host_guard_accepts_the_three_private_ranges():
 def test_renderers_import_no_ingest_db_or_network_code():
     code = (
         "import sys\n"
-        "import app.render.screens, app.render.usage, app.render.celebrate\n"
+        "import app.render.screens, app.render.usage, app.render.celebrate, app.render.month\n"
         "import app.render.rotation, app.render.view, app.render.gamma, app.render.font\n"
         "banned = ('app.ingest', 'app.db', 'app.main', 'app.web', 'sqlite3', 'fastapi', 'httpx')\n"
         "print(sorted(m for m in sys.modules if m.startswith(banned)))\n"
@@ -348,15 +350,17 @@ def test_usage_track_has_ticks_at_60_and_85(settings):
 
 def test_rotation_clips_is_the_ordered_device_ready_rotation(settings):
     from app.render.frame import MAX_CLIP_FRAMES
+    from app.render.month import render_month
     from app.render.rotation import rotation_clips
 
     view, now = load(WEEK_41, settings)
     clips = rotation_clips(view, now)
-    assert [name for name, _ in clips] == ["week", "today", "books"]
+    assert [name for name, _ in clips] == ["today", "week", "month", "books"]
     assert all(isinstance(clip, Clip) for _, clip in clips)
-    assert clips[0][1].poster.tobytes() == render_week(view, now).poster.tobytes()
-    assert clips[1][1].poster.tobytes() == render_today(view).poster.tobytes()
-    assert clips[2][1].poster.tobytes() == render_books(view).poster.tobytes()
+    assert clips[0][1].poster.tobytes() == render_today(view).poster.tobytes()
+    assert clips[1][1].poster.tobytes() == render_week(view, now).poster.tobytes()
+    assert clips[2][1].poster.tobytes() == render_month(view, now).poster.tobytes()
+    assert clips[3][1].poster.tobytes() == render_books(view).poster.tobytes()
     empty = rotation_clips(DayView(day_local="2026-10-02"), now)
-    assert [name for name, _ in empty] == ["week", "today", "books"]
+    assert [name for name, _ in empty] == ["today", "week", "month", "books"]
     assert all(clip.poster.getbbox() and len(clip.frames) <= MAX_CLIP_FRAMES for _, clip in empty)

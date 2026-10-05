@@ -9,7 +9,7 @@ from datetime import date, timedelta
 import pytest
 
 from app.summary import payload as payload_mod
-from app.summary.fallback import ULTIMATE_LINE, candidates, fallback_line
+from app.summary.fallback import ULTIMATE_LINE, candidates, fact_clause, fallback_line
 from app.summary.gate import DEVICE_MAX, Recent, check_device_line
 from app.summary.payload import LENSES, Payload, lens_for
 from tests.summary.conftest import golden_cases, payload_for, seed
@@ -71,7 +71,7 @@ def test_last_resort_when_every_candidate_collides_still_shows_a_line(db, settin
     recent = Recent(similarity_lines=tuple(candidates(payload)))
     result = fallback_line(payload, recent, THRESHOLD)
     assert result.last_resort
-    assert result.line.startswith("No workout yesterday, 7.4 h of sleep.")
+    assert result.line == "7.4 h of sleep yesterday."
     assert "similarity not checked" in result.gate.reason
     assert result.line != ULTIMATE_LINE
 
@@ -82,7 +82,10 @@ def test_broken_week_fallback_never_mentions_the_streak(db, settings):
     for lens in LENSES:
         for line in candidates(with_lens(payload, lens)):
             assert "streak" not in line.lower() and "next week" not in line.lower()
-    assert fallback_line(payload, Recent(), THRESHOLD).line.startswith("One dot last week")
+    assert fact_clause(payload).startswith("One dot last week")
+    line = fallback_line(payload, Recent(), THRESHOLD).line
+    assert line == candidates(payload)[0]
+    assert not line.startswith("One dot last week"), "the thought leads; the fact is context"
 
 
 def test_wellness_fact_goes_to_the_web_line_only(db, settings):

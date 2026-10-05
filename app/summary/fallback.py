@@ -1,16 +1,27 @@
 """Rule-based copy for when the model is unavailable, over budget, or rejected twice.
 
-The line is read in the morning and describes yesterday. It is a fact clause (numbers
-first, from the payload, at most FACT_MAX characters) plus a thought chosen by lens and
-situation (at most THOUGHT_MAX characters), so every candidate fits the 110-character device
-line whatever the numbers or the book title. Candidates are tried in a day-rotated order
-until one passes the same gate the model's line must pass. The last resort is the fact
-clause alone, checked for everything but similarity, so the display never blanks.
+The line is read in the morning and follows the model's voice: the thought leads and the
+day's numbers are optional context. On an ordinary day (a dot, or no workout on record)
+the candidates are of three kinds, and the date decides which kind is tried first, so the
+kinds take turns:
+a quote from the bank for the day's lens with its author (`quotes.display`), a thought of
+our own chosen by lens and situation, and a thought followed by the fact clause (the one day
+in three that touches a number). A finished book is a win and is always named, after the
+thought. A day with no workout on record is never called rest (Max, 2026-10-04: absence of
+a record is not evidence of rest, weekends included): its fact clause is the sleep alone,
+its thoughts speak of rest only as an idea, and the same gate check that binds the model
+binds every line here. Three hard cases keep the plain fact in front, because the brief
+requires naming what happened: health data not arrived (missing), a session without
+heart-rate data (nodot), a scored workout under the load bar (under: the nodot thoughts
+that do not blame the record).
 
-Situations: train (a dot), rest (no workout), nodot (a session without heart-rate data:
-the work happened, the record did not score it), under (a scored workout below the load
-bar: the nodot thoughts that do not blame the record), missing (health data not arrived).
-No thought refers to a time of day or tells him what he feels (Ingrid, 2026-10-02).
+The fact clause is at most FACT_MAX characters and a thought at most THOUGHT_MAX, and every
+bank entry fits with its attribution, so every candidate fits the device line whatever the
+numbers or the book title. Candidates are tried in order until one passes the same gate the
+model's line must pass, so a quote or an author seen in the last 14 lines is skipped. The
+last resort is the fact clause alone, checked for everything but similarity, so the display
+never blanks. No thought refers to a time of day or tells him what he feels (Ingrid,
+2026-10-02).
 """
 
 from __future__ import annotations
@@ -28,12 +39,16 @@ from app.summary.gate import (
     check_hard_day,
     check_length,
     check_names,
+    check_rest_claim,
     check_wellness,
+    without_title,
 )
 from app.summary.payload import Payload
+from app.summary.quotes import display, for_lens
 
 FACT_MAX = 60
 THOUGHT_MAX = DEVICE_MAX - FACT_MAX - 1
+HARD_SITUATIONS = frozenset({"missing", "nodot", "under"})
 ULTIMATE_LINE = "Today is on the record; the numbers are on the web page."
 COUNT_WORDS = ("No", "One", "Two", "Three", "Four", "Five", "Six", "Seven")
 
@@ -51,10 +66,10 @@ THOUGHTS: dict[str, dict[str, tuple[str, ...]]] = {
             "What was yours to decide, you decided.",
             "One thing in your hands, handled.",
         ),
-        "rest": (
+        "quiet": (
             "The schedule is not yours; the response is.",
-            "What was in reach was rest, and you took it.",
-            "You chose the pause; that was yours to choose.",
+            "What is in reach is enough to work with.",
+            "The day is not yours to grade; the next choice is.",
         ),
         "nodot": (
             "The work was yours; the record was not.",
@@ -73,7 +88,7 @@ THOUGHTS: dict[str, dict[str, tuple[str, ...]]] = {
             "A habit is built from unremarkable days.",
             "The dot is small; the pattern behind it is not.",
         ),
-        "rest": (
+        "quiet": (
             "Rest is part of the pattern, not a gap in it.",
             "Habits are kept in weeks, not single days.",
             "The week is the habit; this was one of its days.",
@@ -95,7 +110,7 @@ THOUGHTS: dict[str, dict[str, tuple[str, ...]]] = {
             "Done, and then let go of.",
             "The work was the point; the dot is its shadow.",
         ),
-        "rest": (
+        "quiet": (
             "Begin again today, without drama.",
             "Nothing is owed to the day before.",
             "A day without a dot is a day, not a verdict.",
@@ -117,10 +132,10 @@ THOUGHTS: dict[str, dict[str, tuple[str, ...]]] = {
             "A feeling after is information, not orders.",
             "Notice the pull to do more; it is not a need.",
         ),
-        "rest": (
+        "quiet": (
             "Worth noticing how you count a day like this.",
             "Rest is easy to undercount. It still counts.",
-            "A quiet day is data too.",
+            "What the record leaves out is worth noticing too.",
         ),
         "nodot": (
             "A missing number is easy to take personally.",
@@ -139,10 +154,10 @@ THOUGHTS: dict[str, dict[str, tuple[str, ...]]] = {
             "The hard part was starting; that is behind you.",
             "Steady beats dramatic, and this was steady.",
         ),
-        "rest": (
+        "quiet": (
             "Recovery is where resilience is actually built.",
             "Holding back is also a kind of holding.",
-            "The quiet day carries the loud one.",
+            "Quiet days carry the loud ones.",
         ),
         "nodot": (
             "The work held up even when the record did not.",
@@ -161,10 +176,10 @@ THOUGHTS: dict[str, dict[str, tuple[str, ...]]] = {
             "The work is done; now it gets absorbed.",
             "Recovery finishes what the workout started.",
         ),
-        "rest": (
+        "quiet": (
             "Rest is where the training lands.",
-            "The rest day did its job while you did nothing.",
-            "Recovery was the work, and it counts.",
+            "Rest does its work unobserved.",
+            "Recovery is work too, and it counts.",
         ),
         "nodot": (
             "The body counted it, even if the chart did not.",
@@ -183,9 +198,9 @@ THOUGHTS: dict[str, dict[str, tuple[str, ...]]] = {
             "Good to have had the time and legs for it.",
             "That was a good one to have.",
         ),
-        "rest": (
-            "A slow day is a good thing to have had.",
-            "Good to have a day with room in it.",
+        "quiet": (
+            "An ordinary day is a good thing to have had.",
+            "Good to have had the day at all.",
             "Nothing to add to the day, which is a gift.",
         ),
         "nodot": (
@@ -293,8 +308,10 @@ def fact_options(payload: Payload) -> list[str]:
             when = "last week" if week["relation"] == "this week" else "the week before"
             count = _count(int(week["previous_week_quality_workouts"]), "dot").lower()
             core = [f"{count} {when}, {sleep_text}."]
+        elif sleep is not None:
+            core = [f"{sleep} h of sleep yesterday."]
         else:
-            core = [f"no workout yesterday, {sleep_text}."]
+            core = ["no workout or sleep on record yesterday."]
     options: list[str] = []
     for clause in core:
         if cell.day_type == "travel":
@@ -316,7 +333,7 @@ def _situation(payload: Payload) -> str:
     day = payload.data["day"]
     if day.get("quality_workout"):
         return "train"
-    return "under" if (day.get("workout_count") or 0) > 0 else "rest"
+    return "under" if (day.get("workout_count") or 0) > 0 else "quiet"
 
 
 def thoughts_for(lens: str, situation: str) -> tuple[str, ...]:
@@ -344,12 +361,36 @@ def web_fact(payload: Payload) -> str | None:
     return " ".join(parts) or None
 
 
+def _rotated(items: tuple[str, ...], start: int) -> list[str]:
+    if not items:
+        return []
+    start %= len(items)
+    return list(items[start:] + items[:start])
+
+
+def quote_lines(payload: Payload) -> list[str]:
+    """The lens's bank entries as shown, starting one further on each time the lens returns."""
+    ordinal = date.fromisoformat(payload.day_local).toordinal()
+    entries = tuple(display(q) for q in for_lens(payload.lens))
+    return _rotated(entries, ordinal // 7)
+
+
 def candidates(payload: Payload) -> list[str]:
     fact = fact_clause(payload)
-    thoughts = thoughts_for(payload.lens, _situation(payload))
-    start = date.fromisoformat(payload.day_local).toordinal() % len(thoughts)
-    ordered = thoughts[start:] + thoughts[:start]
-    return [f"{fact} {thought}" for thought in ordered]
+    situation = _situation(payload)
+    ordinal = date.fromisoformat(payload.day_local).toordinal()
+    thoughts = _rotated(thoughts_for(payload.lens, situation), ordinal)
+    if situation in HARD_SITUATIONS:
+        return [f"{fact} {thought}" for thought in thoughts]
+    with_fact = [f"{thought} {fact}" for thought in thoughts]
+    quotes = quote_lines(payload)
+    if payload.data["day"].get("book_finished"):
+        return with_fact + quotes + thoughts
+    return [
+        with_fact + quotes + thoughts,
+        quotes + thoughts + with_fact,
+        thoughts + quotes + with_fact,
+    ][ordinal % 3]
 
 
 def fallback_line(payload: Payload, recent: Recent, threshold: float) -> FallbackResult:
@@ -359,13 +400,15 @@ def fallback_line(payload: Payload, recent: Recent, threshold: float) -> Fallbac
         if result.ok:
             return FallbackResult(line, web, result)
     fact = fact_clause(payload)
+    text = without_title(fact, payload)
     reasons = (
         check_length(fact)
         or check_grounding(fact, payload)
-        or check_ban(fact)
-        or check_names(fact, recent.sources_named)
-        or check_hard_day(fact, payload)
-        or check_wellness(fact, payload)
+        or check_ban(text)
+        or check_names(text, recent.sources_named)
+        or check_rest_claim(text, payload)
+        or check_hard_day(text, payload)
+        or check_wellness(text, payload)
     )
     if reasons:
         note = f"last resort: fact clause rejected ({'; '.join(reasons)}), constant line used"

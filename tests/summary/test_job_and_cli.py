@@ -62,7 +62,9 @@ def test_cli_writes_then_reports_stored(db, settings, capsys):
     seed(db, golden_cases()[0])
     assert summary_tool.main(["--date", "2026-10-01"]) == 0
     out = capsys.readouterr().out
-    assert out.startswith("2026-10-01 [fallback] Yesterday made the third dot this week, load 118.")
+    first = out.splitlines()[0]
+    assert first.startswith("2026-10-01 [fallback] ")
+    assert first.endswith(" Yesterday made the third dot this week, load 118.")
     assert "attempt model: unavailable: no api key" in out
     assert summary_tool.main(["--date", "2026-10-01"]) == 0
     assert "[stored]" in capsys.readouterr().out

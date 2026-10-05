@@ -78,7 +78,7 @@ def old_db(tmp_path: Path):
 def test_migration_005_keeps_every_copy_and_sample_and_applies_once(tmp_path):
     conn = old_db(tmp_path)
 
-    assert migrate(conn) == [5]
+    assert migrate(conn) == list(range(5, CODE_SCHEMA_VERSION + 1))
     after = schema(conn)
     assert migrate(conn) == []
     assert schema(conn) == after

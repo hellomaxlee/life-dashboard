@@ -94,3 +94,9 @@ pixoo_host = "192.168.1.185"
 # Seconds a still screen stays up (3 or more). The Books screen stays until its summary has
 # paged through once; each small-win sparkle plays for about 4 seconds.
 screen_seconds = 6
+# Panel brightness, 0 to 100: `night_brightness` from `night_from` until `night_until`
+# (home timezone), `brightness` the rest of the day. Equal times = never dimmed.
+brightness = 100
+night_brightness = 10
+night_from = "22:00"
+night_until = "05:30"

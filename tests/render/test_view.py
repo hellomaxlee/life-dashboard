@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 
 from app.render.view import ClaudeUsage, DayView, view_from_metrics, week_start
 from app.render.view_db import view_from_db
@@ -18,7 +19,8 @@ def put_daily(db, day: str, metrics: dict) -> None:
 def test_fixture_builds_the_expected_view(settings):
     view, now = load(WEEK_41, settings)
     assert now == from_utc_iso("2026-09-30T22:15:00Z")
-    assert view == DayView(
+    assert view.month_feature is not None and view.month_feature.month == "2026-09"
+    assert replace(view, month_feature=None) == DayView(
         day_local="2026-09-30",
         home_tz="America/New_York",
         week_target=3,

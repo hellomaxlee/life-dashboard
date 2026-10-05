@@ -6,8 +6,10 @@ python -m tools.pixoo_window --url http://192.168.1.171:8080 [--fixture <combo> 
 Reads `/pixoo/rotation.json` and the frame PNGs from the service on the LAN (stdlib tkinter
 plus Pillow; no new dependencies) and draws the same LED look the /pixoo page draws: a round
 LED per pixel, 70 % of the cell, over faint unlit LEDs, with a soft glow. Rendering stays on
-the service; this window only maps pixels to LEDs. Keys: space pause, n next screen,
-s sparkle, p party, q quit. Nothing is sent anywhere but the service address given.
+the service; this window only maps pixels to LEDs. It starts at Today and runs the service's
+sequence (Today, Week, Month, Books, the earned small wins, the party when the week is done).
+Keys: space pause, n next screen, s sparkle, p party, q quit. Nothing is sent anywhere but the
+service address given.
 """
 
 from __future__ import annotations
@@ -217,9 +219,6 @@ def main(argv: list[str] | None = None) -> int:
     caption.configure(text=describe())
     state["step_ms"] = min(current()["frames"][0]["ms"], current()["hold_ms"])
     schedule(state["step_ms"])
-    earned = [c for c in rotation.celebrations if c["earned"]]
-    if earned:
-        play(earned[-1]["name"])
     root.mainloop()
     return 0
 

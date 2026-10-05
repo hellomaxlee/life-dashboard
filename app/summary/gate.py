@@ -2,10 +2,13 @@
 names the reason. The same gate judges the model's line and the fallback's.
 
 Rules, in order:
-  length      the device line is 1 to 110 characters, no control characters
+  length      the device line is 1 to 220 characters, no control characters
   grounding   every number token (digits, optional decimals, a bare ".5", thousands commas
               removed, digits glued to letters as in "x2"; "VO2" and "Z1".."Z5" are names)
               equals a number in the payload: "7.4" is 7.4, "118" is 118 or 118.0, "7" is 7.0.
+              A line with no number passes. Numbers inside a verbatim quote-bank entry in
+              double quotes ("a thousand miles") are the author's, not a claim about the day,
+              and are not checked; numbers outside it are.
               Number words count like digits wherever they stand: zero, two..nineteen, the
               tens, hundred, thousand, million, dozen, half, twice, thrice, and compounds of
               them ("twenty-one", "a hundred"). "one" and the ordinal words (first, second,
@@ -27,12 +30,26 @@ Rules, in order:
               need/have/had/got to, you gotta, you better, you must, just do it, don't miss,
               try/work/push harder, do better, only/just N [noun] left/more/to go, any "!",
               any emoji or symbol character, a second exclamatory clause
-  names       an attributed quote in any case ("as [the] X said/says/noted/wrote/taught/put
-              it", "in the words of", "to quote", an ancient source followed by a speech
-              verb), a modern name, a capitalised two-word name followed by
-              says/said/would/noted/wrote and the like (an ancient source with "would" is a
-              paraphrase and passes), or an ancient source named when one was already named
-              in the last 7 days
+  names       words go under a person's name only from the quote bank (app/summary/quotes.py).
+              Curly quotes and dashes are folded first. A line with double quotation marks
+              passes only if they are balanced, hold one quotation, its words match a bank
+              entry (case, spacing and punctuation aside) and that entry's author is named
+              outside the quotation with no other person beside it. A person named with no
+              such quotation is rejected: a bank author with other words, an ancient or
+              modern name from the lists, "as X said", "in the words of", "to quote", "who
+              also said", a capitalised two-word name before says/said/would/wrote and the
+              like, a closing "- Name". A bank entry written without its quotation marks is
+              rejected. A tradition named in paraphrase ("the Stoics", "an old Buddhist
+              idea") passes. The same quote or the same author within the last 14 lines is
+              rejected.
+  rest        no claim that he rested, on any day, weekends included: the payload has no
+              positive rest signal, and no workout on record is absence of a record, not
+              evidence of rest. Rejected: rest/recovery/easy/off day, day off, day of rest,
+              you rested/recovered/took it easy/took the day off/chose rest, rested or rest
+              or recovery next to yesterday/today/a weekday/the weekend, your rest, "no
+              workout" (or training, session, run) unless followed by "on record",
+              "recorded" or "logged", did not train, without a workout. Rest as an idea
+              ("rest is where the training lands") passes.
   hard-days   in the week after a broken week only: no "streak", no "next week"
   wellness    HRV, resting heart rate, VO2 max, daylight only when the payload has a fact
   opening     the first three words do not open any of the last 14 lines
@@ -40,7 +57,7 @@ Rules, in order:
               configured threshold
 
 A finished book's title is a stored value: it is replaced by a neutral word before the
-grounding, ban, names, hard-days and wellness checks, so "#1" in a series title is not an
+grounding, ban, names, rest, hard-days and wellness checks, so "#1" in a series title is not an
 invented number. Length is measured on the line as written.
 """
 
@@ -51,11 +68,12 @@ import unicodedata
 from dataclasses import dataclass, field
 
 from app.summary.payload import Payload
+from app.summary.quotes import AUTHOR_ALIASES, QUOTES, Quote
 
-DEVICE_MAX = 110
+DEVICE_MAX = 220
 RECENT_OPENING_LINES = 14
 RECENT_SIMILARITY_LINES = 30
-SOURCE_WINDOW_DAYS = 7
+SOURCE_WINDOW_LINES = 14
 
 DETERMINER = r"(?:the|your|this|that|a|my|our)"
 CHAIN = r"(?:chain|streak)"
@@ -128,26 +146,48 @@ BANS: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
     )
 )
 
-ANCIENT_SOURCES = (
-    "marcus aurelius",
-    "aurelius",
-    "epictetus",
-    "seneca",
-    "aristotle",
+OTHER_SOURCES = (
     "socrates",
     "plato",
     "zeno",
     "chrysippus",
+    "cleanthes",
+    "musonius rufus",
     "musonius",
     "cato",
-    "buddha",
-    "the buddha",
-    "lao tzu",
-    "laozi",
-    "confucius",
-    "heraclitus",
-    "diogenes",
     "cicero",
+    "plutarch",
+    "epicurus",
+    "diogenes",
+    "pythagoras",
+    "the buddha",
+    "buddha",
+    "mencius",
+    "sun tzu",
+    "rumi",
+    "pascal",
+    "goethe",
+    "kant",
+    "nietzsche",
+    "kierkegaard",
+    "schopenhauer",
+    "tolstoy",
+    "shakespeare",
+    "franklin",
+    "lincoln",
+    "twain",
+    "einstein",
+    "gandhi",
+    "churchill",
+    "camus",
+    "frankl",
+    "mandela",
+    "thich nhat hanh",
+    "alan watts",
+    "bruce lee",
+    "muhammad ali",
+    "lombardi",
+    "prefontaine",
 )
 MODERN_NAMES = (
     "goggins",
@@ -168,6 +208,13 @@ MODERN_NAMES = (
     "kobe",
     "steve jobs",
     "dalai lama",
+    "pema chodron",
+    "eckhart tolle",
+    "kabat-zinn",
+    "murakami",
+    "michael jordan",
+    "lebron",
+    "serena",
 )
 SPEECH_VERBS = (
     r"(?:said|says|put\s+it|puts\s+it|wrote|writes|taught|teaches|noted|notes|observed|"
@@ -175,12 +222,31 @@ SPEECH_VERBS = (
 )
 ATTRIBUTION = re.compile(
     rf"\bas\s+(?:[\w'-]+\s+){{1,4}}?(?:once\s+|often\s+)?{SPEECH_VERBS}\b"
-    r"|\bin\s+the\s+words\s+of\b|\bto\s+quote\b|\bquoting\b",
+    r"|\bin\s+the\s+words\s+of\b|\bto\s+quote\b|\bquoting\b"
+    rf"|\b(?:who|he|she)\s+(?:also\s+|once\s+|often\s+)?{SPEECH_VERBS}\b",
     re.IGNORECASE,
 )
-SOURCE_SPEAKS = re.compile(
-    rf"\b(?:{'|'.join(ANCIENT_SOURCES)})\s+(?:once\s+|often\s+)?{SPEECH_VERBS}\b"
+CLOSING_ATTRIBUTION = re.compile(r"(?:^|\s)-{1,2}\s*(?:[A-Z][\w'.]*\s*){1,4}[.]?\s*$")
+QUOTED = re.compile(r'"([^"]*)"')
+QUOTE_MARKS = str.maketrans(
+    {
+        "“": '"',
+        "”": '"',
+        "„": '"',
+        "‟": '"',
+        "«": '"',
+        "»": '"',
+        "″": '"',
+        "–": "-",
+        "—": "-",
+        "―": "-",
+        "‒": "-",
+        "‐": "-",
+        "‑": "-",
+        "−": "-",
+    }
 )
+QUOTE_STAND_IN = "a quotation"
 NAMED_SPEAKER = re.compile(
     r"\b((?:[A-Z][a-z'-]+\s+){1,3}[A-Z][a-z'-]+)\s+(?:once\s+|often\s+)?"
     r"(said|says|would|noted|notes|wrote|writes|taught|teaches|called|calls|believed|believes)\b"
@@ -195,6 +261,42 @@ WELLNESS_WORDS = (
     "daylight",
 )
 HARD_DAY_WORDS = ("streak", "next week")
+A_DAY = (
+    r"(?:yesterday|today|monday|tuesday|wednesday|thursday|friday|saturday|sunday|"
+    r"(?:the|this|last)\s+weekend|last\s+night)"
+)
+RESTING = r"(?:rest|resting|rested|recovery|recovering)"
+REST_CLAIMS: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
+    (label, re.compile(pattern))
+    for label, pattern in (
+        ("rest day", r"\b(?:rest|resting|recovery|easy|off|down)\s+days?\b"),
+        ("day off", r"\b(?:days?|weekends?)\s+(?:off|of\s+rest|of\s+recovery)\b"),
+        (
+            "you rested",
+            r"\byou(?:'ve|\s+have|\s+had)?\s+(?:\w+\s+)?(?:rested|recovered|"
+            r"took\s+(?:it\s+easy|a\s+break|a\s+rest|rest|the\s+pause)|"
+            r"chose\s+(?:rest|recovery|the\s+pause|to\s+rest|not\s+to\s+train))\b",
+        ),
+        ("took it easy", r"\b(?:took|taking|take)\s+it\s+easy\b"),
+        ("rested yesterday", rf"\b{RESTING}\s+(?:on\s+)?{A_DAY}\b"),
+        (
+            "yesterday was rest",
+            rf"\b{A_DAY}(?:'s)?\s+(?:was|is|were|went\s+to)\s+(?:a\s+|for\s+|about\s+)?{RESTING}\b",
+        ),
+        ("yesterday's rest", rf"\b{A_DAY}'s\s+{RESTING}\b"),
+        ("your rest", r"\byour\s+(?:rest|recovery)\b(?!\s+(?:is|was)\s+yours)"),
+        (
+            "no workout",
+            r"\bno\s+(?:workouts?|training|sessions?|run|runs|exercise)\b"
+            r"(?!\s+(?:on\s+(?:the\s+)?record|recorded|logged|was\s+recorded))",
+        ),
+        (
+            "did not train",
+            r"\b(?:did\s+not|didn't|didnt)\s+(?:train|work\s+out|run|exercise)\b",
+        ),
+        ("without a workout", r"\bwithout\s+(?:a\s+)?(?:workout|training|a\s+run)\b"),
+    )
+)
 EXCLAMATORY_OPENERS = re.compile(r"^(?:what\s+an?\b|how\s+\w+\b|such\s+an?\b|so\s+\w+\s*$)")
 
 THOUSANDS = re.compile(r"(?<=\d),(?=\d{3}\b)")
@@ -261,6 +363,7 @@ class Recent:
     opening_lines: tuple[str, ...] = ()
     similarity_lines: tuple[str, ...] = ()
     sources_named: tuple[str, ...] = ()
+    """Every person named in the last SOURCE_WINDOW_LINES lines, as `persons_in` keys."""
 
 
 @dataclass(frozen=True)
@@ -515,12 +618,68 @@ def similarity(a: str, b: str) -> float:
     return len(ta & tb) / len(ta | tb)
 
 
-def ancient_sources_in(text: str) -> list[str]:
-    lowered = normalize(text)
-    found = [name for name in ANCIENT_SOURCES if re.search(rf"\b{re.escape(name)}\b", lowered)]
-    if "marcus aurelius" in found and "aurelius" in found:
-        found.remove("aurelius")
+def fold_quotes(text: str) -> str:
+    """`fold` with every double quotation mark straight and every dash a hyphen."""
+    return fold(text).translate(QUOTE_MARKS)
+
+
+def quote_key(text: str) -> str:
+    """What makes two quotations the same words: case, spacing and punctuation aside."""
+    return normalize(fold_quotes(text))
+
+
+BANK: dict[str, Quote] = {quote_key(q.text): q for q in QUOTES}
+PERSON_ALIASES: tuple[tuple[str, str], ...] = tuple(
+    sorted(
+        [(normalize(a), author.lower()) for author, names in AUTHOR_ALIASES.items() for a in names]
+        + [(normalize(name), name) for name in OTHER_SOURCES],
+        key=lambda pair: -len(pair[0]),
+    )
+)
+BANK_AUTHORS = frozenset(author.lower() for author in AUTHOR_ALIASES)
+
+
+def bank_entry(quoted: str) -> Quote | None:
+    return BANK.get(quote_key(quoted))
+
+
+def quotations_in(text: str) -> list[str]:
+    return QUOTED.findall(fold_quotes(text))
+
+
+def persons_in(text: str) -> list[str]:
+    """The persons named in `text`, longest alias first, each once: a bank author as the
+    lowercased bank name ("marcus aurelius"), any other listed source as listed."""
+    padded = f" {normalize(fold_quotes(text))} "
+    found: list[str] = []
+    for alias, person in PERSON_ALIASES:
+        if f" {alias} " in padded:
+            if person not in found:
+                found.append(person)
+            padded = padded.replace(f" {alias} ", "  ")
     return found
+
+
+def sources_in(text: str) -> list[str]:
+    """Who a stored line named, for the memory: persons outside any quotation."""
+    return persons_in(QUOTED.sub(" ", fold_quotes(text)))
+
+
+def without_bank_quotes(text: str) -> str:
+    """The line with each verbatim bank quotation replaced by a neutral word."""
+
+    def stand_in(match: re.Match[str]) -> str:
+        return f'"{QUOTE_STAND_IN}"' if bank_entry(match.group(1)) else match.group(0)
+
+    return QUOTED.sub(stand_in, fold_quotes(text))
+
+
+def _without_names(text: str, person: str) -> str:
+    for alias, owner in PERSON_ALIASES:
+        if owner == person:
+            pattern = r"[\s-]+".join(re.escape(word) for word in alias.split())
+            text = re.sub(rf"\b{pattern}\b", " ", text, flags=re.IGNORECASE)
+    return text
 
 
 def without_title(line: str, payload: Payload) -> str:
@@ -539,7 +698,7 @@ def check_length(line: str) -> list[str]:
 
 
 def check_grounding(line: str, payload: Payload) -> list[str]:
-    text = without_title(line, payload)
+    text = without_bank_quotes(without_title(line, payload))
     bad = odd_numerals(text) + ungrounded_numbers(text, payload.numbers())
     for token, value, kind in counted_numbers(text):
         if value not in typed_numbers(payload, kind) and token not in bad:
@@ -563,25 +722,89 @@ def check_ban(line: str) -> list[str]:
     return []
 
 
-def check_names(line: str, recent_sources: tuple[str, ...]) -> list[str]:
-    lowered = normalize(line)
-    if ATTRIBUTION.search(fold(line)) or SOURCE_SPEAKS.search(lowered):
+def check_names(
+    line: str, recent_sources: tuple[str, ...], recent_lines: tuple[str, ...] = ()
+) -> list[str]:
+    text = fold_quotes(line)
+    if text.count('"') % 2:
+        return ["names: unbalanced quotation marks"]
+    spans = QUOTED.findall(text)
+    residue = QUOTED.sub(" ", text)
+    if len(spans) > 1:
+        return ["names: more than one quotation in one line"]
+    entry = bank_entry(spans[0]) if spans else None
+    if spans and entry is None:
+        return [
+            "names: the words in quotation marks are not a quote-bank entry, whole and "
+            "unchanged; quote only from the bank, or write an original line with no "
+            "quotation marks"
+        ]
+    named = persons_in(residue)
+    if entry is not None:
+        author = entry.author.lower()
+        if author not in named:
+            wrong = f", not {named[0]!r}" if named else ""
+            return [
+                f"names: that quotation is {entry.author}'s in the bank{wrong}; name its author"
+            ]
+        others = [person for person in named if person != author]
+        if others:
+            return [f"names: {others[0]!r} named beside a quotation by {entry.author}"]
+        residue = _without_names(residue, author)
+    elif named:
+        return [
+            f"names: {named[0]!r} named without a verbatim quote-bank entry in double "
+            "quotation marks; quote from the bank or name no person"
+        ]
+    lowered = normalize(residue)
+    padded = f" {lowered} "
+    for key, quote in BANK.items():
+        if f" {key} " in padded:
+            return [
+                f"names: a bank quotation by {quote.author} without its quotation marks and author"
+            ]
+    if ATTRIBUTION.search(residue):
         return ["names: attributed quote"]
     for name in MODERN_NAMES:
         if re.search(rf"\b{re.escape(normalize(name))}\b", lowered):
             return [f"names: living or modern person {name!r}"]
-    for speaker in NAMED_SPEAKER.finditer(fold(line)):
+    for speaker in NAMED_SPEAKER.finditer(residue):
         words = normalize(speaker.group(1)).split()
         while words and words[0] in NAME_OPENERS:
             words = words[1:]
-        paraphrase = speaker.group(2) == "would" and " ".join(words) in ANCIENT_SOURCES
-        if len(words) >= 2 and not paraphrase:
+        if len(words) >= 2:
             return [f"names: named person {' '.join(words)!r}"]
-    named = ancient_sources_in(line)
-    if named and recent_sources:
-        return [f"names: {named[0]!r} named, a source was already named in the last 7 days"]
-    if len(named) > 1:
-        return ["names: more than one source in one line"]
+    if CLOSING_ATTRIBUTION.search(residue):
+        return ["names: a closing attribution to a person who is not a bank author"]
+    if entry is not None:
+        key = quote_key(entry.text)
+        for previous in recent_lines[:SOURCE_WINDOW_LINES]:
+            if any(quote_key(span) == key for span in quotations_in(previous)):
+                return [f"names: this quotation appeared in the last {SOURCE_WINDOW_LINES} lines"]
+        if entry.author.lower() in recent_sources:
+            return [
+                f"names: {entry.author} was already quoted in the last {SOURCE_WINDOW_LINES} lines"
+            ]
+    return []
+
+
+def has_rest_signal(payload: Payload) -> bool:
+    """Whether the payload positively marks the described day as rest. Nothing does yet:
+    `workout_count: 0` and `quality_workout: false` say no workout reached the dashboard,
+    and the day-type label is derived from that same absence."""
+    return False
+
+
+def check_rest_claim(line: str, payload: Payload) -> list[str]:
+    if has_rest_signal(payload):
+        return []
+    lowered = normalize(line)
+    for label, pattern in REST_CLAIMS:
+        if pattern.search(lowered):
+            return [
+                f"rest: '{label}' claims he rested or did not train; no workout on record "
+                "is not evidence of rest"
+            ]
     return []
 
 
@@ -628,7 +851,8 @@ def _content_checks(line: str, payload: Payload, recent: Recent) -> list[str]:
     return (
         check_grounding(line, payload)
         or check_ban(text)
-        or check_names(text, recent.sources_named)
+        or check_names(text, recent.sources_named, recent.opening_lines)
+        or check_rest_claim(text, payload)
         or check_hard_day(text, payload)
         or check_wellness(text, payload)
     )

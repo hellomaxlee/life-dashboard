@@ -20,12 +20,14 @@ from app.main import create_app
 from app.render.celebrate import celebrations_for, sparkle_clip
 from app.render.frame import Clip, new_frame
 from app.render.gamma import led_gamma, led_lut
-from app.render.rotation import hold_ms, rotation_sequence
+from app.render.rotation import hold_ms, render_screen, rotation_sequence, sequence_names
+from app.render.view import DayView
 from app.timeutil import local_day
 from app.web.pixoo import BRIGHTNESS_STEPS
 from tests.render import WEEK_41, WEEK_COMPLETE, load
 
 PAGES = ("/", "/preview", "/pixoo")
+NOW = datetime(2026, 10, 2, 16, 0, tzinfo=UTC)
 EXTERNAL = ("http://", "https://", "<script src", "<link ", "@import", "url(")
 
 
@@ -60,7 +62,7 @@ def test_rotation_json_lists_the_sequence_with_valid_frames(client, settings):
     clips = {name: clip for name, clip, _ in sequence}
     holds = {name: hold for name, _, hold in sequence}
     names = [s["name"] for s in body["screens"]]
-    assert names == ["week", "today", "win-workout", "win-sleep", "books"]
+    assert names == ["today", "week", "month", "books", "win-workout", "win-sleep"]
     assert body["dwell_ms"] == settings.device.screen_seconds * 1000 == 6000
     assert body["source"] == {"fixture": WEEK_41}
     assert body["day_local"] == view.day_local and body["as_of_local"] == "2026-09-30 18:10 EDT"
@@ -76,7 +78,10 @@ def test_rotation_json_lists_the_sequence_with_valid_frames(client, settings):
             image = _png(client.get(frame["url"]))
             assert image.size == (64, 64)
             assert ImageChops.difference(image, clip.frames[index]).getbbox() is None
-    assert len(body["screens"][-1]["frames"]) > 1, "Books pages are separate frames"
+    frames = {s["name"]: s["frames"] for s in body["screens"]}
+    assert len(frames["books"]) > 1, "Books pages are separate frames"
+    assert [f["ms"] for f in frames["month"]] == [6000, 5000], "the plate, then its note"
+    assert holds["month"] == 11000, "one pass through both pages"
     assert holds["week"] == holds["today"] == 6000
     assert holds["books"] == clips["books"].total_ms > 6000, "the whole message pages through"
     assert holds["win-workout"] == holds["win-sleep"] == 4200
@@ -92,6 +97,22 @@ def test_rotation_json_lists_the_sequence_with_valid_frames(client, settings):
     assert body["celebrations"][0]["earned"] and not body["celebrations"][1]["earned"]
     complete = client.get(f"/pixoo/rotation.json?fixture={WEEK_COMPLETE}").json()
     assert complete["celebrations"][1]["earned"]
+    done, done_now = load(WEEK_COMPLETE, settings)
+    assert [s["name"] for s in complete["screens"]] == list(sequence_names(done))
+    assert [s["name"] for s in complete["screens"]][3:] == [
+        "books",
+        "win-workout",
+        "win-sleep",
+        "party",
+    ]
+    party = complete["screens"][-1]
+    clip = render_screen("party", done, done_now)
+    assert (len(party["frames"]), party["hold_ms"]) == (56, clip.total_ms), "one whole play"
+    assert party["frames"][0]["url"].startswith("/pixoo/frame/party/0.png?")
+    assert party["frames"] == complete["celebrations"][1]["frames"], "one party clip, not two"
+    shown = _png(client.get(party["frames"][30]["url"]))
+    assert ImageChops.difference(shown, clip.frames[30]).getbbox() is None
+    assert len(frames["month"]) == 2 and len(complete["screens"][2]["frames"]) == 1
 
 
 def test_shipped_luts_are_the_gamma_emulator_with_brightness_before_the_curve(client, settings):
@@ -124,11 +145,17 @@ def test_hold_is_the_dwell_or_the_clip_length_if_longer(settings):
     assert hold_ms("week", still, settings.device.screen_seconds) == 6000, "a still: the dwell"
     assert hold_ms("week", short, settings.device.screen_seconds) == 8000, "two whole plays"
     assert hold_ms("books", long, settings.device.screen_seconds) == 25000, "one whole play"
-    assert hold_ms("books", long, 30) == 50000
+    assert hold_ms("books", long, 30) == 25000, "never a second pass"
+    assert hold_ms("books", short, 30) == 4000, "a short summary is not repeated either"
     sparkle = sparkle_clip("book")
     assert sparkle.total_ms == 1400
     assert hold_ms("win-book", sparkle, settings.device.screen_seconds) == 4200
     assert hold_ms("win-book", sparkle, 45) == 4200, "a sparkle never waits out the dwell"
+    paged = Clip((new_frame(),) * 2, (6000, 5000))
+    assert hold_ms("month", paged, 6) == hold_ms("month", paged, 45) == 11000, "one pass"
+    assert hold_ms("month", still, 45) == 45000, "the plate alone, or the calendar: the dwell"
+    party = render_screen("party", DayView(day_local="2026-10-02", week_dots=3), NOW)
+    assert hold_ms("party", party, 6) == hold_ms("party", party, 45) == party.total_ms == 3360
 
 
 def test_rotation_json_dwell_follows_device_config(settings):
@@ -139,7 +166,7 @@ def test_rotation_json_dwell_follows_device_config(settings):
     holds = {s["name"]: (s["hold_ms"], s["total_ms"], len(s["frames"])) for s in body["screens"]}
     assert holds["week"][0] == holds["today"][0] == 45000
     books_hold, books_total, pages = holds["books"]
-    assert pages > 1 and books_hold >= 45000 and books_hold % books_total == 0
+    assert pages > 1 and books_hold == books_total < 45000
     assert holds["win-workout"][0] == 4200
 
 
@@ -173,6 +200,24 @@ def test_bad_input(client):
     assert client.get(f"/pixoo/frame/week/-1.png?fixture={WEEK_41}").status_code == 404
     assert client.get(f"/pixoo/frame/week/x.png?fixture={WEEK_41}").status_code == 422
     assert client.get(f"/pixoo/frame/week/0.png?fixture={WEEK_41}&gamma=2").status_code == 422
+
+
+def test_month_and_party_have_frames_and_deep_links(client, settings):
+    view, now = load(WEEK_41, settings)
+    month = render_screen("month", view, now)
+    for index in (0, 1):
+        image = _png(client.get(f"/pixoo/frame/month/{index}.png?fixture={WEEK_41}"))
+        assert ImageChops.difference(image, month.frames[index]).getbbox() is None
+    assert client.get(f"/pixoo/frame/month/2.png?fixture={WEEK_41}").status_code == 404
+    calendar = _png(client.get("/pixoo/frame/month/0.png?date=2026-10-02"))
+    assert calendar.getbbox() is not None, "no feature stored: the calendar, never blank"
+    assert client.get("/pixoo/frame/month/1.png?date=2026-10-02").status_code == 404
+    sample = _png(client.get(f"/pixoo/frame/party/0.png?fixture={WEEK_41}"))
+    assert sample.getbbox() is not None, "an unearned party is still there to be looked at"
+    page = client.get(f"/pixoo?fixture={WEEK_41}").text
+    assert "/screen=([a-z-]+)/" in page, "#screen=month, #screen=win-sleep, #screen=party"
+    assert "if (wanted !== null && !inRotation) { playCelebration(wanted); }" in page
+    assert "c.earned && c.name === 'party'" not in page, "the earned party is in the rotation"
 
 
 def test_brightness_and_gamma_are_client_side(client):

@@ -23,7 +23,69 @@
     },
     {
       "line": "As Marcus Aurelius said, what stands in the way becomes the way.",
-      "reason": "names: attributed quote"
+      "reason": "names: 'marcus aurelius' named without a verbatim quote-bank entry"
+    },
+    {
+      "line": "\"We suffer more often in imagination than in reality.\" - Epictetus",
+      "reason": "names: that quotation is Seneca's in the bank, not 'epictetus'"
+    },
+    {
+      "line": "\"We suffer more often in imagination than in reality.\"",
+      "reason": "names: that quotation is Seneca's in the bank; name its author"
+    },
+    {
+      "line": "\"We suffer more in imagination than in reality.\" - Seneca",
+      "reason": "names: the words in quotation marks are not a quote-bank entry"
+    },
+    {
+      "line": "\"The day was yours, and so is the rest.\" - Seneca",
+      "reason": "names: the words in quotation marks are not a quote-bank entry"
+    },
+    {
+      "line": "\"We are what we repeatedly do. Excellence, then, is not an act, but a habit.\" - Aristotle",
+      "reason": "names: the words in quotation marks are not a quote-bank entry"
+    },
+    {
+      "line": "\"Stay hungry. Stay foolish.\" - Steve Jobs",
+      "reason": "names: the words in quotation marks are not a quote-bank entry"
+    },
+    {
+      "line": "Steve Jobs would call that focus.",
+      "reason": "names: living or modern person 'steve jobs'"
+    },
+    {
+      "line": "The Dalai Lama says begin again.",
+      "reason": "names: living or modern person 'dalai lama'"
+    },
+    {
+      "line": "Luck is what happens when preparation meets opportunity. - Seneca",
+      "reason": "names: 'seneca' named without a verbatim quote-bank entry"
+    },
+    {
+      "line": "Begin again, without drama. - Thich Nhat Hanh",
+      "reason": "names: 'thich nhat hanh' named without a verbatim quote-bank entry"
+    },
+    {
+      "line": "We suffer more often in imagination than in reality.",
+      "reason": "names: a bank quotation by Seneca without its quotation marks and author"
+    },
+    {
+      "line": "\"A journey of a thousand miles begins with a single step.\" - Lao Tzu. Load 124.",
+      "reason": "grounding: 124 not in payload"
+    },
+    {
+      "line": "Rest day Saturday, 8412 steps, sleep 7.4 h; the week is where the habit lives.",
+      "reason": "rest: 'rest day' claims he rested or did not train"
+    },
+    {
+      "line": "No workout yesterday, 7.4 h of sleep. Rest is where the training lands.",
+      "case": 1,
+      "reason": "rest: 'no workout' claims he rested or did not train"
+    },
+    {
+      "line": "You rested yesterday, and that counts.",
+      "case": 1,
+      "reason": "rest: 'you rested' claims he rested or did not train"
     },
     {
       "line": "Be a beast.",
@@ -62,8 +124,8 @@
       "reason": "wellness: 'hrv' with no band crossing today"
     },
     {
-      "line": "Third dot this week, load 118. Steady is the whole point, and the point is to keep it steady, every single day you can, which is most of them.",
-      "reason": "length: 142 chars, limit 110"
+      "line": "Steady is the whole point, and the point is to keep it steady, every single day you can, which is most of them, and on the days you cannot the point is still there waiting, unbothered, exactly where you left it the last time you looked for it.",
+      "reason": "length: 243 chars, limit 220"
     },
     {
       "line": "One dot last week. The streak is gone; nothing to do but begin.",

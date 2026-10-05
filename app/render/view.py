@@ -1,4 +1,4 @@
-"""DayView: everything the three screens show, as plain typed values.
+"""DayView: everything the screens show, as plain typed values.
 
 The renderer never queries or computes a metric. It is handed a DayView, and every field
 that is None is drawn as a stated fallback ("NO DATA"), never as a blank and never as a
@@ -6,6 +6,13 @@ guess. Two builders make one: `load_fixture` here (a hand-written file under fix
 and `view_from_db` in view_db.py (what is stored for a date). Both go through
 `view_from_metrics`, so a fixture's `daily_metrics` / `weekly_metrics` objects have the same
 shape as the table rows. This module imports no database or ingest code.
+
+`month_feature` is the stored month feature (app/month/spec.py) for the requested day's
+month, or None; the Month screen then draws its calendar. view_db reads it from the
+database. A fixture names a file under fixtures/month with a `month_feature` key; that
+sample is re-dated to the fixture's own month (its days cut to the month's length), so one
+hand-made sample serves every fixture day. Only fixtures do that; a stored feature is
+shown for its own month and no other.
 
 Keys read. Phase 2 (metrics) and Phase 3 (summary) are expected to write the ones marked
 with their phase; until they do, the screens show the fallback.
@@ -39,12 +46,13 @@ from __future__ import annotations
 
 import json
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 from app.config import Settings
+from app.month.spec import MonthFeature, SpecError, days_in, parse_feature
 from app.timeutil import from_utc_iso, to_utc_iso
 
 QUALITY_WORKOUT = "quality_workout"
@@ -94,6 +102,7 @@ class DayView:
     summary_line: str | None = None
     claude: ClaudeUsage = field(default_factory=ClaudeUsage)
     stale_hours: int = 24
+    month_feature: MonthFeature | None = None
 
 
 def _number(value: Any) -> float | None:
@@ -204,10 +213,29 @@ def view_from_metrics(
     )
 
 
+def fixture_feature(days_file: Path, name: object, month: str) -> MonthFeature:
+    """The sample feature fixtures/month/<name>.json, re-dated to `month` (YYYY-MM).
+
+    ValueError naming the fixture if the name is not a bare file name, the file is missing, or
+    the sample does not pass `spec.parse_feature`.
+    """
+    if not isinstance(name, str) or not name or Path(name).name != name:
+        raise ValueError(f"{days_file.name}: month_feature {name!r} is not a file name")
+    path = days_file.parent.parent / "month" / f"{name}.json"
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(raw, dict) or not isinstance(raw.get("days"), list):
+            raise SpecError("not a feature object")
+        return parse_feature({**raw, "month": month, "days": raw["days"][: days_in(month)]}, month)
+    except (OSError, ValueError) as exc:
+        raise ValueError(f"{days_file.name}: month_feature {name!r}: {exc}") from None
+
+
 def load_fixture(path: Path, settings: Settings) -> tuple[DayView, datetime]:
     """Read a fixtures/days file. Returns the view and the fixture's own "now" (UTC).
 
-    ValueError naming the file if its `day_local` or `now_utc` is missing or not a real date.
+    ValueError naming the file if its `day_local` or `now_utc` is missing or not a real date,
+    or if it names a `month_feature` sample that cannot be loaded.
     """
     record = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(record, dict):
@@ -228,4 +256,7 @@ def load_fixture(path: Path, settings: Settings) -> tuple[DayView, datetime]:
         settings,
         as_of_utc=record.get("as_of_utc"),
     )
+    if record.get("month_feature") is not None:
+        feature = fixture_feature(path, record["month_feature"], day_local[:7])
+        view = replace(view, month_feature=feature)
     return view, now

@@ -36,16 +36,16 @@ def test_the_fixture_day_goes_out_in_rotation_order_with_timings(device, capsys)
     seen, _ = device
     assert pixoo_check.main(["--host", HOST, "--no-hold"]) == 0
     lines = capsys.readouterr().out.splitlines()
-    assert [line.split(":")[0] for line in lines] == [
-        "week",
-        "today",
-        "win-workout",
-        "win-sleep",
-        "books",
-    ]
+    names = [line.split(":")[0] for line in lines]
+    assert names[:4] == ["today", "week", "month page 1 of 2", "month page 2 of 2"]
+    assert names[-2:] == ["win-workout", "win-sleep"]
+    pages = len(names) - 6
+    assert pages > 1
+    assert names[4:-2] == [f"books page {n} of {pages}" for n in range(1, pages + 1)]
     assert all("sent in" in line and "hold" in line for line in lines)
+    assert "hold 6 s" in lines[2] and "hold 5 s" in lines[3], "the plate, then its note"
     sends = [body for body in seen if body["Command"] == "Draw/SendHttpGif"]
-    assert sorted({body["PicID"] for body in sends}) == [1, 2, 3, 4, 5]
+    assert sorted({body["PicID"] for body in sends}) == list(range(1, 7 + pages))
     assert {body["PicWidth"] for body in sends} == {64}
 
 
@@ -56,11 +56,29 @@ def test_one_named_screen_and_an_unearned_win_is_skipped(device, capsys):
     assert seen == []
 
 
+def test_month_and_party_can_be_sent_by_name(device, capsys):
+    seen, _ = device
+    assert pixoo_check.main(["--host", HOST, "--no-hold", "--screen", "month"]) == 0
+    sends = [body for body in seen if body["Command"] == "Draw/SendHttpGif"]
+    assert [(body["PicNum"], body["PicOffset"]) for body in sends] == [(1, 0), (1, 0)], "two stills"
+    assert pixoo_check.main(["--host", HOST, "--no-hold", "--screen", "party"]) == 0
+    assert "party: not earned on this day, skipped" in capsys.readouterr().out
+    seen.clear()
+    done = str(pixoo_check.DEFAULT_FIXTURE.with_name("train__all-sources__alive__peak.json"))
+    args = ["--host", HOST, "--no-hold", "--fixture", done, "--screen", "party"]
+    assert pixoo_check.main(args) == 0
+    out = capsys.readouterr().out
+    assert "party: 56 frame(s) sent" in out and "hold 3.36 s" in out
+    assert len([body for body in seen if body["Command"] == "Draw/SendHttpGif"]) == 56
+    with pytest.raises(SystemExit):
+        pixoo_check.main(["--host", HOST, "--screen", "year"])
+
+
 def test_an_unreachable_device_fails_with_the_command_named(device, capsys):
     _, state = device
     state["fail"] = True
     assert pixoo_check.main(["--host", HOST, "--no-hold"]) == 1
-    assert "week: FAILED" in capsys.readouterr().out
+    assert "today: FAILED" in capsys.readouterr().out
 
 
 def test_a_host_off_the_lan_is_refused_before_anything_is_sent(capsys):

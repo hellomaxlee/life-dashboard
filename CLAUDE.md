@@ -1,7 +1,7 @@
 # CLAUDE.md
 
 ## Project
-life-dashboard: a single-user life dashboard that turns Max's training, sleep, and reading into a glanceable picture of progress, first on a LAN web page and then on a Divoom Pixoo-64 II (assumed for design; not yet purchased). The backend ingests Apple Health (via Health Auto Export REST push) and a Goodreads RSS shelf; computes weekly quality-workout counts, a weeks-hit streak, daily small wins, and training load against stated goals; renders device-agnostic frames and short celebration clips; and writes one short daily summary in a balanced, wisdom-leaning voice that favors sustainable habits over streak anxiety. Runs on Max's Mac now, a Raspberry Pi later. Personal only.
+life-dashboard: a single-user life dashboard that turns Max's training, sleep, and reading into a glanceable picture of progress, on a LAN web page and on a Divoom Pixoo-64 (connected 2026-10-04 at 192.168.1.185; local API on port 9000, see `workflows/run-service.md` section 15). The backend ingests Apple Health (via Health Auto Export REST push) and a Goodreads RSS shelf; computes weekly quality-workout counts, a weeks-hit streak, daily small wins, and training load against stated goals; renders device-agnostic frames and short celebration clips; and writes one short daily summary in a balanced, wisdom-leaning voice that favors sustainable habits over streak anxiety. Runs on Max's Mac now, a Raspberry Pi later. Personal only.
 
 **Done means:**
 1. A day's Health Auto Export push and a Goodreads poll land in SQLite idempotently; replaying the same payloads changes no metric.
@@ -44,7 +44,7 @@ Rules that survive any refactor. Break one and the dashboard is wrong even if th
 - **Every displayed number traces to a metrics row.** The model never computes or invents a figure; a grounding gate rejects any summary whose numbers are not in its payload.
 - **The frame is device-agnostic.** Renderers emit a 64x64 RGB frame or a clip of them with per-frame durations; adapters only transport. Legibility is judged at 1x under LED gamma, never at browser zoom.
 - **The display never blanks.** Model unavailable or over budget means rule-based copy, not an empty frame.
-- **Voice: balanced, sustainable, no shame.** Rest counts as progress. Wins are celebrated on the device; misses are shown plainly, never nagged. Streak-anxiety copy ("don't break the chain") and moralizing are banned by a ban list the summary gate enforces. No impersonation of any named person; ancient sources paraphrased sparingly. Repetition is controlled by lens rotation, a recent-lines memory, and a similarity gate. See `notes.txt § Voice brief`.
+- **Voice: balanced, sustainable, no shame.** Rest counts as progress. Wins are celebrated on the device; misses are shown plainly, never nagged. Streak-anxiety copy ("don't break the chain") and moralizing are banned by a ban list the summary gate enforces. The line is practical philosophy first; the day's data is context, not the subject. No impersonation of any named person; a direct quote is welcome with its author named, but only verbatim from the checked quote bank (`app/summary/quotes.py`), never from the model's memory. A day with no workout on record is never called a rest day. Repetition is controlled by lens rotation, a recent-lines memory, and a similarity gate. See `notes.txt § Voice brief`.
 
 ## Working Rules
 - Verify by execution. A claim of "fixed" names the command, fixture, or measurement that proved it.

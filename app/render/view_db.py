@@ -20,11 +20,17 @@ Three things are read outside those two rows, all stated on the frame:
   then leaves the as-of line out rather than print "NO PUSH YET" beside real numbers;
 - sleep and steps come from `daily_metrics` when Phase 2 has written them; the raw tables
   are an interim fallback only (see view.py).
+
+The month feature is `app.month.store.load_feature` for the requested day's month, always
+the requested day's even when the Today screen falls back to yesterday. Whatever goes wrong
+reading it (no row, no table yet, a row that no longer parses) is no feature, and the Month
+screen draws its calendar; it never costs the other screens their view.
 """
 
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 from dataclasses import replace
 from datetime import date, datetime, time, timedelta
@@ -32,6 +38,7 @@ from zoneinfo import ZoneInfo
 
 from app.config import Settings
 from app.ingest.health import SOURCE as HEALTH_SOURCE
+from app.month.spec import MonthFeature
 from app.render.view import (
     ClaudeUsage,
     DayView,
@@ -43,6 +50,7 @@ from app.render.view import (
 from app.timeutil import to_utc_iso
 
 CLAUDE_LOOKBACK_DAYS = 30
+log = logging.getLogger(__name__)
 
 
 def _metrics_row(conn: sqlite3.Connection, table: str, key_column: str, key: str) -> dict:
@@ -91,6 +99,17 @@ def _last_push(conn: sqlite3.Connection, day_local: str, home_tz: str) -> str | 
     return row["t"]
 
 
+def month_feature_for(conn: sqlite3.Connection, day_local: str) -> MonthFeature | None:
+    """The stored feature for the day's month, or None. Never raises."""
+    try:
+        from app.month.store import load_feature
+
+        return load_feature(conn, day_local[:7])
+    except (ImportError, sqlite3.Error, ValueError, TypeError, KeyError, IndexError) as exc:
+        log.warning("month feature for %s not loaded: %s: %s", day_local, type(exc).__name__, exc)
+        return None
+
+
 def view_from_db(conn: sqlite3.Connection, settings: Settings, day_local: str) -> DayView:
     """Build the view from what is stored for a home-timezone day. ValueError if not a date.
 
@@ -98,10 +117,12 @@ def view_from_db(conn: sqlite3.Connection, settings: Settings, day_local: str) -
     sleep, steps or workout yet. The Today screen's day facts then come from the day before,
     when that day has them, and `day_shown` names it so the screen is headed YESTERDAY. The
     finished-book flag moves with them, so every small win belongs to the day shown.
-    Nothing else falls back: week, streak, books, summary and Claude stay the requested day's.
+    Nothing else falls back: week, streak, books, summary, Claude and the month feature stay
+    the requested day's.
     """
     day_local = date.fromisoformat(day_local).isoformat()
     view = _view_for(conn, settings, day_local)
+    view = replace(view, month_feature=month_feature_for(conn, day_local))
     if has_health_data(view):
         return view
     try:

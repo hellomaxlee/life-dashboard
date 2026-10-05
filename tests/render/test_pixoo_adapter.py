@@ -217,3 +217,11 @@ def test_a_refused_connection_is_retried_and_three_in_a_row_fail(settings, monke
     refusals["left"] = 3
     with pytest.raises(PixooError, match="Connection refused"):
         PixooAdapter(HOST, client).send(clip)
+
+
+def test_brightness_goes_as_one_channel_command():
+    seen: list[httpx.Request] = []
+    PixooAdapter(HOST, fake_device(seen)).set_brightness(10)
+    assert [json.loads(r.content) for r in seen] == [
+        {"Command": "Channel/SetBrightness", "Brightness": 10}
+    ]

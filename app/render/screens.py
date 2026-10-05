@@ -55,7 +55,7 @@ SLEEP_BAR_HOURS = 10
 LINE_WIDTH = 60
 PAGE_MS = 2000
 TITLE_GAP = 3
-SUMMARY_MAX_CHARS = 110
+SUMMARY_MAX_CHARS = 220
 SUMMARY_LINE_YS = (45, 54)
 PAGE_PIP_Y = 63
 NO_SUMMARY = "No summary yet."
@@ -384,7 +384,7 @@ def clean_summary(text: str) -> str:
 
 
 def fit_summary(text: str) -> str:
-    """Clean the text; past 110 characters, cut at a word and end with a visible "..."."""
+    """Clean the text; past SUMMARY_MAX_CHARS, cut at a word and end with a visible "..."."""
     text = clean_summary(text)
     if len(text) <= SUMMARY_MAX_CHARS:
         return text

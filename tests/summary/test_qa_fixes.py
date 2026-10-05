@@ -11,7 +11,7 @@ import pytest
 
 from app.summary import fallback as fb
 from app.summary import spend
-from app.summary.gate import Recent, check_ban, check_device_line, check_grounding
+from app.summary.gate import DEVICE_MAX, Recent, check_ban, check_device_line, check_grounding
 from app.summary.payload import LENSES, Payload, build_payload
 from app.summary.prompt import STABLE_SYSTEM_PROMPT
 from app.summary.run import DEVICE_KEY, SUMMARY_KEYS, write_summary
@@ -170,9 +170,7 @@ def test_broken_last_week_only_when_last_week_missed_after_a_streak(db, settings
     put_week(db, "2026-10-12", {"quality_workouts": 1, "week_hit": False, "weeks_hit_streak": 0})
     payload = build_payload(db, settings, "2026-10-22")
     assert payload.cell.streak_state == "never-started"
-    ok = check_device_line(
-        "No workout, 7.2 h of sleep. The streak can wait.", payload, Recent(), TH
-    )
+    ok = check_device_line("7.2 h of sleep yesterday. The streak can wait.", payload, Recent(), TH)
     assert ok.ok, ok.reasons
 
 
@@ -268,7 +266,7 @@ def test_every_candidate_fits_every_cell_lens_and_the_longest_title(db, settings
                 base = payload_for(db, settings, dict(variant, daily_metrics=metrics))
                 for lens in LENSES:
                     for line in fb.candidates(with_lens(base, lens)):
-                        assert len(line) <= 110, (len(line), line)
+                        assert len(line) <= DEVICE_MAX == 220, (len(line), line)
                         verdict = check_device_line(line, with_lens(base, lens), Recent(), TH)
                         assert verdict.ok, (verdict.reason, line)
 

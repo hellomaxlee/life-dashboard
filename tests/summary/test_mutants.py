@@ -130,9 +130,130 @@ MUTANTS = (
     Mutant(
         "attribution is case-sensitive again",
         "app/summary/gate.py",
-        "    re.IGNORECASE,\n)\nSOURCE_SPEAKS",
-        "    0,\n)\nSOURCE_SPEAKS",
-        ("test_attribution_to_a_named_person_is_rejected[In the words of Seneca",),
+        "    re.IGNORECASE,\n)\nCLOSING_ATTRIBUTION",
+        "    0,\n)\nCLOSING_ATTRIBUTION",
+        (
+            "test_attribution_to_a_named_person_is_rejected[In the words of an old coach",
+            "test_attribution_to_a_named_person_is_rejected[AS MY OLD COACH SAID",
+        ),
+    ),
+    Mutant(
+        "a bank quote passes under any author's name",
+        "app/summary/gate.py",
+        "        if author not in named:",
+        "        if False:",
+        (
+            "test_a_bank_quote_under_the_wrong_author_is_rejected",
+            'test_hated_lines_fail_with_the_named_reason["We suffer more often in imagination',
+        ),
+    ),
+    Mutant(
+        "a quotation matches the bank on its first three words",
+        "app/summary/gate.py",
+        "    return normalize(fold_quotes(text))\n\n\nBANK",
+        '    return " ".join(normalize(fold_quotes(text)).split()[:3])\n\n\nBANK',
+        (
+            "test_a_bank_author_with_words_not_in_the_bank_is_rejected"
+            '["We suffer more in imagination than in reality." - Seneca]',
+            "test_bank_is_large_unique_ascii_sourced_and_by_deceased_authors_only",
+        ),
+    ),
+    Mutant(
+        "words in quotation marks need not be a bank entry",
+        "app/summary/gate.py",
+        "    if spans and entry is None:",
+        "    if False:",
+        (
+            'test_a_bank_author_with_words_not_in_the_bank_is_rejected[The "dot" is only a dot.]',
+            "test_an_invented_quote_is_rejected_retried_with_the_reason_then_falls_back",
+        ),
+    ),
+    Mutant(
+        "a person named without a quotation passes",
+        "app/summary/gate.py",
+        "    elif named:\n        return [",
+        "    elif False:\n        return [",
+        (
+            "test_attribution_to_a_named_person_is_rejected[Seneca says the day was yours.]",
+            "test_a_living_or_non_bank_person_is_rejected[Socrates had a word for this.]",
+            "test_a_person_is_named_only_as_the_author_of_a_bank_quote",
+        ),
+    ),
+    Mutant(
+        "the gate believes every day was a rest day",
+        "app/summary/gate.py",
+        'and the day-type label is derived from that same absence."""\n    return False',
+        'and the day-type label is derived from that same absence."""\n    return True',
+        (
+            "test_a_claim_that_he_rested_is_rejected_on_any_day[A rest day well spent.]",
+            "test_hated_lines_fail_with_the_named_reason[Rest day Saturday",
+            "test_hated_lines_fail_with_the_named_reason[You rested yesterday",
+        ),
+    ),
+    Mutant(
+        "device cap back to 110",
+        "app/summary/gate.py",
+        "DEVICE_MAX = 220",
+        "DEVICE_MAX = 110",
+        (
+            "test_220_characters_pass_and_221_fail",
+            "test_every_bank_entry_passes_the_gate_as_displayed[Meditations 12.4]",
+        ),
+    ),
+    Mutant(
+        "device line of any length passes",
+        "app/summary/gate.py",
+        "    if len(line) > DEVICE_MAX:",
+        "    if False:",
+        (
+            "test_220_characters_pass_and_221_fail",
+            "test_hated_lines_fail_with_the_named_reason[Steady is the whole point",
+        ),
+    ),
+    Mutant(
+        "grounding reads the numbers inside a bank quote",
+        "app/summary/gate.py",
+        "    text = without_bank_quotes(without_title(line, payload))",
+        "    text = without_title(line, payload)",
+        (
+            "test_numbers_inside_a_bank_quote_are_not_grounded_and_numbers_outside_are",
+            "test_every_bank_entry_passes_the_gate_as_displayed[Tao Te Ching 64]",
+        ),
+    ),
+    Mutant(
+        "an author may be quoted again inside the window",
+        "app/summary/gate.py",
+        "        if entry.author.lower() in recent_sources:",
+        "        if False:",
+        (
+            "test_the_same_quote_or_author_within_the_memory_window_is_rejected",
+            "test_memory_remembers_authors_for_fourteen_lines_and_no_longer",
+            "test_sixty_days_of_fallback_never_repeat_a_line_a_quote_or_an_author_in_the_window",
+        ),
+    ),
+    Mutant(
+        "the same quotation may return inside the window",
+        "app/summary/gate.py",
+        "            if any(quote_key(span) == key for span in quotations_in(previous)):",
+        "            if False:",
+        ("test_the_same_quote_or_author_within_the_memory_window_is_rejected",),
+    ),
+    Mutant(
+        "the model's quotation marks are stripped from the line",
+        "app/summary/run.py",
+        "    if wrapped and not any(mark in inner for mark in WRAP_OPEN + WRAP_CLOSE):",
+        "    if True:",
+        ("test_split_reply_keeps_a_quotation_and_unwraps_a_wrapped_line",),
+    ),
+    Mutant(
+        "fallback leads with the fact on ordinary days",
+        "app/summary/fallback.py",
+        '    with_fact = [f"{thought} {fact}" for thought in thoughts]',
+        '    with_fact = [f"{fact} {thought}" for thought in thoughts]',
+        (
+            "test_ordinary_days_are_thought_led_and_the_three_kinds_take_turns",
+            "test_morning_run_describes_yesterdays_dot_in_the_fallback",
+        ),
     ),
     Mutant(
         "an unexpected exception from the model call escapes",

@@ -3,6 +3,7 @@
   "day_local": "2026-11-18",
   "now_utc": "2026-11-19T02:30:00Z",
   "as_of_utc": "2026-11-19T00:05:00Z",
+  "month_feature": "sample-2026-10",
   "daily_metrics": {
     "quality_workout": false,
     "workout_count": 1,

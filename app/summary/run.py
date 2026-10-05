@@ -39,6 +39,8 @@ SUMMARY_KEYS = frozenset({DEVICE_KEY, WEB_KEY, SOURCE_KEY})
 MAX_MODEL_ATTEMPTS = 2
 API_BASE_URL = "https://api.anthropic.com"
 FILLER = re.compile(r"^(?:sure|certainly|of course|okay|ok)[\s,.]*$", re.IGNORECASE)
+WRAP_OPEN = '"“'
+WRAP_CLOSE = '"”'
 LABEL = re.compile(r"^here(?:'s|\s+is|\s+are)\b[^:]{0,40}:\s*", re.IGNORECASE)
 
 
@@ -128,14 +130,25 @@ def _reply_of(response: Any) -> ModelReply:
     )
 
 
+def _unwrapped(line: str) -> str:
+    """The line without quotation marks that wrap the whole of it. Marks around a quotation
+    inside the line (`"..." - Seneca`) are the line's own and stay."""
+    line = line.strip()
+    wrapped = len(line) >= 2 and line[0] in WRAP_OPEN and line[-1] in WRAP_CLOSE
+    inner = line[1:-1]
+    if wrapped and not any(mark in inner for mark in WRAP_OPEN + WRAP_CLOSE):
+        return inner.strip()
+    return line
+
+
 def split_reply(text: str) -> tuple[str, str | None]:
     """(device line, web line). A leading label or preamble ("Here is the line:") is not the
     line; when nothing follows it the device line is empty and the gate rejects it."""
-    lines = [ln.strip().strip('"').strip() for ln in text.splitlines() if ln.strip()]
+    lines = [_unwrapped(ln) for ln in text.splitlines() if ln.strip()]
     while lines and (lines[0].endswith(":") or FILLER.match(lines[0])):
         lines = lines[1:]
     if lines:
-        lines[0] = LABEL.sub("", lines[0]).strip('"').strip()
+        lines[0] = _unwrapped(LABEL.sub("", lines[0]))
     if not lines:
         return "", None
     return lines[0], (lines[1] if len(lines) > 1 else None)

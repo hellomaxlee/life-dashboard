@@ -41,6 +41,7 @@ LENSES = (
     "plain gratitude",
 )
 DAY_TYPES = ("train", "rest", "race-week", "travel")
+NO_WORKOUT_LABEL = "no-workout-on-record"
 COMPLETENESS = ("all-sources", "workout-without-hr", "sleep-missing", "health-delayed")
 STREAK_STATES = ("alive", "broken-last-week", "never-started")
 SEASONS = ("base", "peak", "off")
@@ -72,7 +73,20 @@ class Payload:
         return frozenset(_walk_numbers(self.data))
 
     def text(self) -> str:
-        return json.dumps(self.data, sort_keys=True, indent=1)
+        """The payload as the model reads it. The day type `rest` is the fixture matrix's
+        name for "no workout reached the dashboard"; the model is shown what is known."""
+        data = dict(self.data)
+        cell = data.get("cell")
+        if isinstance(cell, dict) and cell.get("day_type") == "rest":
+            data["cell"] = dict(cell, day_type=NO_WORKOUT_LABEL)
+        return json.dumps(data, sort_keys=True, indent=1)
+
+    @property
+    def cell_label(self) -> str:
+        day_type = NO_WORKOUT_LABEL if self.cell.day_type == "rest" else self.cell.day_type
+        return (
+            f"{day_type} / {self.cell.completeness} / {self.cell.streak_state} / {self.cell.season}"
+        )
 
     @property
     def book_title(self) -> str | None:

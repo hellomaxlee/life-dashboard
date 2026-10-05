@@ -21,6 +21,8 @@ EXPECTED_TABLES = {
     "model_spend",
     "load_bar_history",
     "metrics_state",
+    "month_features",
+    "month_feature_attempts",
 }
 
 

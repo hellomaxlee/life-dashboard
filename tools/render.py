@@ -3,7 +3,7 @@
 python -m tools.render --fixture fixtures/days/<combo>.json --out data/preview/<combo>
 python -m tools.render --date YYYY-MM-DD --scale 8
 
-One folder per screen under --out (week, today, books, sparkle, party), each holding
+One folder per screen under --out (today, week, month, books, sparkle, party), each holding
 frame_1x.png, frame_<scale>x.png, frame_gamma_1x.png, frame_gamma_<scale>x.png and, for an
 animated clip, clip_1x.gif, clip_<scale>x.gif, clip_gamma_1x.gif, clip_gamma_<scale>x.gif.
 A celebration the day's data did not earn is printed as "(sample)".

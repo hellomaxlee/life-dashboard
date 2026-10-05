@@ -112,9 +112,16 @@ def test_under_the_bar_fact_cites_only_payload_numbers_and_fits_when_travelling(
     assert check_grounding(fact, payload) == []
 
 
-def test_a_rest_day_still_says_no_workout(db, settings):
+def test_a_day_with_no_workout_on_record_states_only_what_is_known(db, settings):
+    """Was: a rest day still says "No workout yesterday". No workout on record is not
+    evidence that he did not train (Max, 2026-10-04), so the fact is the sleep alone."""
     payload = payload_for(db, settings, golden_cases()[1])
-    assert fb.fact_clause(payload).startswith("No workout yesterday")
+    assert fb.fact_clause(payload) == "7.4 h of sleep yesterday."
+    assert all("workout" not in option.lower() for option in fb.fact_options(payload))
+    unslept = payload_for(db, settings, golden_cases()[3])
+    assert "No workout or sleep on record yesterday." in fb.fact_options(
+        Payload(unslept.day_local, unslept.lens, payload.cell, unslept.data)
+    )
 
 
 # 4. Grounding: number words, glued digits, bare decimals, odd numerals.
@@ -216,6 +223,12 @@ ATTRIBUTED = [
     "The Dalai Lama says begin again.",
     "Jane Doe would call that focus.",
     "Jane Doe once wrote about days like this.",
+    "In the words of an old coach, the day was yours.",
+    "AS MY OLD COACH SAID, the day was yours.",
+    "Epictetus would file the sleep under what was yours.",
+    "Marcus Aurelius had a note for mornings like this.",
+    "The day was yours - Marcus.",
+    "A quiet friend, who once said the day was yours.",
 ]
 
 
@@ -224,13 +237,17 @@ def test_attribution_to_a_named_person_is_rejected(line):
     assert check_names(line, ()), line
 
 
-def test_an_ancient_source_paraphrased_once_and_plain_capitals_still_pass():
+def test_a_tradition_in_paraphrase_and_plain_capitals_still_pass():
+    """Was: an ancient source paraphrased by name passes once. A named person now needs a
+    bank quote (the Epictetus and Marcus Aurelius lines moved to ATTRIBUTED above); a
+    tradition named in paraphrase is still free."""
     for line in (
-        "Epictetus would file the sleep under what was yours.",
-        "Marcus Aurelius would file the sleep under what was yours.",
-        "Marcus Aurelius had a note for mornings like this.",
+        "The Stoics would file the sleep under what was yours.",
+        "An old Buddhist idea: begin again, without drama.",
+        "The Taoists have a word for not forcing it.",
         "Your HRV says the week landed.",
         "The Week said little, and that is fine.",
+        "Half-done is fine - it is an ordinary day.",
     ):
         assert check_names(line, ()) == [], line
 

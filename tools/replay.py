@@ -28,6 +28,9 @@ newer than that recompute, or the engine never ran, they are left out and a note
 The summary's keys (`summary_device_line`, `summary_web_line`, `summary_source`) are authored
 output, not a function of the raw archive (the model's words differ run to run): --verify
 never compares them. --snapshot and --diff, which compare live with live, keep them.
+The month feature (table `month_features`) is authored the same way: --verify leaves it out,
+--snapshot, --diff and the backup checksum include it once a feature is stored, and
+--rebuild-live never touches it.
 
 Replay order is raw_archive.id order (the order payloads were applied) whenever a db with
 raw_archive rows is available. Only payloads that were parsed are replayed. Files on disk
@@ -69,6 +72,7 @@ DATA_TABLES = (
 DERIVED_TABLES = ("load_bar_history",)
 DERIVED_KEYS = {"daily_metrics": DAILY_KEYS, "weekly_metrics": WEEKLY_KEYS}
 AUTHORED_KEYS = {"daily_metrics": SUMMARY_KEYS}
+AUTHORED_TABLES = ("month_features",)
 PROVENANCE_COLUMNS = {"activity_sources": {"raw_archive_id"}}
 SCRATCH_DB = REPO_ROOT / "data" / "replay" / "scratch.db"
 INGESTERS = {
@@ -117,9 +121,26 @@ def snapshot(
     conn: sqlite3.Connection, derived: bool = False, authored: bool = True
 ) -> dict[str, list[dict[str, object]]]:
     """The data tables. With `derived` the metrics engine's keys and tables are included;
-    without `authored` the summary's keys are left out."""
+    without `authored` the summary's keys and the month feature are left out."""
     tables = DATA_TABLES + DERIVED_TABLES if derived else DATA_TABLES
-    return {table: dump_table(conn, table, derived, authored) for table in tables}
+    snap = {table: dump_table(conn, table, derived, authored) for table in tables}
+    if authored:
+        snap.update(_authored_tables(conn))
+    return snap
+
+
+def _authored_tables(conn: sqlite3.Connection) -> dict[str, list[dict[str, object]]]:
+    """The authored tables that hold rows. An empty or absent one is left out, so a snapshot
+    of a db with no month feature is the snapshot it was before the table existed."""
+    found: dict[str, list[dict[str, object]]] = {}
+    for table in AUTHORED_TABLES:
+        exists = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", (table,)
+        ).fetchone()
+        rows = dump_table(conn, table) if exists else []
+        if rows:
+            found[table] = rows
+    return found
 
 
 def checksum(snap: dict[str, list[dict[str, object]]]) -> str:

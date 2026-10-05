@@ -11,7 +11,7 @@ from app.web.preview import PLACEHOLDER
 from tests.render import STALE, WEEK_41, load, rotation
 from tools.render import main as render_main
 
-NAMES = ("week", "today", "books", "sparkle", "party")
+NAMES = ("today", "week", "month", "books", "sparkle", "party")
 
 
 def test_preview_page_shows_every_screen_four_ways(client):
@@ -24,7 +24,9 @@ def test_preview_page_shows_every_screen_four_ways(client):
             for gamma in (0, 1):
                 src = f"/preview/image/{name}?fixture={WEEK_41}&amp;scale={scale}&amp;gamma={gamma}"
                 assert src in page.text, src
-    assert page.text.count("<img ") == 20
+    assert page.text.count("<img ") == 24
+    order = [page.text.index(f"/preview/image/{name}?") for name in NAMES]
+    assert order == sorted(order), "rows follow the rotation: today, week, month, books"
 
 
 def test_preview_images_are_pillow_png_or_gif_bytes(client, settings):
@@ -42,7 +44,7 @@ def test_preview_images_are_pillow_png_or_gif_bytes(client, settings):
             if scale == 1:
                 expected = led_gamma(week) if gamma else week
                 assert ImageChops.difference(image, expected).getbbox() is None
-    for name in ("books", "sparkle", "party"):
+    for name in ("month", "books", "sparkle", "party"):
         response = client.get(f"/preview/image/{name}?fixture={WEEK_41}&scale=8&gamma=1")
         assert response.headers["content-type"] == "image/gif"
         gif = Image.open(io.BytesIO(response.content))
@@ -80,11 +82,20 @@ def test_render_tool_writes_the_documented_files(tmp_path, settings, capsys):
     clips = {"clip_1x.gif", "clip_8x.gif", "clip_gamma_1x.gif", "clip_gamma_8x.gif"}
     assert {p.name for p in out.iterdir()} == set(NAMES)
     assert {p.name for p in (out / "today").iterdir()} == stills
+    assert {p.name for p in (out / "month").iterdir()} == stills, "no feature: the calendar"
     for name in ("week", "books", "sparkle", "party"):
         assert {p.name for p in (out / name).iterdir()} == stills | clips
     assert Image.open(out / "today" / "frame_1x.png").size == (64, 64)
     assert Image.open(out / "today" / "frame_gamma_8x.png").size == (512, 512)
-    assert "week: 16 frames, 4000 ms" in capsys.readouterr().out
+    printed = capsys.readouterr().out
+    assert "week: 16 frames, 4000 ms" in printed and "month: 1 frame, 8000 ms" in printed
+    names = [line.split(":")[0] for line in printed.splitlines() if not line.startswith(" ")]
+    assert names == ["today", "week", "month", "books", "sparkle (sample)", "party (sample)"]
+    with_note = tmp_path / "with-note"
+    fixture = f"fixtures/days/{WEEK_41}.json"
+    assert render_main(["--fixture", fixture, "--out", str(with_note)]) == 0
+    assert {p.name for p in (with_note / "month").iterdir()} == stills | clips
+    assert "month: 2 frames, 11000 ms" in capsys.readouterr().out
 
 
 def test_render_tool_by_date_reads_the_database(tmp_path, settings):

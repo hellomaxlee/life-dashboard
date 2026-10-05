@@ -33,6 +33,8 @@ from app.jobs.rotation import (
     device_adapter,
 )
 from app.metrics.job import RECOMPUTE_JOB, ROLLOVER_JOB, run_recompute
+from app.month import store as month_store
+from app.month.generate import ensure_month_feature
 from app.summary import memory
 from app.summary.run import write_summary
 from app.timeutil import from_utc_iso, local_day, now_utc
@@ -43,9 +45,13 @@ BACKUP_JOB = "nightly_backup"
 BACKUP_CHECK_JOB = "backup_overdue_check"
 GOODREADS_JOB = "goodreads_poll"
 SUMMARY_JOB = "daily_summary"
+MONTH_JOB = "month_feature"
 CORE_JOBS = frozenset(
-    {USAGE_JOB, BACKUP_JOB, BACKUP_CHECK_JOB, SUMMARY_JOB, RECOMPUTE_JOB, ROLLOVER_JOB}
+    {USAGE_JOB, BACKUP_JOB, BACKUP_CHECK_JOB, SUMMARY_JOB, RECOMPUTE_JOB, ROLLOVER_JOB, MONTH_JOB}
 )
+MONTH_TIME = (0, 20)
+MONTH_MISFIRE_GRACE_S = 20 * 3600
+MONTH_CATCHUP_DELAY = timedelta(minutes=5)
 SUMMARY_MISFIRE_GRACE_S = 12 * 3600
 SUMMARY_CATCHUP_DELAY = timedelta(minutes=4)
 RECOMPUTE_FIRST_DELAY = timedelta(seconds=60)
@@ -237,6 +243,34 @@ def summary_overdue(settings: Settings, open_conn: OpenConn, now: datetime) -> b
         return True
 
 
+def run_month_feature(settings: Settings, open_conn: OpenConn) -> str:
+    """Author this home-timezone month's feature if it has none. A stored feature, the
+    attempt guard and the monthly cap each mean no model call."""
+    moment = now_utc()
+    month = local_day(moment, settings.home_tz)[:7]
+    conn = open_conn()
+    try:
+        result = ensure_month_feature(conn, settings, month, now=moment)
+    finally:
+        conn.close()
+    log.info("%s %s [%s] %s", MONTH_JOB, month, result.status, result.reason)
+    return result.status
+
+
+def month_feature_missing(settings: Settings, open_conn: OpenConn, now: datetime) -> bool:
+    """True when this month has no stored feature, or the db cannot say. A start in the
+    middle of a month would otherwise wait for 00:20."""
+    try:
+        conn = open_conn()
+        try:
+            return month_store.load_feature(conn, local_day(now, settings.home_tz)[:7]) is None
+        finally:
+            conn.close()
+    except Exception:
+        log.exception("%s: cannot read this month's feature; trying soon", MONTH_JOB)
+        return True
+
+
 def stop_scheduler(scheduler: BackgroundScheduler) -> bool:
     """Shut the scheduler down, letting running jobs finish for at most SHUTDOWN_WAIT_S.
 
@@ -328,6 +362,16 @@ def build_scheduler(
         id=SUMMARY_JOB,
         misfire_grace_time=SUMMARY_MISFIRE_GRACE_S,
         **first_summary,
+    )
+    first_month = {}
+    if month_feature_missing(settings, open_conn, moment):
+        first_month = {"next_run_time": moment + MONTH_CATCHUP_DELAY}
+    scheduler.add_job(
+        guarded(MONTH_JOB, lambda: run_month_feature(settings, open_conn), stats),
+        CronTrigger(hour=MONTH_TIME[0], minute=MONTH_TIME[1], timezone=tz),
+        id=MONTH_JOB,
+        misfire_grace_time=MONTH_MISFIRE_GRACE_S,
+        **first_month,
     )
     scheduler.add_job(
         guarded(RECOMPUTE_JOB, lambda: run_recompute(settings, open_conn), stats),

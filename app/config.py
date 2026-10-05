@@ -105,6 +105,10 @@ class BackupConfig:
 class DeviceConfig:
     pixoo_host: str = ""
     screen_seconds: int = 6
+    brightness: int = 100
+    night_brightness: int = 10
+    night_from: str = "22:00"
+    night_until: str = "05:30"
 
 
 @dataclass(frozen=True)
@@ -190,6 +194,12 @@ def _clock(key: str, value: object) -> str:
         raise _fail(key, value, "a time written HH:MM")
     if int(parts[0]) > 23 or int(parts[1]) > 59:
         raise _fail(key, value, "a time written HH:MM")
+    return value
+
+
+def _percent(key: str, value: object) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 100:
+        raise _fail(key, value, "a whole number from 0 to 100")
     return value
 
 
@@ -352,6 +362,16 @@ def load_settings(config_path: Path | None = None) -> Settings:
                 os.environ.get("LIFE_PIXOO_HOST", raw.get("device", {}).get("pixoo_host", ""))
             ).strip(),
             screen_seconds=int(raw.get("device", {}).get("screen_seconds", 6)),
+            brightness=_percent("device.brightness", raw.get("device", {}).get("brightness", 100)),
+            night_brightness=_percent(
+                "device.night_brightness", raw.get("device", {}).get("night_brightness", 10)
+            ),
+            night_from=_clock(
+                "device.night_from", raw.get("device", {}).get("night_from", "22:00")
+            ),
+            night_until=_clock(
+                "device.night_until", raw.get("device", {}).get("night_until", "05:30")
+            ),
         ),
         anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY", "").strip(),
         metrics=_metrics(raw),

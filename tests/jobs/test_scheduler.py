@@ -289,6 +289,90 @@ def test_summary_catch_up_respects_the_monthly_cap(db, jobs_settings, monkeypatc
     assert db.execute("SELECT COUNT(*) FROM model_spend").fetchone()[0] == 0
 
 
+def test_month_feature_job_is_registered_daily_at_twenty_past_midnight(jobs_settings):
+    opener = lambda: open_db(jobs_settings.storage.db_path)  # noqa: E731
+    scheduler = jobs.build_scheduler(jobs_settings, opener)
+    scheduler.start(paused=True)
+    try:
+        job = scheduler.get_job(jobs.MONTH_JOB)
+        assert jobs.MONTH_JOB in jobs.CORE_JOBS
+        assert job.max_instances == 1 and job.coalesce
+        assert job.misfire_grace_time == jobs.MONTH_MISFIRE_GRACE_S == 20 * 3600
+        assert str(job.trigger.timezone) == "America/New_York"
+        fire = job.trigger.get_next_fire_time(None, datetime(2026, 10, 31, 12, 0, tzinfo=UTC))
+        assert fire == datetime(2026, 11, 1, 0, 20, tzinfo=ZoneInfo("America/New_York"))
+    finally:
+        scheduler.shutdown(wait=False)
+
+
+def test_month_feature_catch_up_runs_once_after_a_start_without_one(db, jobs_settings, monkeypatch):
+    from app.month import generate
+    from tests.month.conftest import FakeClient, feature_text, reply
+
+    opener = lambda: open_db(jobs_settings.storage.db_path)  # noqa: E731
+    tz = ZoneInfo(jobs_settings.home_tz)
+    now = datetime(2026, 10, 4, 15, 0, tzinfo=tz)
+    fake = FakeClient(reply(feature_text("2026-10")))
+    monkeypatch.setattr(generate, "make_client", lambda settings: fake)
+    monkeypatch.setattr(jobs, "now_utc", lambda: now.astimezone(UTC))
+
+    def first_run(moment: datetime) -> datetime | None:
+        """The catch-up run build_scheduler asked for, or None when it left it to the cron."""
+        scheduler = jobs.build_scheduler(jobs_settings, opener, moment)
+        scheduler.start(paused=True)
+        try:
+            due = scheduler.get_job(jobs.MONTH_JOB).next_run_time
+            return None if (due.hour, due.minute) == jobs.MONTH_TIME else due
+        finally:
+            scheduler.shutdown(wait=False)
+
+    assert jobs.month_feature_missing(jobs_settings, opener, now)
+    assert first_run(now) == now + jobs.MONTH_CATCHUP_DELAY
+
+    scheduler = jobs.build_scheduler(jobs_settings, opener, now)
+    scheduler.get_job(jobs.MONTH_JOB).func()
+    scheduler.get_job(jobs.MONTH_JOB).func()
+
+    assert scheduler.job_stats[jobs.MONTH_JOB] == JobStats(runs=2)
+    assert len(fake.requests) == 1
+    assert db.execute("SELECT month_local FROM month_features").fetchone()[0] == "2026-10"
+    assert not jobs.month_feature_missing(jobs_settings, opener, now)
+    assert first_run(now) is None
+    assert jobs.run_month_feature(jobs_settings, opener) == "stored"
+    assert jobs.month_feature_missing(jobs_settings, opener, now + timedelta(days=28))
+
+
+def test_month_feature_job_never_calls_over_the_cap_or_twice_a_day(db, jobs_settings, monkeypatch):
+    from app.month import generate
+    from tests.month.conftest import FakeClient, reply
+
+    now = datetime(2026, 10, 4, 15, 0, tzinfo=ZoneInfo(jobs_settings.home_tz))
+    monkeypatch.setattr(jobs, "now_utc", lambda: now.astimezone(UTC))
+    opener = lambda: open_db(jobs_settings.storage.db_path)  # noqa: E731
+    capped = replace(jobs_settings, summary=replace(jobs_settings.summary, monthly_cap_usd=0.0))
+    fake = FakeClient(reply("not an object", output_tokens=40), reply("nor this"), reply("x"))
+    monkeypatch.setattr(generate, "make_client", lambda settings: fake)
+
+    assert jobs.run_month_feature(capped, opener) == "failed"
+    assert fake.requests == []
+    assert db.execute("SELECT COUNT(*) FROM month_feature_attempts").fetchone()[0] == 0
+
+    assert jobs.run_month_feature(jobs_settings, opener) == "failed"
+    assert len(fake.requests) == 2
+    assert jobs.run_month_feature(jobs_settings, opener) == "skipped"
+    assert len(fake.requests) == 2
+    assert db.execute("SELECT COUNT(*) FROM model_spend").fetchone()[0] == 2
+
+
+def test_month_feature_catch_up_runs_when_the_db_cannot_say(jobs_settings, caplog):
+    def broken():
+        raise sqlite3.OperationalError("locked")
+
+    now = datetime(2026, 10, 4, 15, 0, tzinfo=ZoneInfo(jobs_settings.home_tz))
+    assert jobs.month_feature_missing(jobs_settings, broken, now)
+    assert "cannot read this month's feature" in caplog.text
+
+
 def test_summary_catch_up_runs_when_the_db_cannot_say(jobs_settings, caplog):
     def broken():
         raise sqlite3.OperationalError("locked")

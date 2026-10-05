@@ -1,12 +1,14 @@
 """Send the rotation to a Pixoo once, by hand, and time every send: the hardware smoke test.
 
 python -m tools.pixoo_check --host 192.168.1.50
-python -m tools.pixoo_check --host 192.168.1.50 --screen week --screen win-workout
+python -m tools.pixoo_check --host 192.168.1.50 --screen month --screen win-workout --screen party
 python -m tools.pixoo_check --host 192.168.1.50 --date 2026-10-04
 
 Without --date the screens come from a fixture day, so no Health data is needed. Nothing is
 read from or written to `config.toml` and the service is not involved: the rotation job
-stays off until `device.pixoo_host` is set. Each screen is held as the job would hold it.
+stays off until `device.pixoo_host` is set. Each screen is held as the job would hold it, in the
+job's order (Today, Week, Month, Books, the earned small wins, the party); a paged screen goes
+page by page as stills.
 See workflows/run-service.md section 15.
 """
 
@@ -22,13 +24,13 @@ from app.config import REPO_ROOT, load_settings
 from app.db import SchemaMismatch, connect_live
 from app.jobs.rotation import DEVICE_TIMEOUT_S
 from app.render.adapters.pixoo import FRAME_BUDGET_S, PixooAdapter, PixooError
-from app.render.rotation import WIN_NAMES, rotation_sequence
+from app.render.rotation import SCREEN_NAMES, device_parts, rotation_sequence
 from app.render.view import load_fixture
 from app.render.view_db import view_from_db
 from app.timeutil import now_utc
 
 DEFAULT_FIXTURE = REPO_ROOT / "fixtures" / "days" / "train__all-sources__alive__base.json"
-SCREENS = ("week", "today", *WIN_NAMES, "books")
+SCREENS = SCREEN_NAMES
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -63,19 +65,24 @@ def main(argv: list[str] | None = None) -> int:
             print(f"{name}: not earned on this day, skipped")
             continue
         clip, hold = slots[name]
-        started = time.monotonic()
-        try:
-            report = adapter.send(clip)
-        except PixooError as exc:
-            print(f"{name}: FAILED after {time.monotonic() - started:.2f} s: {exc}")
-            return 1
-        took = time.monotonic() - started
-        print(
-            f"{name}: {report.frames_sent} frame(s) sent in {took:.2f} s "
-            f"(PicId {report.pic_id}, {clip.durations_ms[0]} ms per frame, hold {hold / 1000:g} s)"
-        )
-        if not args.no_hold:
-            time.sleep(hold / 1000)
+        parts = device_parts(clip)
+        for number, part in enumerate(parts, start=1):
+            label = name if len(parts) == 1 else f"{name} page {number} of {len(parts)}"
+            part_hold = hold if len(parts) == 1 else part.total_ms
+            started = time.monotonic()
+            try:
+                report = adapter.send(part)
+            except PixooError as exc:
+                print(f"{label}: FAILED after {time.monotonic() - started:.2f} s: {exc}")
+                return 1
+            took = time.monotonic() - started
+            print(
+                f"{label}: {report.frames_sent} frame(s) sent in {took:.2f} s "
+                f"(PicId {report.pic_id}, {part.durations_ms[0]} ms per frame, "
+                f"hold {part_hold / 1000:g} s)"
+            )
+            if not args.no_hold:
+                time.sleep(part_hold / 1000)
     return 0
 
 

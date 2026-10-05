@@ -5,14 +5,13 @@ from __future__ import annotations
 import json
 import sqlite3
 from dataclasses import dataclass
-from datetime import date, timedelta
 
 from app.summary.gate import (
     RECENT_OPENING_LINES,
     RECENT_SIMILARITY_LINES,
-    SOURCE_WINDOW_DAYS,
+    SOURCE_WINDOW_LINES,
     Recent,
-    ancient_sources_in,
+    sources_in,
 )
 from app.timeutil import now_utc, to_utc_iso
 
@@ -48,14 +47,12 @@ def recent_before(conn: sqlite3.Connection, day_local: str) -> Recent:
     rows = conn.execute(
         "SELECT day_local, line FROM summary_lines WHERE day_local < ? "
         "ORDER BY day_local DESC LIMIT ?",
-        (day_local, max(RECENT_OPENING_LINES, RECENT_SIMILARITY_LINES)),
+        (day_local, max(RECENT_OPENING_LINES, RECENT_SIMILARITY_LINES, SOURCE_WINDOW_LINES)),
     ).fetchall()
     lines = tuple(r["line"] for r in rows)
-    window_start = (date.fromisoformat(day_local) - timedelta(days=SOURCE_WINDOW_DAYS)).isoformat()
     sources: list[str] = []
-    for r in rows:
-        if r["day_local"] >= window_start:
-            sources.extend(ancient_sources_in(r["line"]))
+    for line in lines[:SOURCE_WINDOW_LINES]:
+        sources.extend(sources_in(line))
     return Recent(
         opening_lines=lines[:RECENT_OPENING_LINES],
         similarity_lines=lines[:RECENT_SIMILARITY_LINES],

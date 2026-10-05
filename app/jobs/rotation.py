@@ -1,13 +1,14 @@
 """The scheduled display rotation: a tick sends the next screen once the last one's hold is up.
 
-Week, Today, one sparkle per small win the day earned, Books, wrapping (the sequence and
-its holds are `app.render.rotation`). The scheduler runs one tick, then moves the next run to
+Today, Week, Month, Books, one sparkle per small win the day earned, then the week-complete
+party once the week's target is met, wrapping (the sequence and its holds are
+`app.render.rotation`; a restart begins at Today). A paged screen (Books, Month with a note)
+goes page by page as stills. The scheduler runs one tick, then moves the next run to
 `due()`: the moment the screen just sent has had its hold, so no tick overlaps a slow send.
 A tick renders only its own screen from a fresh connection, so a renderer or a device that
 fails costs that one slot: the slot is spent before any work, the error goes to the
 scheduler's guard, and the next tick, one dwell later, tries the next screen. Nothing is sent
-on a failed tick, so the device keeps whatever it showed last. The week-complete party is
-not in the sequence.
+on a failed tick, so the device keeps whatever it showed last.
 """
 
 from __future__ import annotations
@@ -16,11 +17,12 @@ import sqlite3
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import Protocol
+from zoneinfo import ZoneInfo
 
 from app.config import Settings
 from app.render.adapters.pixoo import FRAME_BUDGET_S, PixooAdapter, PixooError
 from app.render.frame import Clip
-from app.render.rotation import hold_ms, render_screen, sequence_names
+from app.render.rotation import device_parts, hold_ms, render_screen, sequence_names
 from app.render.view_db import view_from_db
 from app.timeutil import local_day
 
@@ -35,6 +37,18 @@ SEND_ERRORS = (PixooError,)
 
 class ClipAdapter(Protocol):
     def send(self, clip: Clip) -> object: ...
+
+    def set_brightness(self, percent: int) -> None: ...
+
+
+def brightness_at(now: datetime, settings: Settings) -> int:
+    """The night level from `night_from` until `night_until`, home time, across midnight if
+    the window wraps; the day level otherwise."""
+    device = settings.device
+    clock = now.astimezone(ZoneInfo(settings.home_tz)).strftime("%H:%M")
+    start, end = device.night_from, device.night_until
+    night = start <= clock < end if start <= end else clock >= start or clock < end
+    return device.night_brightness if night else device.brightness
 
 
 class DeviceRotation:
@@ -51,6 +65,9 @@ class DeviceRotation:
         self._clock = clock
         self._next = 0
         self._hold_until: datetime | None = None
+        self._brightness: int | None = None
+        self._pages: list[Clip] = []
+        self._page_of = ""
 
     def tick(self) -> str:
         """Send the next screen and return its name, or HOLDING while the last one's hold runs."""
@@ -59,6 +76,15 @@ class DeviceRotation:
             return HOLDING
         dwell = self._settings.device.screen_seconds
         self._hold_until = now + timedelta(seconds=dwell)
+        if self._pages:
+            page = self._pages.pop(0)
+            try:
+                self._adapter.send(page)
+            except Exception:
+                self._pages = []
+                raise
+            self._hold_until = self._clock() + timedelta(milliseconds=page.total_ms)
+            return self._page_of
         slot = self._next
         self._next += 1
         conn = self._open_conn()
@@ -71,8 +97,17 @@ class DeviceRotation:
         name = names[index]
         self._next = (index + 1) % len(names)
         clip = render_screen(name, view, now)
-        self._adapter.send(clip)
-        self._hold_until = self._clock() + timedelta(milliseconds=hold_ms(name, clip, dwell))
+        level = brightness_at(now, self._settings)
+        if level != self._brightness:
+            self._adapter.set_brightness(level)
+            self._brightness = level
+        first, *rest = device_parts(clip)
+        self._adapter.send(first)
+        if rest:
+            self._pages, self._page_of = rest, name
+            self._hold_until = self._clock() + timedelta(milliseconds=first.total_ms)
+        else:
+            self._hold_until = self._clock() + timedelta(milliseconds=hold_ms(name, clip, dwell))
         return name
 
     def due(self) -> datetime:

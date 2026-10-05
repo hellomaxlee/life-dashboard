@@ -12,9 +12,12 @@ that falls below one PWM step goes dark. Toggling either redraws from the cached
 nothing is fetched or rendered again. `gamma=1` on the frame endpoint exists for parity with
 /preview and so a test can prove the shipped tables equal the emulator pixel for pixel.
 
-The sequence and its holds are `app.render.rotation`'s, the same the device job sends: Week,
-Today, one sparkle per earned small win, Books; a clip loops while it is held. No external
-scripts, fonts, or assets; everything is inline and the page works on the LAN only.
+The sequence and its holds are `app.render.rotation`'s, the same the device job sends: Today,
+Week, Month, Books, one sparkle per earned small win, then the week-complete party when the
+week is done; a clip loops while it is held. `#screen=<name>` starts on that screen
+(`#screen=month`, `#screen=win-sleep`, `#screen=party`); a celebration the day did not earn is
+played once as a sample instead. No external scripts, fonts, or assets; everything is inline
+and the page works on the LAN only.
 """
 
 from __future__ import annotations
@@ -28,10 +31,10 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from app.render.adapters.file import png_bytes
-from app.render.celebrate import CELEBRATION_ORDER, Celebration, celebrations_for
+from app.render.celebrate import CELEBRATION_ORDER, Celebration, celebrations_for, week_complete
 from app.render.frame import Clip
 from app.render.gamma import led_gamma, led_lut
-from app.render.rotation import ROTATION_ORDER, WIN_NAMES, render_screen, rotation_sequence
+from app.render.rotation import PARTY, SCREEN_NAMES, render_screen, rotation_sequence
 from app.render.view import DayView
 from app.timeutil import to_utc_iso, utc_iso_to_local_display
 from app.web.nav import NAV_STYLE, nav_html
@@ -50,13 +53,14 @@ SIZES = (256, 512, 768)
 DEFAULT_SIZE = 512
 BRIGHTNESS_STEPS = tuple(range(10, 101, 10))
 DEFAULT_BRIGHTNESS = 100
-NAMES = ROTATION_ORDER + CELEBRATION_ORDER
+NAMES = (*SCREEN_NAMES, *(name for name in CELEBRATION_ORDER if name not in SCREEN_NAMES))
 
 
 def _clip(view: DayView, now: datetime, name: str) -> tuple[Clip, bool]:
-    """(clip, earned) for one screen or celebration; a rotation screen is always earned."""
-    if name in ROTATION_ORDER or name in WIN_NAMES:
-        return render_screen(name, view, now), True
+    """(clip, earned) for one screen or celebration. A rotation screen is always earned; the
+    party is the rotation's own clip, earned once the week is complete."""
+    if name in SCREEN_NAMES:
+        return render_screen(name, view, now), name != PARTY or week_complete(view)
     found: Celebration = next(c for c in celebrations_for(view) if c.name == name)
     return found.clip, found.earned
 
@@ -138,7 +142,7 @@ def pixoo_frame(
     fixture: str | None = None,
     gamma: int = 0,
 ) -> Response:
-    if name not in NAMES and name not in WIN_NAMES:
+    if name not in NAMES:
         raise HTTPException(status_code=404, detail="unknown screen")
     if gamma not in (0, 1):
         raise HTTPException(status_code=422, detail="gamma must be 0 or 1")
@@ -256,7 +260,9 @@ _STRIP = (
     "<figure><img id='thumb-party' alt='party'><figcaption id='label-party'>party</figcaption>"
     "<button type='button' data-play='party'>play party</button></figure>"
     "</div>"
-    "<p class='note'>Frames are rendered by the service and drawn here as LEDs; the page only "
+    "<p class='note'>The rotation runs Today, Week, Month, Books, then each small win the day "
+    "earned and the party once the week is done. "
+    "Frames are rendered by the service and drawn here as LEDs; the page only "
     "maps pixels. Brightness scales the PWM level before the panel curve. Judge legibility on "
     "the LED-gamma view.</p></main>"
 )
@@ -531,10 +537,8 @@ _SCRIPT = r"""
       if (!screen.pixels) { await loadClip(screen); }
     }
     for (const c of state.rotation.celebrations) { await loadClip(c); }
-    const party = state.rotation.celebrations.find(function (c) {
-      return c.earned && c.name === 'party';
-    });
-    if (party && wanted === null) { playCelebration(party.name); }
+    const inRotation = state.rotation.screens.some(function (s) { return s.name === wanted; });
+    if (wanted !== null && !inRotation) { playCelebration(wanted); }
   }
 
   function startScreen() {

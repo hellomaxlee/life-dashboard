@@ -1,5 +1,6 @@
 """The gate against the golden cases: the ten hand-written lines pass, the hated lines fail
-with the named reason, and each rule has its own red case."""
+with the named reason, and each rule has its own red case. The quotation rules have their
+own file, test_voice.py."""
 
 from __future__ import annotations
 
@@ -54,26 +55,36 @@ def test_grounding_formatting_rules(db, settings):
     assert gate.number_tokens("VO2 and Z2 are not numbers; 1.3 is") == ["1.3"]
 
 
-def test_ancient_source_at_most_once_in_seven_days(db, settings):
-    payload = payload_for(db, settings, golden_cases()[1])
-    first = "No workout, 7.4 h of sleep. Epictetus would file the sleep under what was yours."
-    assert check_device_line(first, payload, EMPTY, THRESHOLD).ok
-    second = "No workout, 7.4 h of sleep. Marcus Aurelius had a note for mornings like this."
-    recent = Recent(sources_named=("epictetus",))
-    verdict = check_device_line(second, payload, recent, THRESHOLD)
-    assert verdict.reason.startswith("names: 'marcus aurelius' named, a source was already named")
-    assert check_device_line(second, payload, EMPTY, THRESHOLD).ok
-
-
-def test_attributed_quote_is_rejected_even_once(db, settings):
+def test_a_person_is_named_only_as_the_author_of_a_bank_quote(db, settings):
+    """Was: an ancient source may be paraphrased by name once in seven days. The 2026-10-04
+    voice lets a name appear only beside that person's own words from the bank."""
     payload = payload_for(db, settings, golden_cases()[1])
     for line in (
-        "As Marcus Aurelius said, 7.4 h is enough.",
-        "No workout, 7.4 h of sleep. As Seneca put it, the day was yours.",
-        "As David Goggins says, 7.4 h is soft.",
+        "A night of 7.4 h of sleep. Epictetus would file the sleep under what was yours.",
+        "A night of 7.4 h of sleep. Marcus Aurelius had a note for mornings like this.",
     ):
         verdict = check_device_line(line, payload, EMPTY, THRESHOLD)
-        assert verdict.reason == "names: attributed quote", line
+        assert verdict.reason.startswith("names: "), line
+        assert "named without a verbatim quote-bank entry" in verdict.reason
+    quoted = '"Of things some are in our power, and others are not." - Epictetus'
+    assert check_device_line(quoted, payload, EMPTY, THRESHOLD).ok
+
+
+def test_words_put_in_a_named_mouth_are_rejected_even_once(db, settings):
+    """Was: every attributed quote is rejected. Now: every attribution that is not a bank
+    entry under its own author is."""
+    payload = payload_for(db, settings, golden_cases()[1])
+    for line, reason in (
+        ("As Marcus Aurelius said, 7.4 h is enough.", "names: 'marcus aurelius' named without"),
+        (
+            "A night of 7.4 h of sleep. As Seneca put it, the day was yours.",
+            "names: 'seneca' named without",
+        ),
+        ("As David Goggins says, 7.4 h is soft.", "names: attributed quote"),
+        ("As my old coach said, 7.4 h is enough.", "names: attributed quote"),
+    ):
+        verdict = check_device_line(line, payload, EMPTY, THRESHOLD)
+        assert verdict.reason.startswith(reason), (line, verdict.reason)
 
 
 def test_opening_three_words_may_not_repeat_a_recent_line(db, settings):

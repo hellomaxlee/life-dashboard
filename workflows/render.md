@@ -4,7 +4,7 @@ Owner: Diego Almeida. QA: Lucía Ferrer. Tool: `tools/render.py`. Skill: `/frame
 
 ## What it does
 
-Renders the three rotation screens (Week, Today, Books + summary) and the two celebration
+Renders the four rotation screens (Today, Week, Month, Books + summary) and the two celebration
 clips (sparkle, party) to files, raw and through the LED gamma emulator, at 1x and enlarged.
 Nothing is sent to a device and nothing leaves the machine.
 
@@ -27,7 +27,7 @@ enlarged files; the 1x files are always written.
 One folder per screen, in rotation order, then the celebrations:
 
 ```
-<out>/week/      <out>/today/      <out>/books/      <out>/sparkle/      <out>/party/
+<out>/today/    <out>/week/    <out>/month/    <out>/books/    <out>/sparkle/    <out>/party/
 ```
 
 Each folder holds:
@@ -42,7 +42,8 @@ Each folder holds:
 
 Which screens animate: Books when the summary needs more than one page (two word-wrapped
 lines per page, 2 s each; a 110-character line is about seven pages); Week only when the
-Claude reading is stale (pulsing dot, label alternating with its age); Today never; both
+Claude reading is stale (pulsing dot, label alternating with its age); Today never; Month is
+two pages (the plate 6 s, the note 5 s) only when the day's plate has a note; both
 celebrations always. No clip may exceed 59 frames, the most one device animation is assumed
 to hold; a test holds every fixture to it and the Pixoo adapter refuses a longer clip.
 
@@ -74,13 +75,36 @@ The tool and the preview page always render both celebrations so they can be loo
 the day's data did not earn is labelled `(sample)`; an earned party prints the week's stored
 count and target.
 
+## The Month screen
+
+`app/render/month.py`. With a stored feature for the requested day's month (`app/month/`, one
+authored theme a month, one 16x16 plate a day): the title in the small face in the palette's
+first colour, the day's plate at three LEDs a cell on black, the caption in the second colour,
+and a rail of one pip per day down each side (days gone in a dimmed second colour, today white,
+days to come in the track grey). A day with a note gets a second page: the same title over the
+note in the body face, word-wrapped and centred. Text that would not fit is cut at a whole
+glyph, and a note too long for the body face drops to the small one; nothing is drawn off the
+frame. Title and caption colours too dark for small text are lifted toward white.
+
+With no feature for that month (none generated yet, the model unavailable or over budget, a
+stored row that no longer parses, the table missing) the screen is the month as a calendar,
+from the date alone: month name in a colour of its own and the year, `M T W T F S S`, one 6x6
+cell per day in Monday-first weeks, past days in the month's colour dimmed, today white, days
+to come grey. No metric is read.
+
+The month is always the requested day's. When Today falls back to yesterday on the first of a
+month, the Month screen still shows the new month.
+
 ## Fixtures
 
 `fixtures/days/<day type>__<completeness>__<streak state>__<season>.json`. `daily_metrics` and
 `weekly_metrics` have the same keys as the database rows (listed in `app/render/view.py`);
 `now_utc` fixes the clock and `as_of_utc` is the last Health push. An optional `note` is for
 the reader (two audit fixtures use it to say their summary lines are display data, never
-summary-gate goldens). A key left out is a missing
+summary-gate goldens). An optional `month_feature` names a file under `fixtures/month/`
+(`sample-2026-10`, a hand-made moon over water); the loader re-dates that sample to the
+fixture's own month, cutting its days to the month's length, so one sample serves any fixture
+day. A fixture without the key renders the calendar. A key left out is a missing
 value and must render as a stated fallback. Use a new cell each cycle (CLAUDE.md § Iteration Rule).
 Every file in the folder is rendered and snapshot-tested, so a new fixture needs its goldens:
 render it, look at it (next section), then run the `UPDATE_SNAPSHOTS=1` command and commit them.
@@ -103,11 +127,14 @@ Until then `tests/render/test_snapshots.py` fails for that fixture by design; no
 
 `GET /pixoo` is the display as a Pixoo-64 on a desk: a dark bezel, a 64x64 matrix drawn as
 round LEDs with black gaps and a soft glow, and the rotation running live the way the device
-job runs it: Week → Today → one sparkle per small win the day earned (workout, sleep, book)
-→ Books, repeating. A still holds for `device.screen_seconds` (6 s). Anything animated holds
+job runs it: Today → Week → Month → Books → one sparkle per small win the day earned
+(workout, sleep, book) → the week-complete party once the week's target is met, repeating
+(day, week, month, year, then the wins). `app.render.rotation.sequence_names` is the one
+definition; a restart begins at Today. A still holds for `device.screen_seconds` (6 s). Anything animated holds
 for whole plays and is never replaced part way: Books until its summary has paged through
-(2 s a page; twice if one pass is shorter than the dwell), each sparkle three plays (4.2 s). The workout sparkle reads "WORKOUT DONE / SMALL WIN", and once the week's target is met
-it stays in the sequence every day through Sunday. The week-complete party is not in the sequence. `/preview` stays the engineering view; the
+exactly once (2 s a page), Month's plate 6 s then its note 5 s, each sparkle three plays
+(4.2 s), the party one play (3.4 s). On the device a paged screen goes as one still per page. The workout sparkle reads "WORKOUT DONE / SMALL WIN", and once the week's target is met
+it stays in the sequence every day through Sunday, and so does the party. `/preview` stays the engineering view; the
 three pages link each other on their first line.
 
 Rendering never moves into the browser. The page fetches `/pixoo/rotation.json` (screens in
@@ -123,9 +150,10 @@ gamma are client-side: the server ships `led_lut(brightness=b)` for every step a
 `int(v * b)` table beside it, so dimming scales the PWM level before the panel curve exactly as
 `led_gamma(frame, brightness=b)` does, and changing either redraws from cached pixels without
 another request. The strip under the device shows both celebrations with earned or sample
-marked; a button plays either on the panel; an earned one plays once when the page loads.
-`#screen=today` in the URL starts the rotation on that screen (and skips the auto-play) so a
-screenshot can target one screen; `#paused` holds it.
+marked; a button plays either on the panel. The page starts at Today, as the device does.
+`#screen=month` (or `today`, `week`, `books`, `win-sleep`, `party`) in the URL starts the
+rotation on that screen so a screenshot can target one; a celebration the day did not earn
+is played once as a sample instead. `#paused` holds it.
 
 `tools/pixoo_window.py` draws the same look in a native window with stdlib tkinter
 (`python -m tools.pixoo_window --url http://<service>:8080 --fixture <combo>`; keys: space
