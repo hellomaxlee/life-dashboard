@@ -3,6 +3,12 @@
 Running log, newest first. The Lead reads this to find root causes and prioritize.
 Entry format: `## YYYY-MM-DD · <Title> (<Author>)` followed by terse bullets. Name the fixture combo on render/summary cycles.
 
+## 2026-10-05 · Month brief: months must differ, every day sharp and informative (Ingrid Halvorsen)
+- Max found October's notes a bit cryptic ("The first two leaves are only a rough draft"), then got it; he asked that months vary in concept and theme and always be sharp and informative, and to keep October.
+- `app/month/prompt.py`: the brief now asks for months that differ in concept, theme and kind (not one life-cycle after another), for every day to teach something true and specific that needs no prior knowledge of the subject, for the note to say plainly what the plate shows with the wit in the phrasing ("a clear sentence first, a riddle never"), and for nothing invented to fill a day. October's stored feature "PATCH TO PORCH" is untouched (a stored month is never regenerated without `--force`); the change first applies to November.
+- Gate: ruff clean; month tests 67 passed, with a test pinning the four phrases. No model call; spend unchanged at $0.4849 of $3.00.
+- Unproven: what the new brief produces. The first evidence is November's feature on 2026-11-01; "informative" also invites factual claims, which nothing checks beyond the instruction not to invent.
+
 ## 2026-10-05 · City detail pages only for delays and suspensions, full messages, no cut words (Lucía Ferrer)
 - Max: no detail page for planned work; show the whole alert message, paged like the Books quote; do not cut words off with "...".
 - `app/render/city.py`: detail pages only for lines whose status is delays or suspended (`detail_lines`); planned work stays a WORK word on the lines page. The headline is shown whole over as many 5 s pages as it needs (`headline_pages`): body face while that takes at most two pages, else the small face; "+N MORE" on the last page of the last line. The stored headline cap went from 120 to 600 characters, so nothing a real alert carries is cut (the longest in tonight's feeds is under 300).
