@@ -699,12 +699,14 @@ def test_interval_jobs_run_once_after_a_sleep_instead_of_logging_a_miss(db, jobs
 
 
 def test_the_panel_is_dimmed_from_ten_at_night_until_half_past_five(db, jobs_settings):
+    dim = jobs_settings.device.night_brightness
+    assert 0 < dim < jobs_settings.device.brightness == 100
     night = from_utc_iso("2026-10-05T02:00:00Z")  # 22:00 New York
     cases = {
         "2026-10-05T01:59:00Z": 100,  # 21:59
-        "2026-10-05T02:00:00Z": 10,  # 22:00
-        "2026-10-05T07:00:00Z": 10,  # 03:00
-        "2026-10-05T09:29:00Z": 10,  # 05:29
+        "2026-10-05T02:00:00Z": dim,  # 22:00
+        "2026-10-05T07:00:00Z": dim,  # 03:00
+        "2026-10-05T09:29:00Z": dim,  # 05:29
         "2026-10-05T09:30:00Z": 100,  # 05:30
         "2026-10-05T16:00:00Z": 100,  # noon
     }
@@ -717,10 +719,10 @@ def test_the_panel_is_dimmed_from_ten_at_night_until_half_past_five(db, jobs_set
     for _ in range(4):
         rotation.tick()
         clock.now += timedelta(seconds=30)
-    assert adapter.levels == [100, 10], "set once at start, once when the night begins"
+    assert adapter.levels == [100, dim], "set once at start, once when the night begins"
     clock.now = from_utc_iso("2026-10-05T09:30:00Z")
     rotation.tick()
-    assert adapter.levels == [100, 10, 100]
+    assert adapter.levels == [100, dim, 100]
 
 
 def test_a_brightness_command_that_fails_is_sent_again_next_tick(db, jobs_settings):
