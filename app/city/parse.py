@@ -31,7 +31,7 @@ from app.config import CityConfig
 from app.render.font import normalize
 
 MERCURY = "transit_realtime.mercury_alert"
-HEADLINE_MAX = 120
+HEADLINE_MAX = 600
 HOUR_STEPS = 6
 HOUR_SPACING = 3
 MAX_WEATHER_ALERTS = 3

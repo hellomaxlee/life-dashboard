@@ -292,16 +292,16 @@ def test_headline_is_plain_ascii_on_one_line_and_keeps_the_bullets():
     raw = "  [N] trains — “slow” near Café  St\n\tExpect… delays,  "
     assert clean_headline(raw) == '[N] trains - "slow" near Cafe St Expect... delays'
     assert clean_headline("[F][G] skip 4 Av-9 St") == "[F][G] skip 4 Av-9 St"
-    exact = "word " * 23 + "ending"
-    assert len(exact) == 121
+    exact = "word " * 119 + "ending"
+    assert len(exact) == 601
     cut = clean_headline(exact)
-    assert cut == ("word " * 23).strip() + "..." and len(cut) == 117
-    assert clean_headline(exact[:-1]) == exact[:-1], "120 characters fit whole"
-    unbroken = clean_headline("x" * 300)
-    assert unbroken == "x" * 117 + "..."
+    assert cut == ("word " * 119).strip() + "..." and len(cut) == 597
+    assert clean_headline(exact[:-1]) == exact[:-1], "600 characters fit whole"
+    unbroken = clean_headline("x" * 700)
+    assert unbroken == "x" * 597 + "..."
     for entity in load("real", "subway")["entity"] + load("real", "bus")["entity"]:
         text = clean_headline(parse.header_text(entity["alert"]))
-        assert text.isascii() and len(text) <= 120 and "\n" not in text and "<" not in text
+        assert text.isascii() and len(text) <= 600 and "\n" not in text and "<" not in text
 
 
 def test_the_plain_english_header_is_preferred_over_html():

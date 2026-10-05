@@ -440,17 +440,30 @@ def _glue_attribution(words: list[str]) -> list[str]:
     return units
 
 
+def _at_hyphens(units: list[str]) -> list[str]:
+    """A hyphenated word too wide for a line breaks after its hyphens ("water-" / "drops"),
+    never in the middle of a part."""
+    out: list[str] = []
+    for unit in units:
+        if "-" in unit.strip("-") and text_width(unit.replace(_GLUE, " "), BODY) > WORD_WIDTH:
+            parts = unit.replace("-", "-\n").split("\n")
+            out.extend(part for part in parts if part)
+        else:
+            out.append(unit)
+    return out
+
+
 def wrap_lines(text: str) -> list[str]:
     """Greedy word wrap to LINE_WIDTH pixels.
 
     A number stays on the same line as its unit or its "of N" whenever the group fits a
     line, and an attribution dash stays with its name. A word alone on a line may run into
-    the right margin (WORD_WIDTH), so "Yesterday's" is not cut before its "s"; only a word
-    wider than that is ever split.
+    the right margin (WORD_WIDTH), so "Yesterday's" is not cut before its "s"; a wider
+    hyphenated word breaks after a hyphen, and only a wider unhyphenated word is ever split.
     """
     lines: list[str] = []
     current = ""
-    for unit in _glue_attribution(_glue_numbers(text.split())):
+    for unit in _at_hyphens(_glue_attribution(_glue_numbers(text.split()))):
         word = unit.replace(_GLUE, " ")
         candidate = f"{current} {word}" if current else word
         if text_width(candidate, BODY) <= LINE_WIDTH:

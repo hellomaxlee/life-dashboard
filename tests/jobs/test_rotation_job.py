@@ -283,7 +283,7 @@ def test_city_goes_page_by_page_as_stills_in_order_and_a_failed_page_costs_the_r
     fetched = "2026-10-02T15:55:00Z"
     lines = (
         LineStatus("N", "subway"),
-        LineStatus("W", "subway", "planned", "No W trains after 9:45 PM.", False, 1),
+        LineStatus("W", "subway", "suspended", "No W trains.", True, 1),
         LineStatus("M", "subway", "delays", "M trains are delayed.", True, 1),
         LineStatus("Q69", "bus"),
     )

@@ -95,7 +95,7 @@ def test_render_tool_writes_the_documented_files(tmp_path, settings, capsys):
         count = len(rotation(view, now)[name].frames)
         assert count > 1
         assert {p.name for p in (out / name).iterdir()} == stills | clips | pages(count), name
-    for number in (1, 2, 3):
+    for number in (1, 2):
         page = Image.open(out / "city" / f"page_{number}_1x.png").convert("RGB")
         assert page.tobytes() == rotation(view, now)["city"].frames[number - 1].tobytes()
     assert Image.open(out / "today" / "frame_1x.png").size == (64, 64)

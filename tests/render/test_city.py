@@ -41,7 +41,8 @@ from app.render.city import (
     bar_box,
     condition,
     degrees,
-    headline_layout,
+    detail_lines,
+    headline_pages,
     hour_label,
     line_color,
     line_rows,
@@ -527,22 +528,24 @@ def affected_five() -> tuple[LineStatus, ...]:
         ("N", "planned", False),
         ("W", "delays", True),
         ("M", "suspended", True),
-        ("Q103", "planned", True),
+        ("Q103", "delays", True),
         ("Q69", "delays", False),
+        ("B62", "planned", True),
     )
 
 
 def test_detail_pages_are_most_severe_first_then_now_before_later(monkeypatch):
     city = status(lines=affected_five())
-    assert [line.line for line in affected_lines(city)] == ["M", "W", "Q69", "Q103", "N"]
+    assert [line.line for line in affected_lines(city)] == ["M", "W", "Q103", "Q69", "B62", "N"]
+    assert [line.line for line in detail_lines(city)] == ["M", "W", "Q103", "Q69"]
     recorded = record_text(monkeypatch)
     clip = render_city(view_of(city), NOW)
     assert clip.durations_ms == (WEATHER_MS, LINES_MS, DETAIL_MS, DETAIL_MS, DETAIL_MS)
     assert clip.durations_ms == (6000, 6000, 5000, 5000, 5000)
     headers = [r for r in recorded if r[2] == HEADER_Y - 1 and r[3] == BODY.name]
-    assert [r[0] for r in headers] == ["M", "W", "Q69"], "at most three, in that order"
-    assert [r[0] for r in recorded if r[0].endswith("MORE")] == ["+2 MORE"]
-    more = next(r for r in recorded if r[0] == "+2 MORE")
+    assert [r[0] for r in headers] == ["M", "W", "Q103"], "at most three, in that order"
+    assert [r[0] for r in recorded if r[0].endswith("MORE")] == ["+1 MORE"]
+    more = next(r for r in recorded if r[0] == "+1 MORE")
     last_body = [r for r in recorded[recorded.index(headers[-1]) :] if r[2] >= DETAIL_TOP]
     assert last_body[-1][2] + 7 <= more[2] or last_body[0] == more, "the count has its own line"
     assert more[2] + SMALL.height - 1 <= DETAIL_BOTTOM
@@ -552,43 +555,56 @@ def test_detail_pages_are_most_severe_first_then_now_before_later(monkeypatch):
 
     three = status(lines=lines(("N", "planned", False), ("W", "delays", True), ("M", "ok", True)))
     recorded.clear()
-    assert len(render_city(view_of(three), NOW).frames) == 4
+    assert len(render_city(view_of(three), NOW).frames) == 3, "work has no page"
     assert not [r for r in recorded if r[0].endswith("MORE")]
     odd = status(lines=(LineStatus("N", "subway", "mystery", None, True),))
+    assert len(render_city(view_of(odd), NOW).frames) == 2, "an unknown status has no page"
+    bare = status(lines=(LineStatus("N", "subway", "delays", None, True),))
     recorded.clear()
-    assert len(render_city(view_of(odd), NOW).frames) == 3
-    assert "ALERT" in texts(recorded) and "No details" in " ".join(texts(recorded))
+    assert len(render_city(view_of(bare), NOW).frames) == 3
+    assert "No details" in " ".join(texts(recorded))
 
 
-def test_a_headline_is_wrapped_like_the_summary_then_shrunk_then_cut(monkeypatch):
+def test_a_headline_is_shown_whole_over_as_many_pages_as_it_needs(monkeypatch):
     room = DETAIL_BOTTOM - DETAIL_TOP + 1
     short = "Delays of 9.8 min on the N – expect a wait."
-    font, pitch, wrapped = headline_layout(short, room)
-    assert (font, pitch) == (BODY, 9) and wrapped == wrap_lines(clean_summary(short))
-    assert any("9.8 min" in line for line in wrapped), "a number stays with its unit"
-    longer = "Southbound M trains are delayed while we address a signal problem at Queens Plaza."
-    font, pitch, wrapped = headline_layout(longer, room)
-    assert (font, pitch) == (SMALL, 7) and " ".join(wrapped) == longer
+    font, pitch, pages = headline_pages(short, room)
+    assert (font, pitch) == (BODY, 9) and sum(pages, []) == wrap_lines(clean_summary(short))
+    assert any("9.8 min" in line for line in sum(pages, [])), "a number stays with its unit"
+    two = "Southbound M trains are delayed while we address a signal problem at Queens Plaza."
+    font, pitch, pages = headline_pages(two, room)
+    assert font is BODY and len(pages) == 2 and " ".join(sum(pages, [])) == two
     hyphen = "No W trains between Astoria-Ditmars Blvd and Queensboro Plaza."
-    assert "Astoria-" in headline_layout(hyphen, room)[2], "a long name breaks at its hyphen"
+    assert "Astoria-" in sum(headline_pages(hyphen, room)[2], [])
     endless = "Trains are rerouted in both directions. " * 12
-    font, pitch, wrapped = headline_layout(endless, room)
-    assert font is SMALL and wrapped[-1].endswith("...") and not wrapped[-1].endswith("....")
-    assert (len(wrapped) - 1) * pitch + font.height <= room
-    assert all(text_width(line, font) <= WIDTH for line in wrapped)
-    less = headline_layout(endless, room - 14)[2]
-    assert len(less) == len(wrapped) - 2 and less[-1].endswith("...")
-    assert headline_layout("W" * 200, room)[2][-1].endswith("...")
+    font, pitch, pages = headline_pages(endless, room)
+    assert font is SMALL and len(pages) > 1
+    assert " ".join(sum(pages, [])) == endless.strip(), "nothing is cut"
+    assert all((len(page) - 1) * pitch + font.height <= room for page in pages)
+    assert all(text_width(line, font) <= WIDTH for page in pages for line in page)
+    assert "".join(sum(headline_pages("W" * 200, room)[2], [])) == "W" * 200
 
     recorded = record_text(monkeypatch)
     only = (LineStatus("M", "subway", "delays", endless, True, 1),)
-    page = render_city(view_of(status(lines=only)), NOW).frames[2]
+    clip = render_city(view_of(status(lines=only)), NOW)
+    assert len(clip.frames) == 2 + len(pages) and set(clip.durations_ms[2:]) == {5000}
+    wrapped = sum(pages, [])
     body = [r for r in recorded if r[2] >= DETAIL_TOP and r[0] in wrapped]
     assert [r[0] for r in body[-len(wrapped) :]] == wrapped
     assert max(r[2] for r in body) + SMALL.height - 1 <= DETAIL_BOTTOM
-    assert page.crop((0, DETAIL_BOTTOM + 1, SIZE, SIZE)).getbbox() is None
-    box = page.getbbox()
-    assert box[0] >= LEFT and box[2] <= RIGHT + 1
+    for page in clip.frames[2:]:
+        assert page.crop((0, DETAIL_BOTTOM + 1, SIZE, SIZE)).getbbox() is None
+        box = page.getbbox()
+        assert box[0] >= LEFT and box[2] <= RIGHT + 1
+
+
+def test_planned_work_gets_no_detail_page_and_delays_and_suspensions_do():
+    work = LineStatus("W", "subway", "planned", "No W trains after 9:45 PM.", False, 1)
+    late = LineStatus("M", "subway", "delays", "M trains are delayed.", True, 1)
+    gone = LineStatus("N", "subway", "suspended", "No N service.", True, 1)
+    assert len(render_city(view_of(status(lines=(work,))), NOW).frames) == 2
+    assert [line.line for line in detail_lines(status(lines=(work, late, gone)))] == ["N", "M"]
+    assert len(render_city(view_of(status(lines=(work, late, gone))), NOW).frames) == 4
 
 
 def test_all_ok_and_no_alert_is_two_calm_pages():

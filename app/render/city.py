@@ -13,10 +13,10 @@ Drawn from the view's `city` (app/city/model.py), which is always the requested 
   carries the status; the colour only repeats it. The name sits beside the badge, not inside
   it: a 3x5 letter on a lit disc does not read at 1x under LED gamma, the same letter on
   black does. Seven lines get the body face; eight need a tighter row and the small face.
-- up to DETAIL_PAGES detail pages, one per line that is not ok, most severe first, then what
-  is in effect now before what starts later: that line's row as the header, and the alert's
-  own headline word-wrapped under it. More affected lines than pages ends the last page
-  with "+N MORE".
+- detail pages for up to DETAIL_PAGES lines that are delayed or suspended (planned work gets
+  none), most severe first, then what is in effect now before what starts later: that
+  line's row as the header, and the alert's own headline under it, whole, over as many
+  pages as it needs. More such lines than DETAIL_PAGES ends the last page with "+N MORE".
 
 All ok and no alert is the common case: the weather and lines pages and nothing else.
 
@@ -125,6 +125,8 @@ DETAIL_TOP = 11
 DETAIL_BOTTOM = 62
 FOOTER_PITCH = 7
 HEADLINE_FACES = ((BODY, 9), (SMALL, 7))
+BODY_PAGES = 2
+DETAIL_STATUSES = ("delays", "suspended")
 BULLET = re.compile(r"\[([A-Za-z0-9]{1,4})\]")
 ELLIPSIS = "..."
 NO_DETAILS = "No details given."
@@ -695,6 +697,12 @@ def affected_lines(city: CityStatus) -> list[LineStatus]:
     return sorted(lines, key=lambda line: (-severity(line), not line.now))
 
 
+def detail_lines(city: CityStatus) -> list[LineStatus]:
+    """The affected lines that get detail pages: delays and suspensions only. Planned work
+    shows as WORK on the lines page and has no page of its own (Max, 2026-10-05)."""
+    return [line for line in affected_lines(city) if line.status in DETAIL_STATUSES]
+
+
 def _soften(text: str, font: Font, width: int) -> str:
     """Let a word too wide for a line break after its hyphens and slashes
     ("Astoria-Ditmars") instead of mid-syllable, and write the feed's bracketed line
@@ -729,43 +737,46 @@ def _wrap_small(text: str, width: int) -> list[str]:
     return lines
 
 
-def headline_layout(headline: str, room: int) -> tuple[Font, int, list[str]]:
-    """(face, line pitch, lines) for a headline in `room` pixel rows: the body face with the
-    Books wrap while it fits, then the small face; a headline too long for that keeps the
-    lines that fit and ends the last one in "..."."""
+def headline_pages(headline: str, room: int) -> tuple[Font, int, list[list[str]]]:
+    """(face, line pitch, pages of lines) for a whole headline in `room` pixel rows a page.
+    Nothing is cut: the text runs over as many pages as it needs, in the body face with the
+    Books wrap while that takes at most BODY_PAGES pages, else in the small face."""
     text = clean_summary(headline)
     for font, pitch in HEADLINE_FACES:
         if font is BODY:
             lines = wrap_lines(_soften(text, BODY, WIDTH))
         else:
             lines = _wrap_small(_soften(text, SMALL, WIDTH), WIDTH)
-        if (len(lines) - 1) * pitch + font.height <= room:
-            return font, pitch, lines
-    kept = lines[: max(1, (room - font.height) // pitch + 1)]
-    last = kept[-1].rstrip(" .,;:")
-    while last and text_width(last + ELLIPSIS, font) > WIDTH:
-        last = last[:-1].rstrip(" .,;:")
-    kept[-1] = last + ELLIPSIS
-    return font, pitch, kept
+        per_page = max(1, (room - font.height) // pitch + 1)
+        pages = [lines[i : i + per_page] for i in range(0, len(lines), per_page)] or [[]]
+        if font is SMALL or len(pages) <= BODY_PAGES:
+            break
+    return font, pitch, pages
 
 
-def _detail_frame(line: LineStatus, more: int, stale: str | None) -> Frame:
-    frame = new_frame()
-    draw_row(frame, HEADER_Y - 1, line)
-    footers: list[tuple[str, Color]] = []
-    if stale is not None:
-        footers.append((stale, AMBER))
-    if more > 0:
-        footers.append((f"+{more} MORE", SECONDARY))
-    bottom = DETAIL_BOTTOM - len(footers) * FOOTER_PITCH
-    for index, (text, color) in enumerate(footers):
-        y = DETAIL_BOTTOM - SMALL.height + 1 - (len(footers) - 1 - index) * FOOTER_PITCH
-        draw_text(frame, LEFT, y, text, color, SMALL)
+def _detail_frames(line: LineStatus, more: int, stale: str | None) -> list[Frame]:
+    """The line's whole headline, on as many pages as it takes; "+N MORE" on its last."""
     headline = line.headline if isinstance(line.headline, str) and line.headline.strip() else ""
-    font, pitch, lines = headline_layout(headline or NO_DETAILS, bottom - DETAIL_TOP + 1)
-    for index, text in enumerate(lines):
-        draw_text(frame, LEFT, DETAIL_TOP + index * pitch, text, TEXT, font)
-    return frame
+    room = DETAIL_BOTTOM - (FOOTER_PITCH if stale is not None else 0) - DETAIL_TOP + 1
+    if more > 0:
+        room -= FOOTER_PITCH
+    font, pitch, pages = headline_pages(headline or NO_DETAILS, room)
+    frames = []
+    for number, lines in enumerate(pages):
+        frame = new_frame()
+        draw_row(frame, HEADER_Y - 1, line)
+        footers: list[tuple[str, Color]] = []
+        if stale is not None:
+            footers.append((stale, AMBER))
+        if more > 0 and number == len(pages) - 1:
+            footers.append((f"+{more} MORE", SECONDARY))
+        for index, (text, color) in enumerate(footers):
+            y = DETAIL_BOTTOM - SMALL.height + 1 - (len(footers) - 1 - index) * FOOTER_PITCH
+            draw_text(frame, LEFT, y, text, color, SMALL)
+        for index, text in enumerate(lines):
+            draw_text(frame, LEFT, DETAIL_TOP + index * pitch, text, TEXT, font)
+        frames.append(frame)
+    return frames
 
 
 # the screen
@@ -790,19 +801,20 @@ def city_for(view: DayView) -> CityStatus | None:
 
 
 def render_city(view: DayView, now: datetime | None = None) -> Clip:
-    """The weather page, the lines page, then a detail page for each of the first DETAIL_PAGES
-    affected lines, as a paged clip; one "CITY NO DATA" still when the view has no city status
-    for its day. `now` (aware UTC) dates staleness and tells day from night; without it
-    nothing is called stale and a clear sky is the sun."""
+    """The weather page, the lines page, then the whole headline, on as many pages as it
+    needs, of each of the first DETAIL_PAGES delayed or suspended lines, as a paged clip;
+    one "CITY NO DATA" still when the view has no city status for its day. `now` (aware UTC)
+    dates staleness and tells day from night; without it nothing is called stale and a clear
+    sky is the sun."""
     city = city_for(view)
     if city is None:
         return still(_no_data_frame(view))
     frames = [_weather_frame(view, city, now), _lines_frame(view, city, now)]
-    affected = affected_lines(city)
+    affected = detail_lines(city)
     stale = as_of_label(city.transit_fetched_at_utc, now, view.home_tz, view.city_stale_minutes)
     shown = affected[:DETAIL_PAGES]
     for index, line in enumerate(shown):
         more = len(affected) - len(shown) if index == len(shown) - 1 else 0
-        frames.append(_detail_frame(line, more, stale))
-    durations = (WEATHER_MS, LINES_MS, *(DETAIL_MS,) * len(shown))
+        frames.extend(_detail_frames(line, more, stale))
+    durations = (WEATHER_MS, LINES_MS, *(DETAIL_MS,) * (len(frames) - 2))
     return Clip(tuple(frames), durations)

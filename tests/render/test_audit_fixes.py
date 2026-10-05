@@ -467,3 +467,11 @@ def test_a_word_two_pixels_too_wide_keeps_its_line_and_the_dash_keeps_its_author
     assert wrap_lines('so "said" - Heraclitus')[-2:] == ['so "said" -', "Heraclitus"]
     assert wrap_lines("sleep. It's enough - rest is work")[:2] == ["sleep. It's", "enough -"]
     assert wrap_lines("Rest Supercalifragilistic day")[1] != "Supercalifragilistic"
+
+
+def test_a_wide_hyphenated_word_breaks_after_its_hyphen_not_mid_part():
+    lines = wrap_lines("Even by the falling of water-drops a water-pot is filled")
+    assert "of water-" in lines and "drops a" in lines
+    assert not any(line.startswith("s ") or line == "water-drop" for line in lines)
+    assert "".join(lines).replace(" ", "") == "Evenbythefallingofwater-dropsawater-potisfilled"
+    assert wrap_lines("a well-made day")[0] == "a well-made", "one that fits stays whole"
