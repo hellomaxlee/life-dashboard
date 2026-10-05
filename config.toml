@@ -97,7 +97,7 @@ screen_seconds = 6
 # Panel brightness, 0 to 100: `night_brightness` from `night_from` until `night_until`
 # (home timezone), `brightness` the rest of the day. Equal times = never dimmed.
 brightness = 100
-night_brightness = 10
+night_brightness = 3
 night_from = "22:00"
 night_until = "05:30"
 

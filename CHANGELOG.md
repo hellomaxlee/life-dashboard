@@ -3,6 +3,9 @@
 Running log, newest first. The Lead reads this to find root causes and prioritize.
 Entry format: `## YYYY-MM-DD · <Title> (<Author>)` followed by terse bullets. Name the fixture combo on render/summary cycles.
 
+## 2026-10-05 · Night brightness 10 to 3 (Lucía Ferrer)
+- Max: dim it more during sleeping hours. `[device] night_brightness = 3` (22:00 to 05:30); day stays 100. Service restarted at about 00:50; the first tick sent the new level with no send failure. How 3 looks on the panel is Max's to judge.
+
 ## 2026-10-05 · Month brief: months must differ, every day sharp and informative (Ingrid Halvorsen)
 - Max found October's notes a bit cryptic ("The first two leaves are only a rough draft"), then got it; he asked that months vary in concept and theme and always be sharp and informative, and to keep October.
 - `app/month/prompt.py`: the brief now asks for months that differ in concept, theme and kind (not one life-cycle after another), for every day to teach something true and specific that needs no prior knowledge of the subject, for the note to say plainly what the plate shows with the wit in the phrasing ("a clear sentence first, a riddle never"), and for nothing invented to fill a day. October's stored feature "PATCH TO PORCH" is untouched (a stored month is never regenerated without `--force`); the change first applies to November.
