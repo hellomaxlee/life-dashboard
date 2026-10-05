@@ -4,6 +4,7 @@
   "day_local": "2026-08-05",
   "now_utc": "2026-08-05T13:00:00Z",
   "as_of_utc": "2026-08-03T22:00:00Z",
+  "city": "weather-only",
   "daily_metrics": {
     "books_ytd": 3,
     "summary_device_line": "Finished *Jazz* (3 of 12); 6.2 h of sleep. It's enough - rest is 22% of the work.",

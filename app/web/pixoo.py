@@ -13,11 +13,11 @@ nothing is fetched or rendered again. `gamma=1` on the frame endpoint exists for
 /preview and so a test can prove the shipped tables equal the emulator pixel for pixel.
 
 The sequence and its holds are `app.render.rotation`'s, the same the device job sends: Today,
-Week, Month, Books, one sparkle per earned small win, then the week-complete party when the
+City, Week, Month, Books, one sparkle per earned small win, then the week-complete party when the
 week is done; a clip loops while it is held. `#screen=<name>` starts on that screen
-(`#screen=month`, `#screen=win-sleep`, `#screen=party`); a celebration the day did not earn is
-played once as a sample instead. No external scripts, fonts, or assets; everything is inline
-and the page works on the LAN only.
+(`#screen=city`, `#screen=month`, `#screen=win-sleep`, `#screen=party`); a celebration the
+day did not earn is played once as a sample instead. No external scripts, fonts, or assets;
+everything is inline and the page works on the LAN only.
 """
 
 from __future__ import annotations
@@ -260,8 +260,8 @@ _STRIP = (
     "<figure><img id='thumb-party' alt='party'><figcaption id='label-party'>party</figcaption>"
     "<button type='button' data-play='party'>play party</button></figure>"
     "</div>"
-    "<p class='note'>The rotation runs Today, Week, Month, Books, then each small win the day "
-    "earned and the party once the week is done. "
+    "<p class='note'>The rotation runs Today, City, Week, Month, Books, then each small win "
+    "the day earned and the party once the week is done. "
     "Frames are rendered by the service and drawn here as LEDs; the page only "
     "maps pixels. Brightness scales the PWM level before the panel curve. Judge legibility on "
     "the LED-gamma view.</p></main>"

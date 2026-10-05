@@ -37,15 +37,18 @@ def test_the_fixture_day_goes_out_in_rotation_order_with_timings(device, capsys)
     assert pixoo_check.main(["--host", HOST, "--no-hold"]) == 0
     lines = capsys.readouterr().out.splitlines()
     names = [line.split(":")[0] for line in lines]
-    assert names[:4] == ["today", "week", "month page 1 of 2", "month page 2 of 2"]
+    city = [f"city page {n} of 4" for n in range(1, 5)]
+    assert names[:8] == ["today", *city, "week", "month page 1 of 2", "month page 2 of 2"]
     assert names[-2:] == ["win-workout", "win-sleep"]
-    pages = len(names) - 6
+    pages = len(names) - 10
     assert pages > 1
-    assert names[4:-2] == [f"books page {n} of {pages}" for n in range(1, pages + 1)]
+    assert names[8:-2] == [f"books page {n} of {pages}" for n in range(1, pages + 1)]
     assert all("sent in" in line and "hold" in line for line in lines)
-    assert "hold 6 s" in lines[2] and "hold 5 s" in lines[3], "the plate, then its note"
+    assert ["hold 6 s" in line for line in lines[1:5]] == [True, True, False, False]
+    assert "hold 5 s" in lines[3] and "hold 5 s" in lines[4], "weather, lines, two alerts"
+    assert "hold 6 s" in lines[6] and "hold 5 s" in lines[7], "the plate, then its note"
     sends = [body for body in seen if body["Command"] == "Draw/SendHttpGif"]
-    assert sorted({body["PicID"] for body in sends}) == list(range(1, 7 + pages))
+    assert sorted({body["PicID"] for body in sends}) == list(range(1, 11 + pages))
     assert {body["PicWidth"] for body in sends} == {64}
 
 
@@ -72,6 +75,16 @@ def test_month_and_party_can_be_sent_by_name(device, capsys):
     assert len([body for body in seen if body["Command"] == "Draw/SendHttpGif"]) == 56
     with pytest.raises(SystemExit):
         pixoo_check.main(["--host", HOST, "--screen", "year"])
+
+
+def test_city_can_be_sent_by_name_as_one_still_per_page(device, capsys):
+    seen, _ = device
+    assert pixoo_check.main(["--host", HOST, "--no-hold", "--screen", "city"]) == 0
+    lines = capsys.readouterr().out.splitlines()
+    assert [line.split(":")[0] for line in lines] == [f"city page {n} of 4" for n in (1, 2, 3, 4)]
+    sends = [body for body in seen if body["Command"] == "Draw/SendHttpGif"]
+    assert [(body["PicNum"], body["PicOffset"]) for body in sends] == [(1, 0)] * 4, "four stills"
+    assert len({body["PicData"] for body in sends}) == 4, "four different pages"
 
 
 def test_an_unreachable_device_fails_with_the_command_named(device, capsys):

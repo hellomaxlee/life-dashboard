@@ -18,6 +18,7 @@ os.environ["GOODREADS_RSS_URL"] = ""
 os.environ["ANTHROPIC_API_KEY"] = ""
 os.environ["LIFE_SCHEDULER_ENABLED"] = "0"
 os.environ["LIFE_PIXOO_HOST"] = ""
+os.environ["LIFE_CITY_ENABLED"] = "0"
 os.environ.setdefault("LIFE_BACKUP_DIR", str(_SESSION_DIR / "backups"))
 
 from app.config import Settings, load_settings  # noqa: E402
@@ -35,6 +36,7 @@ def settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Settings:
     monkeypatch.setenv("GOODREADS_RSS_URL", "")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "")
     monkeypatch.setenv("LIFE_PIXOO_HOST", "")
+    monkeypatch.setenv("LIFE_CITY_ENABLED", "0")
     return load_settings()
 
 

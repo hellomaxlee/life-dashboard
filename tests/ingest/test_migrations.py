@@ -23,6 +23,7 @@ EXPECTED_TABLES = {
     "metrics_state",
     "month_features",
     "month_feature_attempts",
+    "city_snapshots",
 }
 
 

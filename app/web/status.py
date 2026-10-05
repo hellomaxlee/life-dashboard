@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+from dataclasses import asdict
 from html import escape
 
 from fastapi import APIRouter, Request
@@ -114,3 +115,16 @@ def status_page(request: Request) -> HTMLResponse:
 @router.get("/healthz")
 def healthz() -> dict[str, bool]:
     return {"ok": True}
+
+
+@router.get("/display/sends.json")
+def display_sends(request: Request) -> dict[str, object]:
+    """The rotation job's most recent sends to the panel, oldest first, and each job's run
+    and failure counts. Empty while no device is configured."""
+    scheduler = request.app.state.scheduler
+    rotation = getattr(scheduler, "rotation", None)
+    stats = getattr(scheduler, "job_stats", {})
+    return {
+        "sends": [asdict(record) for record in rotation.sends] if rotation else [],
+        "jobs": {name: asdict(record) for name, record in stats.items()},
+    }

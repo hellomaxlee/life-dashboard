@@ -7,7 +7,8 @@ Reads `/pixoo/rotation.json` and the frame PNGs from the service on the LAN (std
 plus Pillow; no new dependencies) and draws the same LED look the /pixoo page draws: a round
 LED per pixel, 70 % of the cell, over faint unlit LEDs, with a soft glow. Rendering stays on
 the service; this window only maps pixels to LEDs. It starts at Today and runs the service's
-sequence (Today, Week, Month, Books, the earned small wins, the party when the week is done).
+sequence (Today, City, Week, Month, Books, the earned small wins, the party when the week is
+done).
 Keys: space pause, n next screen, s sparkle, p party, q quit. Nothing is sent anywhere but the
 service address given.
 """

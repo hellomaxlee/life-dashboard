@@ -14,6 +14,13 @@ sample is re-dated to the fixture's own month (its days cut to the month's lengt
 hand-made sample serves every fixture day. Only fixtures do that; a stored feature is
 shown for its own month and no other.
 
+`city` is the city status (app/city/model.py: weather and transit lines) for the requested
+day, or None; the City screen then says "CITY NO DATA". view_db reads it from the database. A
+fixture names a file under fixtures/city_view with a `city` key (see `fixture_city`); that
+sample is dated to the fixture's own day and its fetch times are counted back from the
+fixture's "now", so one sample serves any fixture day. `city_stale_minutes` is how old a
+fetch may be before its page says "AS OF".
+
 Keys read. Phase 2 (metrics) and Phase 3 (summary) are expected to write the ones marked
 with their phase; until they do, the screens show the fallback.
 
@@ -51,6 +58,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from app.city.model import KINDS, CityStatus, HourWeather, LineStatus, Weather
 from app.config import Settings
 from app.month.spec import MonthFeature, SpecError, days_in, parse_feature
 from app.timeutil import from_utc_iso, to_utc_iso
@@ -71,6 +79,7 @@ WEEK_QUALITY_WORKOUTS = "quality_workouts"
 WEEKS_HIT_STREAK = "weeks_hit_streak"
 
 MAX_SLEEP_HOURS = 24.0
+CITY_STALE_MINUTES = 45
 
 
 @dataclass(frozen=True)
@@ -103,6 +112,8 @@ class DayView:
     claude: ClaudeUsage = field(default_factory=ClaudeUsage)
     stale_hours: int = 24
     month_feature: MonthFeature | None = None
+    city: CityStatus | None = None
+    city_stale_minutes: int = CITY_STALE_MINUTES
 
 
 def _number(value: Any) -> float | None:
@@ -165,6 +176,14 @@ def claude_from_metrics(daily: dict[str, Any]) -> ClaudeUsage:
     )
 
 
+def city_stale_minutes(settings: Settings) -> int:
+    """`[city] stale_minutes`, or CITY_STALE_MINUTES when the settings carry none."""
+    value = getattr(getattr(settings, "city", None), "stale_minutes", None)
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        return CITY_STALE_MINUTES
+    return value
+
+
 def week_start(day_local: str) -> str:
     day = date.fromisoformat(day_local)
     return (day - timedelta(days=day.weekday())).isoformat()
@@ -210,6 +229,7 @@ def view_from_metrics(
         summary_line=summary.strip() if isinstance(summary, str) and summary.strip() else None,
         claude=claude if claude is not None else claude_from_metrics(daily),
         stale_hours=settings.claude_usage.stale_hours,
+        city_stale_minutes=city_stale_minutes(settings),
     )
 
 
@@ -231,11 +251,82 @@ def fixture_feature(days_file: Path, name: object, month: str) -> MonthFeature:
         raise ValueError(f"{days_file.name}: month_feature {name!r}: {exc}") from None
 
 
+def _minutes_before(now: datetime, minutes: object) -> str | None:
+    if minutes is None:
+        return None
+    if _number(minutes) is None:
+        raise ValueError(f"minutes ago {minutes!r} is not a number")
+    return to_utc_iso(now - timedelta(minutes=minutes))
+
+
+def _fixture_weather(raw: dict, now: datetime) -> Weather:
+    hours = tuple(
+        HourWeather(
+            hour_local=int(step["hour_local"]),
+            temp_f=float(step["temp_f"]),
+            precip_pct=int(step["precip_pct"]),
+            code=int(step["code"]),
+            tomorrow=step.get("tomorrow") is True,
+        )
+        for step in raw.get("hours", [])
+    )
+    return Weather(
+        temp_f=_number(raw.get("temp_f")),
+        feels_f=_number(raw.get("feels_f")),
+        code=_whole(raw.get("code")),
+        high_f=_number(raw.get("high_f")),
+        low_f=_number(raw.get("low_f")),
+        precip_pct_max=_whole(raw.get("precip_pct_max")),
+        hours=hours,
+        alerts=tuple(str(event) for event in raw.get("alerts", [])),
+        fetched_at_utc=_minutes_before(now, raw.get("fetched_minutes_ago")),
+    )
+
+
+def _fixture_line(raw: dict) -> LineStatus:
+    if raw["kind"] not in KINDS:
+        raise ValueError(f"line kind {raw['kind']!r} is not one of {KINDS}")
+    headline = raw.get("headline")
+    return LineStatus(
+        line=str(raw["line"]),
+        kind=raw["kind"],
+        status=str(raw.get("status", "ok")),
+        headline=str(headline) if headline is not None else None,
+        now=raw.get("now") is True,
+        alerts=int(raw.get("alerts", 0)),
+    )
+
+
+def fixture_city(days_file: Path, name: object, day_local: str, now: datetime) -> CityStatus:
+    """The sample city status fixtures/city_view/<name>.json, dated to `day_local`.
+
+    The file holds `weather` (the Weather fields, `hours` as a list of HourWeather objects,
+    and `fetched_minutes_ago`) or null, `lines` (LineStatus objects), and
+    `transit_fetched_minutes_ago` or null for never fetched; minutes are counted back from
+    `now`. ValueError naming the fixture if the name is not a bare file name, the file is
+    missing, or it does not have that shape.
+    """
+    if not isinstance(name, str) or not name or Path(name).name != name:
+        raise ValueError(f"{days_file.name}: city {name!r} is not a file name")
+    path = days_file.parent.parent / "city_view" / f"{name}.json"
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        weather = raw.get("weather")
+        return CityStatus(
+            day_local=day_local,
+            weather=_fixture_weather(weather, now) if weather is not None else None,
+            lines=tuple(_fixture_line(line) for line in raw.get("lines", [])),
+            transit_fetched_at_utc=_minutes_before(now, raw.get("transit_fetched_minutes_ago")),
+        )
+    except (OSError, ValueError, TypeError, KeyError, AttributeError) as exc:
+        raise ValueError(f"{days_file.name}: city {name!r}: {type(exc).__name__}: {exc}") from None
+
+
 def load_fixture(path: Path, settings: Settings) -> tuple[DayView, datetime]:
     """Read a fixtures/days file. Returns the view and the fixture's own "now" (UTC).
 
     ValueError naming the file if its `day_local` or `now_utc` is missing or not a real date,
-    or if it names a `month_feature` sample that cannot be loaded.
+    or if it names a `month_feature` or `city` sample that cannot be loaded.
     """
     record = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(record, dict):
@@ -259,4 +350,6 @@ def load_fixture(path: Path, settings: Settings) -> tuple[DayView, datetime]:
     if record.get("month_feature") is not None:
         feature = fixture_feature(path, record["month_feature"], day_local[:7])
         view = replace(view, month_feature=feature)
+    if record.get("city") is not None:
+        view = replace(view, city=fixture_city(path, record["city"], day_local, now))
     return view, now

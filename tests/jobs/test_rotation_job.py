@@ -41,7 +41,7 @@ from app.timeutil import from_utc_iso, local_day
 
 HOST = "192.168.1.50"
 NOON = datetime(2026, 10, 2, 16, 0, tzinfo=UTC)
-PLAIN = ["today", "week", "month", "books"]
+PLAIN = ["today", "city", "week", "month", "books"]
 DAYS_FILE = REPO_ROOT / "fixtures" / "days" / "any.json"
 
 
@@ -114,14 +114,14 @@ def test_ticks_walk_the_rotation_in_order_and_wrap(db, jobs_settings):
     clock, adapter = Clock(), FakeAdapter()
     rotation = DeviceRotation(jobs_settings, opener(jobs_settings), adapter, clock)
     shown = []
-    for _ in range(9):
+    for _ in range(11):
         shown.append(rotation.tick())
         clock.now += timedelta(seconds=20)
     assert shown == [*ROTATION_ORDER, *ROTATION_ORDER, ROTATION_ORDER[0]]
-    assert shown[:4] == ["today", "week", "month", "books"], "day, week, month, year"
+    assert shown[:5] == ["today", "city", "week", "month", "books"], "day, city, week, month, year"
 
     view = view_from_db(db, jobs_settings, "2026-10-02")
-    assert [name for name, _ in rotation_clips(view, NOON)] == shown[:4]
+    assert [name for name, _ in rotation_clips(view, NOON)] == shown[:5]
     for index, name in enumerate(shown):
         at = NOON + timedelta(seconds=20 * index)
         assert same(adapter.sent[index], render_screen(name, view, at))
@@ -162,7 +162,7 @@ def test_the_day_shown_is_the_new_york_day_on_both_sides_of_midnight(db, jobs_se
         assert rotation.tick() == "today"
         assert same(adapter.sent[0], expected[day])
         clock.now += timedelta(seconds=20)
-        assert rotation.tick() == "week"
+        assert rotation.tick() == "city"
 
 
 def test_an_adapter_error_costs_one_slot_and_the_next_tick_shows_the_next_screen(
@@ -184,13 +184,13 @@ def test_an_adapter_error_costs_one_slot_and_the_next_tick_shows_the_next_screen
     clock.now = rotation.due()
     run()
     view = view_from_db(db, jobs_settings, "2026-10-02")
-    assert same(adapter.sent[0], render_screen("month", view, NOON))
+    assert same(adapter.sent[0], render_screen("week", view, NOON))
     assert stats[ROTATION_JOB] == jobs.JobStats(runs=3, failures=2, last_error=None)
     clock.now += timedelta(seconds=20)
-    assert rotation.tick() == "books"
+    assert rotation.tick() == "month"
 
 
-@pytest.mark.parametrize("broken", ["today", "month"])
+@pytest.mark.parametrize("broken", ["today", "city", "month"])
 def test_a_screen_that_cannot_render_does_not_stop_the_others(
     db, jobs_settings, monkeypatch, broken
 ):
@@ -204,11 +204,11 @@ def test_a_screen_that_cannot_render_does_not_stop_the_others(
     stats: dict[str, jobs.JobStats] = {}
     rotation = DeviceRotation(jobs_settings, opener(jobs_settings), adapter, clock)
     run = jobs.guarded(ROTATION_JOB, rotation.tick, stats)
-    for _ in range(8):
+    for _ in range(10):
         run()
         clock.now += timedelta(seconds=20)
-    assert (stats[ROTATION_JOB].runs, stats[ROTATION_JOB].failures) == (8, 2)
-    assert adapter.attempts == len(adapter.sent) == 6
+    assert (stats[ROTATION_JOB].runs, stats[ROTATION_JOB].failures) == (10, 2)
+    assert adapter.attempts == len(adapter.sent) == 8
     view = view_from_db(db, jobs_settings, "2026-10-02")
     others = [name for name in ROTATION_ORDER if name != broken]
     for index, name in enumerate(others * 2):
@@ -227,14 +227,14 @@ def test_a_month_renderer_that_raises_costs_only_the_month_slot(db, jobs_setting
     adapter, clock = FakeAdapter(), Clock()
     rotation = DeviceRotation(jobs_settings, opener(jobs_settings), adapter, clock)
     shown = []
-    for _ in range(5):
+    for _ in range(6):
         try:
             shown.append(rotation.tick())
         except RuntimeError:
             shown.append("failed")
         clock.now = rotation.due()
-    assert shown == ["today", "week", "failed", "books", "today"]
-    assert len(adapter.sent) == 4
+    assert shown == ["today", "city", "week", "failed", "books", "today"]
+    assert len(adapter.sent) == 5
 
 
 def test_month_goes_as_two_stills_in_order_the_plate_then_its_note(db, jobs_settings, monkeypatch):
@@ -246,7 +246,7 @@ def test_month_goes_as_two_stills_in_order_the_plate_then_its_note(db, jobs_sett
         month = render_screen("month", view, noon)
         clock, adapter = Clock(noon), FakeAdapter()
         rotation = DeviceRotation(jobs_settings, opener(jobs_settings), adapter, clock)
-        for name in ("today", "week"):
+        for name in ("today", "city", "week"):
             assert rotation.tick() == name
             clock.advance(20)
         if day == "2026-10-02":
@@ -269,7 +269,56 @@ def test_month_goes_as_two_stills_in_order_the_plate_then_its_note(db, jobs_sett
             clock.advance(0.001)
         assert month.frames[0].tobytes() != month.frames[1].tobytes()
         assert rotation.tick() == "books"
-        assert len(adapter.sent) == 5
+        assert len(adapter.sent) == 6
+
+
+def test_city_goes_page_by_page_as_stills_in_order_and_a_failed_page_costs_the_rest(
+    db, jobs_settings, monkeypatch
+):
+    import sys
+    from types import SimpleNamespace
+
+    from app.city.model import CityStatus, LineStatus, Weather
+
+    fetched = "2026-10-02T15:55:00Z"
+    lines = (
+        LineStatus("N", "subway"),
+        LineStatus("W", "subway", "planned", "No W trains after 9:45 PM.", False, 1),
+        LineStatus("M", "subway", "delays", "M trains are delayed.", True, 1),
+        LineStatus("Q69", "bus"),
+    )
+    city = CityStatus("2026-10-02", Weather(57.2, 55.0, 3, 62.4, 50.6, 70, (), (), fetched), lines)
+    city = replace(city, transit_fetched_at_utc=fetched)
+    store = SimpleNamespace(load_status=lambda conn, day: replace(city, day_local=day))
+    monkeypatch.setitem(sys.modules, "app.city.store", store)
+    expected = render_screen("city", view_from_db(db, jobs_settings, "2026-10-02"), NOON)
+    assert expected.durations_ms == (6000, 6000, 5000, 5000)
+
+    clock, adapter = Clock(), FakeAdapter()
+    rotation = DeviceRotation(jobs_settings, opener(jobs_settings), adapter, clock)
+    assert rotation.tick() == "today"
+    clock.advance(20)
+    for page, seconds in enumerate((6, 6, 5, 5)):
+        assert rotation.tick() == "city"
+        sent = adapter.sent[-1]
+        assert len(sent.frames) == 1, "a page is a still, so the panel has nothing to loop"
+        assert sent.frames[0].tobytes() == expected.frames[page].tobytes()
+        assert rotation.due() == clock.now + timedelta(seconds=seconds)
+        clock.advance(seconds - 0.001)
+        assert rotation.tick() == HOLDING
+        clock.advance(0.001)
+    assert rotation.tick() == "week"
+    assert len(adapter.sent) == 6
+
+    clock, adapter = Clock(), FakeAdapter(fail_on_sends=(3,))
+    rotation = DeviceRotation(jobs_settings, opener(jobs_settings), adapter, clock)
+    for name in ("today", "city"):
+        assert rotation.tick() == name
+        clock.now = rotation.due()
+    with pytest.raises(PixooError):
+        rotation.tick()
+    clock.now = rotation.due()
+    assert rotation.tick() == "week", "the lost pages are dropped; the rotation moves on"
 
 
 def test_a_finished_week_ends_the_cycle_with_one_whole_party(db, jobs_settings):
@@ -282,13 +331,13 @@ def test_a_finished_week_ends_the_cycle_with_one_whole_party(db, jobs_settings):
     clock, adapter = Clock(), FakeAdapter()
     rotation = DeviceRotation(settings, opener(settings), adapter, clock)
     shown = []
-    for _ in range(7):
+    for _ in range(8):
         shown.append(rotation.tick())
         last_due = rotation.due() - clock.now
         clock.now = rotation.due()
-    assert shown == ["today", "week", "month", "books", "win-workout", "party", "today"]
+    assert shown == ["today", "city", "week", "month", "books", "win-workout", "party", "today"]
     party = party_clip(3, 3)
-    assert same(adapter.sent[5], party) and len(party.frames) == 56
+    assert same(adapter.sent[6], party) and len(party.frames) == 56
     view = view_from_db(db, settings, "2026-10-02")
     holds = {name: hold for name, _, hold in rotation_sequence(view, NOON, 6)}
     assert holds["party"] == party.total_ms == 3360, "one whole play, not the dwell"
@@ -302,7 +351,7 @@ def test_books_goes_page_by_page_as_stills_each_shown_once(db, jobs_settings):
     assert pages > 2 and set(books.durations_ms) == {2000}
     clock, adapter = Clock(), FakeAdapter()
     rotation = DeviceRotation(jobs_settings, opener(jobs_settings), adapter, clock)
-    for name in ("today", "week", "month"):
+    for name in ("today", "city", "week", "month"):
         assert rotation.tick() == name
         clock.advance(20)
     for page in range(pages):
@@ -314,14 +363,14 @@ def test_books_goes_page_by_page_as_stills_each_shown_once(db, jobs_settings):
         assert rotation.tick() == HOLDING
         clock.advance(0.001)
     assert rotation.tick() == "today"
-    assert len(adapter.sent) == 3 + pages + 1
+    assert len(adapter.sent) == 4 + pages + 1
 
 
 def test_a_page_that_fails_drops_the_rest_and_the_rotation_moves_on(db, jobs_settings):
     set_day(db, "2026-10-02", summary_device_line=LONG_SUMMARY)
-    clock, adapter = Clock(), FakeAdapter(fail_on_sends=(5,))
+    clock, adapter = Clock(), FakeAdapter(fail_on_sends=(6,))
     rotation = DeviceRotation(jobs_settings, opener(jobs_settings), adapter, clock)
-    for name in ("today", "week", "month", "books"):
+    for name in ("today", "city", "week", "month", "books"):
         assert rotation.tick() == name
         clock.now = rotation.due()
     with pytest.raises(PixooError):
@@ -346,7 +395,13 @@ def test_the_default_dwell_is_a_few_seconds_and_books_still_pages_through(db, jo
     holds = {name: hold for name, _, hold in rotation_sequence(view, NOON, dwell)}
     books = dict(rotation_clips(view, NOON))["books"]
     assert books.total_ms > 8000
-    assert holds == {"today": 6000, "week": 6000, "month": 6000, "books": books.total_ms}
+    assert holds == {
+        "today": 6000,
+        "city": 6000,
+        "week": 6000,
+        "month": 6000,
+        "books": books.total_ms,
+    }
 
 
 def test_each_earned_small_win_gets_its_own_slot_after_books(db, jobs_settings):
@@ -362,23 +417,24 @@ def test_each_earned_small_win_gets_its_own_slot_after_books(db, jobs_settings):
     clock, adapter = Clock(), FakeAdapter()
     rotation = DeviceRotation(settings, opener(settings), adapter, clock)
     shown = []
-    for _ in range(45):
+    for _ in range(51):
         result = rotation.tick()
         if result != HOLDING:
             shown.append((result, (clock.now - NOON).total_seconds()))
         clock.now += timedelta(seconds=1)
-    assert shown[:8] == [
+    assert shown[:9] == [
         ("today", 0),
-        ("week", 6),
-        ("month", 12),
-        ("books", 18),
-        ("win-workout", 24),
-        ("win-sleep", 29),
-        ("win-book", 34),
-        ("today", 39),
+        ("city", 6),
+        ("week", 12),
+        ("month", 18),
+        ("books", 24),
+        ("win-workout", 30),
+        ("win-sleep", 35),
+        ("win-book", 40),
+        ("today", 45),
     ]
-    assert same(adapter.sent[4], sparkle_clip("workout"))
-    assert same(adapter.sent[6], sparkle_clip("book"))
+    assert same(adapter.sent[5], sparkle_clip("workout"))
+    assert same(adapter.sent[7], sparkle_clip("book"))
 
     db.execute(
         "UPDATE daily_metrics SET metrics_json = ? WHERE day_local = '2026-10-02'",
@@ -390,6 +446,7 @@ def test_each_earned_small_win_gets_its_own_slot_after_books(db, jobs_settings):
     view = view_from_db(db, settings, "2026-10-02")
     assert [name for name, _, _ in rotation_sequence(view, NOON, 6)] == [
         "today",
+        "city",
         "week",
         "month",
         "books",
@@ -516,7 +573,7 @@ def test_a_week_finished_early_keeps_the_workout_win_until_the_week_ends(db, job
     def names(day: str) -> list[str]:
         return list(sequence_names(view_from_db(db, jobs_settings, day)))
 
-    done = ["today", "week", "month", "books", "win-workout", "party"]
+    done = ["today", "city", "week", "month", "books", "win-workout", "party"]
     assert names("2026-10-01") == done
     assert names("2026-10-04") == done, "Sunday still plays"
     assert names("2026-10-05") == PLAIN, "Monday starts a new week"
@@ -548,7 +605,7 @@ def test_holds_are_whole_plays_and_due_is_exact(db, jobs_settings):
     settings = with_device(jobs_settings, seconds=6)
     view = view_from_db(db, settings, "2026-10-02")
     slots = {name: (clip, hold) for name, clip, hold in rotation_sequence(view, NOON, 6)}
-    assert list(slots) == ["today", "week", "month", "books", "win-workout"]
+    assert list(slots) == ["today", "city", "week", "month", "books", "win-workout"]
     books, books_hold = slots["books"]
     assert (len(books.frames), books.total_ms, books_hold) == (2, 4000, 4000), "one pass, never two"
     assert slots["win-workout"][1] == 4200
@@ -557,11 +614,12 @@ def test_holds_are_whole_plays_and_due_is_exact(db, jobs_settings):
     rotation = DeviceRotation(settings, opener(settings), FakeAdapter(), clock)
     steps = (
         ("today", 6000),
-        ("week", 12000),
-        ("month", 18000),
-        ("books", 20000),
-        ("books", 22000),
-        ("win-workout", 26200),
+        ("city", 12000),
+        ("week", 18000),
+        ("month", 24000),
+        ("books", 26000),
+        ("books", 28000),
+        ("win-workout", 32200),
     )
     for name, offset_ms in steps:
         assert rotation.tick() == name
@@ -575,19 +633,19 @@ def test_a_sequence_that_shrinks_restarts_at_today_instead_of_skipping_it(db, jo
     clock = Clock()
     rotation = DeviceRotation(settings, opener(settings), FakeAdapter(), clock)
     shown = []
-    for _ in range(5):
+    for _ in range(6):
         shown.append(rotation.tick())
         clock.now = rotation.due()
-    assert shown == ["today", "week", "month", "books", "win-workout"]
+    assert shown == ["today", "city", "week", "month", "books", "win-workout"]
     db.execute(
         "UPDATE daily_metrics SET metrics_json = ? WHERE day_local = '2026-10-02'",
         (json.dumps({"quality_workout": False, "sleep_hours": 6.0, "steps": 4000}),),
     )
     db.commit()
-    for _ in range(4):
+    for _ in range(5):
         shown.append(rotation.tick())
         clock.now = rotation.due()
-    assert shown[5:] == PLAIN
+    assert shown[6:] == PLAIN
 
 
 def test_every_win_belongs_to_the_day_the_today_screen_shows(db, jobs_settings):
@@ -679,3 +737,31 @@ def test_a_brightness_command_that_fails_is_sent_again_next_tick(db, jobs_settin
     clock.now = rotation.due()
     rotation.tick()
     assert adapter.levels == [100, 100] and len(adapter.sent) == 1
+
+
+def test_every_send_is_recorded_with_its_page_time_and_hold(db, jobs_settings):
+    set_day(db, "2026-10-02", summary_device_line=LONG_SUMMARY)
+    clock, adapter = Clock(), FakeAdapter(fail_on_sends=(2,))
+    rotation = DeviceRotation(jobs_settings, opener(jobs_settings), adapter, clock)
+    names = sequence_names(view_from_db(db, jobs_settings, "2026-10-02"))
+    for _ in range(40):
+        try:
+            rotation.tick()
+        except PixooError:
+            pass
+        clock.now = rotation.due()
+    sends = list(rotation.sends)
+    assert sends[0].name == names[0] and sends[0].error is None and sends[0].hold_ms > 0
+    assert sends[1].error == "PixooError: Draw/GetHttpGifId: timed out"
+    books = [s for s in sends if s.name == "books"]
+    pages = books[0].pages
+    assert pages > 1 and [s.page for s in books[:pages]] == list(range(1, pages + 1))
+    assert all(s.frames == 1 and s.hold_ms == 2000 for s in books)
+    assert all(s.seconds >= 0 for s in sends) and len(sends) <= rotation_job.SEND_LOG_SIZE
+
+
+def test_the_send_log_is_served_as_json(jobs_settings, db):
+    settings = with_device(jobs_settings)
+    with TestClient(create_app(settings)) as client:
+        body = client.get("/display/sends.json").json()
+    assert body["sends"] == [] and isinstance(body["jobs"], dict)

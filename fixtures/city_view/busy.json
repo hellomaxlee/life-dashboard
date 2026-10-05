@@ -1,0 +1,99 @@
+{
+  "note": "A weekday evening: overcast, rain overnight; W has planned work later, M is delayed now. Display sample for the City screen, hand-written; not a raw payload (those are fixtures/city/).",
+  "weather": {
+    "temp_f": 57.2,
+    "feels_f": 55.4,
+    "code": 3,
+    "high_f": 62.4,
+    "low_f": 50.6,
+    "precip_pct_max": 70,
+    "hours": [
+      {
+        "hour_local": 18,
+        "temp_f": 57.2,
+        "precip_pct": 20,
+        "code": 3
+      },
+      {
+        "hour_local": 21,
+        "temp_f": 55.1,
+        "precip_pct": 45,
+        "code": 61
+      },
+      {
+        "hour_local": 0,
+        "temp_f": 53.4,
+        "precip_pct": 70,
+        "code": 63,
+        "tomorrow": true
+      },
+      {
+        "hour_local": 3,
+        "temp_f": 52.0,
+        "precip_pct": 60,
+        "code": 61,
+        "tomorrow": true
+      },
+      {
+        "hour_local": 6,
+        "temp_f": 50.6,
+        "precip_pct": 30,
+        "code": 3,
+        "tomorrow": true
+      },
+      {
+        "hour_local": 9,
+        "temp_f": 54.3,
+        "precip_pct": 10,
+        "code": 2,
+        "tomorrow": true
+      }
+    ],
+    "alerts": [],
+    "fetched_minutes_ago": 12
+  },
+  "lines": [
+    {
+      "line": "N",
+      "kind": "subway",
+      "status": "ok"
+    },
+    {
+      "line": "W",
+      "kind": "subway",
+      "status": "planned",
+      "headline": "No W trains between Astoria-Ditmars Blvd and Queensboro Plaza after 9:45 PM. Take the N instead.",
+      "now": false,
+      "alerts": 1
+    },
+    {
+      "line": "M",
+      "kind": "subway",
+      "status": "delays",
+      "headline": "Southbound M trains are delayed while we address a signal problem at Queens Plaza.",
+      "now": true,
+      "alerts": 2
+    },
+    {
+      "line": "Q103",
+      "kind": "bus",
+      "status": "ok"
+    },
+    {
+      "line": "Q66",
+      "kind": "bus",
+      "status": "ok"
+    },
+    {
+      "line": "Q69",
+      "kind": "bus",
+      "status": "ok"
+    },
+    {
+      "line": "B62",
+      "kind": "bus",
+      "status": "ok"
+    }
+  ],
+  "transit_fetched_minutes_ago": 3
+}

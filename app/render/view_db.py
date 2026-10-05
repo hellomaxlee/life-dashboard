@@ -25,6 +25,11 @@ The month feature is `app.month.store.load_feature` for the requested day's mont
 the requested day's even when the Today screen falls back to yesterday. Whatever goes wrong
 reading it (no row, no table yet, a row that no longer parses) is no feature, and the Month
 screen draws its calendar; it never costs the other screens their view.
+
+The city status is `app.city.store.load_status` for the requested day, on the same terms:
+the requested day's even when Today falls back, and anything that goes wrong reading it (the
+module or its table not there yet, a row that does not parse, something that is not a
+CityStatus) is no city status, which the City screen states as "CITY NO DATA".
 """
 
 from __future__ import annotations
@@ -36,6 +41,7 @@ from dataclasses import replace
 from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
+from app.city.model import CityStatus
 from app.config import Settings
 from app.ingest.health import SOURCE as HEALTH_SOURCE
 from app.month.spec import MonthFeature
@@ -110,6 +116,18 @@ def month_feature_for(conn: sqlite3.Connection, day_local: str) -> MonthFeature 
         return None
 
 
+def city_for(conn: sqlite3.Connection, day_local: str) -> CityStatus | None:
+    """The stored city status for the day, or None. Never raises."""
+    try:
+        from app.city.store import load_status
+
+        status = load_status(conn, day_local)
+    except (ImportError, sqlite3.Error, ValueError, TypeError, KeyError) as exc:
+        log.warning("city status for %s not loaded: %s: %s", day_local, type(exc).__name__, exc)
+        return None
+    return status if isinstance(status, CityStatus) else None
+
+
 def view_from_db(conn: sqlite3.Connection, settings: Settings, day_local: str) -> DayView:
     """Build the view from what is stored for a home-timezone day. ValueError if not a date.
 
@@ -117,12 +135,14 @@ def view_from_db(conn: sqlite3.Connection, settings: Settings, day_local: str) -
     sleep, steps or workout yet. The Today screen's day facts then come from the day before,
     when that day has them, and `day_shown` names it so the screen is headed YESTERDAY. The
     finished-book flag moves with them, so every small win belongs to the day shown.
-    Nothing else falls back: week, streak, books, summary, Claude and the month feature stay
-    the requested day's.
+    Nothing else falls back: week, streak, books, summary, Claude, the month feature and the
+    city status stay the requested day's.
     """
     day_local = date.fromisoformat(day_local).isoformat()
     view = _view_for(conn, settings, day_local)
-    view = replace(view, month_feature=month_feature_for(conn, day_local))
+    view = replace(
+        view, month_feature=month_feature_for(conn, day_local), city=city_for(conn, day_local)
+    )
     if has_health_data(view):
         return view
     try:

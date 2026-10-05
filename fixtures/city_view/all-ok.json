@@ -1,0 +1,92 @@
+{
+  "note": "A clear weekend afternoon with every line running: the common, calm case.",
+  "weather": {
+    "temp_f": 68.4,
+    "feels_f": 68.0,
+    "code": 0,
+    "high_f": 72.5,
+    "low_f": 58.1,
+    "precip_pct_max": 5,
+    "hours": [
+      {
+        "hour_local": 17,
+        "temp_f": 68.4,
+        "precip_pct": 0,
+        "code": 0
+      },
+      {
+        "hour_local": 20,
+        "temp_f": 64.9,
+        "precip_pct": 0,
+        "code": 0
+      },
+      {
+        "hour_local": 23,
+        "temp_f": 61.2,
+        "precip_pct": 5,
+        "code": 1
+      },
+      {
+        "hour_local": 2,
+        "temp_f": 59.0,
+        "precip_pct": 5,
+        "code": 2,
+        "tomorrow": true
+      },
+      {
+        "hour_local": 5,
+        "temp_f": 58.1,
+        "precip_pct": 0,
+        "code": 0,
+        "tomorrow": true
+      },
+      {
+        "hour_local": 8,
+        "temp_f": 63.7,
+        "precip_pct": 0,
+        "code": 0,
+        "tomorrow": true
+      }
+    ],
+    "alerts": [],
+    "fetched_minutes_ago": 20
+  },
+  "lines": [
+    {
+      "line": "N",
+      "kind": "subway",
+      "status": "ok"
+    },
+    {
+      "line": "W",
+      "kind": "subway",
+      "status": "ok"
+    },
+    {
+      "line": "F",
+      "kind": "subway",
+      "status": "ok"
+    },
+    {
+      "line": "Q103",
+      "kind": "bus",
+      "status": "ok"
+    },
+    {
+      "line": "Q66",
+      "kind": "bus",
+      "status": "ok"
+    },
+    {
+      "line": "Q69",
+      "kind": "bus",
+      "status": "ok"
+    },
+    {
+      "line": "B62",
+      "kind": "bus",
+      "status": "ok"
+    }
+  ],
+  "transit_fetched_minutes_ago": 2
+}

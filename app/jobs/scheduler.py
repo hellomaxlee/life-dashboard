@@ -20,6 +20,8 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
+from app.city import fetch as city_fetch
+from app.city.parse import ParseError as CityParseError
 from app.config import Settings
 from app.ingest import goodreads
 from app.ingest.claude_usage import read_usage_file
@@ -49,6 +51,12 @@ MONTH_JOB = "month_feature"
 CORE_JOBS = frozenset(
     {USAGE_JOB, BACKUP_JOB, BACKUP_CHECK_JOB, SUMMARY_JOB, RECOMPUTE_JOB, ROLLOVER_JOB, MONTH_JOB}
 )
+CITY_TRANSIT_JOB = "city_transit"
+CITY_WEATHER_JOB = "city_weather"
+CITY_JOBS = frozenset({CITY_TRANSIT_JOB, CITY_WEATHER_JOB})
+CITY_ERRORS = (city_fetch.FetchError, CityParseError)
+CITY_TRANSIT_FIRST_DELAY = timedelta(seconds=20)
+CITY_WEATHER_FIRST_DELAY = timedelta(seconds=30)
 MONTH_TIME = (0, 20)
 MONTH_MISFIRE_GRACE_S = 20 * 3600
 MONTH_CATCHUP_DELAY = timedelta(minutes=5)
@@ -271,6 +279,26 @@ def month_feature_missing(settings: Settings, open_conn: OpenConn, now: datetime
         return True
 
 
+def run_city_transit(settings: Settings, open_conn: OpenConn) -> int:
+    """Fetch the MTA alert feeds and replace the stored transit snapshot. A failed fetch
+    raises a CITY_ERRORS error and leaves the last snapshot in place."""
+    conn = open_conn()
+    try:
+        statuses = city_fetch.poll_transit(conn, settings)
+    finally:
+        conn.close()
+    return len(statuses)
+
+
+def run_city_weather(settings: Settings, open_conn: OpenConn) -> None:
+    """Fetch the forecast and the weather alerts and replace the stored weather snapshot."""
+    conn = open_conn()
+    try:
+        city_fetch.poll_weather(conn, settings)
+    finally:
+        conn.close()
+
+
 def stop_scheduler(scheduler: BackgroundScheduler) -> bool:
     """Shut the scheduler down, letting running jobs finish for at most SHUTDOWN_WAIT_S.
 
@@ -388,6 +416,30 @@ def build_scheduler(
         misfire_grace_time=int(timedelta(hours=23).total_seconds()),
     )
 
+    if settings.city.enabled:
+        city_jobs = (
+            (
+                CITY_TRANSIT_JOB,
+                run_city_transit,
+                settings.city.transit_poll_minutes,
+                CITY_TRANSIT_FIRST_DELAY,
+            ),
+            (
+                CITY_WEATHER_JOB,
+                run_city_weather,
+                settings.city.weather_poll_minutes,
+                CITY_WEATHER_FIRST_DELAY,
+            ),
+        )
+        for job_id, run, minutes, first_delay in city_jobs:
+            scheduler.add_job(
+                guarded(job_id, lambda run=run: run(settings, open_conn), stats, quiet=CITY_ERRORS),
+                IntervalTrigger(minutes=minutes, timezone=tz),
+                id=job_id,
+                misfire_grace_time=minutes * 60,
+                next_run_time=moment + first_delay,
+            )
+
     if settings.device.pixoo_host:
         try:
             adapter = device or device_adapter(settings)
@@ -395,6 +447,7 @@ def build_scheduler(
             log.exception("%s not registered: bad [device] config", ROTATION_JOB)
         else:
             rotation = DeviceRotation(settings, open_conn, adapter)
+            scheduler.rotation = rotation
             tick = guarded(ROTATION_JOB, rotation.tick, stats, quiet=SEND_ERRORS)
 
             def run_rotation() -> None:

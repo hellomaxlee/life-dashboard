@@ -42,7 +42,15 @@ def test_every_clip_fits_the_device_frame_limit(combo, settings):
 
     view, now = load(combo, settings)
     clips = rotation_clips(view, now) + [(c.name, c.clip) for c in celebrations_for(view)]
-    assert [name for name, _ in clips] == ["today", "week", "month", "books", "sparkle", "party"]
+    assert [name for name, _ in clips] == [
+        "today",
+        "city",
+        "week",
+        "month",
+        "books",
+        "sparkle",
+        "party",
+    ]
     assert MAX_CLIP_FRAMES == 59
     for name, clip in clips:
         assert len(clip.frames) <= MAX_CLIP_FRAMES, f"{name}: {len(clip.frames)} frames"
@@ -311,6 +319,7 @@ def test_renderers_import_no_ingest_db_or_network_code():
     code = (
         "import sys\n"
         "import app.render.screens, app.render.usage, app.render.celebrate, app.render.month\n"
+        "import app.render.city\n"
         "import app.render.rotation, app.render.view, app.render.gamma, app.render.font\n"
         "banned = ('app.ingest', 'app.db', 'app.main', 'app.web', 'sqlite3', 'fastapi', 'httpx')\n"
         "print(sorted(m for m in sys.modules if m.startswith(banned)))\n"
@@ -349,18 +358,20 @@ def test_usage_track_has_ticks_at_60_and_85(settings):
 
 
 def test_rotation_clips_is_the_ordered_device_ready_rotation(settings):
+    from app.render.city import render_city
     from app.render.frame import MAX_CLIP_FRAMES
     from app.render.month import render_month
     from app.render.rotation import rotation_clips
 
     view, now = load(WEEK_41, settings)
     clips = rotation_clips(view, now)
-    assert [name for name, _ in clips] == ["today", "week", "month", "books"]
+    assert [name for name, _ in clips] == ["today", "city", "week", "month", "books"]
     assert all(isinstance(clip, Clip) for _, clip in clips)
     assert clips[0][1].poster.tobytes() == render_today(view).poster.tobytes()
-    assert clips[1][1].poster.tobytes() == render_week(view, now).poster.tobytes()
-    assert clips[2][1].poster.tobytes() == render_month(view, now).poster.tobytes()
-    assert clips[3][1].poster.tobytes() == render_books(view).poster.tobytes()
+    assert clips[1][1].poster.tobytes() == render_city(view, now).poster.tobytes()
+    assert clips[2][1].poster.tobytes() == render_week(view, now).poster.tobytes()
+    assert clips[3][1].poster.tobytes() == render_month(view, now).poster.tobytes()
+    assert clips[4][1].poster.tobytes() == render_books(view).poster.tobytes()
     empty = rotation_clips(DayView(day_local="2026-10-02"), now)
-    assert [name for name, _ in empty] == ["today", "week", "month", "books"]
+    assert [name for name, _ in empty] == ["today", "city", "week", "month", "books"]
     assert all(clip.poster.getbbox() and len(clip.frames) <= MAX_CLIP_FRAMES for _, clip in empty)

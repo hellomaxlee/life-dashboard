@@ -1,0 +1,339 @@
+{
+ "header": {
+  "gtfs_realtime_version": "2.0",
+  "incrementality": "FULL_DATASET",
+  "timestamp": 1791169200,
+  "transit_realtime.mercury_feed_header": {
+   "mercury_version": "1.0"
+  }
+ },
+ "entity": [
+  {
+   "id": "synthetic:1",
+   "alert": {
+    "active_period": [
+     {
+      "start": 1791168000
+     }
+    ],
+    "informed_entity": [
+     {
+      "agency_id": "MTASBWY",
+      "route_id": "N",
+      "transit_realtime.mercury_entity_selector": {
+       "sort_order": "MTASBWY:N:20"
+      }
+     }
+    ],
+    "header_text": {
+     "translation": [
+      {
+       "text": "[N] trains are running with delays in both directions after we removed a train with a mechanical problem at Queensboro Plaza.",
+       "language": "en"
+      },
+      {
+       "text": "<p>[N] trains are running with delays in both directions after we removed a train with a mechanical problem at Queensboro Plaza.</p>",
+       "language": "en-html"
+      }
+     ]
+    },
+    "description_text": {
+     "translation": [
+      {
+       "text": "SYNTHETIC fixture alert; not a real MTA message.",
+       "language": "en"
+      }
+     ]
+    },
+    "transit_realtime.mercury_alert": {
+     "created_at": 1791168600,
+     "updated_at": 1791168600,
+     "alert_type": "Delays",
+     "display_before_active": 0
+    }
+   }
+  },
+  {
+   "id": "synthetic:2",
+   "alert": {
+    "active_period": [
+     {
+      "start": 1791018000,
+      "end": 1791190800
+     }
+    ],
+    "informed_entity": [
+     {
+      "agency_id": "MTASBWY",
+      "route_id": "N",
+      "transit_realtime.mercury_entity_selector": {
+       "sort_order": "MTASBWY:N:20"
+      }
+     },
+     {
+      "agency_id": "MTASBWY",
+      "route_id": "W",
+      "transit_realtime.mercury_entity_selector": {
+       "sort_order": "MTASBWY:W:20"
+      }
+     }
+    ],
+    "header_text": {
+     "translation": [
+      {
+       "text": "In Queens, Manhattan-bound [N][W] skip 39 Av, 36 Av, Broadway and 30 Av",
+       "language": "en"
+      },
+      {
+       "text": "<p>In Queens, Manhattan-bound [N][W] skip 39 Av, 36 Av, Broadway and 30 Av</p>",
+       "language": "en-html"
+      }
+     ]
+    },
+    "description_text": {
+     "translation": [
+      {
+       "text": "SYNTHETIC fixture alert; not a real MTA message.",
+       "language": "en"
+      }
+     ]
+    },
+    "transit_realtime.mercury_alert": {
+     "created_at": 1789912800,
+     "updated_at": 1789912800,
+     "alert_type": "Planned - Stops Skipped",
+     "display_before_active": 0
+    }
+   }
+  },
+  {
+   "id": "synthetic:3",
+   "alert": {
+    "active_period": [
+     {
+      "start": 1790998200,
+      "end": 1791190800
+     }
+    ],
+    "informed_entity": [
+     {
+      "agency_id": "MTASBWY",
+      "route_id": "W",
+      "transit_realtime.mercury_entity_selector": {
+       "sort_order": "MTASBWY:W:20"
+      }
+     }
+    ],
+    "header_text": {
+     "translation": [
+      {
+       "text": "No [W] service — take the [N] or [R] instead",
+       "language": "en"
+      },
+      {
+       "text": "<p>No [W] service — take the [N] or [R] instead</p>",
+       "language": "en-html"
+      }
+     ]
+    },
+    "description_text": {
+     "translation": [
+      {
+       "text": "SYNTHETIC fixture alert; not a real MTA message.",
+       "language": "en"
+      }
+     ]
+    },
+    "transit_realtime.mercury_alert": {
+     "created_at": 1789995600,
+     "updated_at": 1789995600,
+     "alert_type": "Planned - Suspended",
+     "display_before_active": 0
+    }
+   }
+  },
+  {
+   "id": "synthetic:4",
+   "alert": {
+    "active_period": [
+     {
+      "start": 1791258300,
+      "end": 1791277200
+     }
+    ],
+    "informed_entity": [
+     {
+      "agency_id": "MTASBWY",
+      "route_id": "M",
+      "transit_realtime.mercury_entity_selector": {
+       "sort_order": "MTASBWY:M:20"
+      }
+     }
+    ],
+    "header_text": {
+     "translation": [
+      {
+       "text": "[M] runs via the [F] line between 47-50 Sts and Queens Plaza",
+       "language": "en"
+      },
+      {
+       "text": "<p>[M] runs via the [F] line between 47-50 Sts and Queens Plaza</p>",
+       "language": "en-html"
+      }
+     ]
+    },
+    "description_text": {
+     "translation": [
+      {
+       "text": "SYNTHETIC fixture alert; not a real MTA message.",
+       "language": "en"
+      }
+     ]
+    },
+    "transit_realtime.mercury_alert": {
+     "created_at": 1790082000,
+     "updated_at": 1790082000,
+     "alert_type": "Planned - Reroute",
+     "display_before_active": 0
+    }
+   }
+  },
+  {
+   "id": "synthetic:5",
+   "alert": {
+    "active_period": [
+     {
+      "start": 1791158400,
+      "end": 1791190800
+     }
+    ],
+    "informed_entity": [
+     {
+      "agency_id": "MTASBWY",
+      "route_id": "F",
+      "transit_realtime.mercury_entity_selector": {
+       "sort_order": "MTASBWY:F:20"
+      }
+     }
+    ],
+    "header_text": {
+     "translation": [
+      {
+       "text": "Free shuttle buses replace [F] trains between 21 St-Queensbridge and Roosevelt Island",
+       "language": "en"
+      },
+      {
+       "text": "<p>Free shuttle buses replace [F] trains between 21 St-Queensbridge and Roosevelt Island</p>",
+       "language": "en-html"
+      }
+     ]
+    },
+    "description_text": {
+     "translation": [
+      {
+       "text": "SYNTHETIC fixture alert; not a real MTA message.",
+       "language": "en"
+      }
+     ]
+    },
+    "transit_realtime.mercury_alert": {
+     "created_at": 1790859600,
+     "updated_at": 1790859600,
+     "alert_type": "Shuttle Buses Replace Trains",
+     "display_before_active": 0
+    }
+   }
+  },
+  {
+   "id": "synthetic:6",
+   "alert": {
+    "active_period": [
+     {
+      "start": 1790827200
+     }
+    ],
+    "informed_entity": [
+     {
+      "agency_id": "MTASBWY",
+      "route_id": "F",
+      "transit_realtime.mercury_entity_selector": {
+       "sort_order": "MTASBWY:F:20"
+      }
+     }
+    ],
+    "header_text": {
+     "translation": [
+      {
+       "text": "The elevator at 21 St-Queensbridge [F] is out of service",
+       "language": "en"
+      },
+      {
+       "text": "<p>The elevator at 21 St-Queensbridge [F] is out of service</p>",
+       "language": "en-html"
+      }
+     ]
+    },
+    "description_text": {
+     "translation": [
+      {
+       "text": "SYNTHETIC fixture alert; not a real MTA message.",
+       "language": "en"
+      }
+     ]
+    },
+    "transit_realtime.mercury_alert": {
+     "created_at": 1791169140,
+     "updated_at": 1791169140,
+     "alert_type": "Station Notice",
+     "display_before_active": 0
+    }
+   }
+  },
+  {
+   "id": "synthetic:7",
+   "alert": {
+    "active_period": [
+     {
+      "start": 1791000000,
+      "end": 1791162000
+     }
+    ],
+    "informed_entity": [
+     {
+      "agency_id": "MTASBWY",
+      "route_id": "M",
+      "transit_realtime.mercury_entity_selector": {
+       "sort_order": "MTASBWY:M:20"
+      }
+     }
+    ],
+    "header_text": {
+     "translation": [
+      {
+       "text": "No [M] service between Essex St and Forest Hills-71 Av",
+       "language": "en"
+      },
+      {
+       "text": "<p>No [M] service between Essex St and Forest Hills-71 Av</p>",
+       "language": "en-html"
+      }
+     ]
+    },
+    "description_text": {
+     "translation": [
+      {
+       "text": "SYNTHETIC fixture alert; not a real MTA message.",
+       "language": "en"
+      }
+     ]
+    },
+    "transit_realtime.mercury_alert": {
+     "created_at": 1790341200,
+     "updated_at": 1790341200,
+     "alert_type": "Planned - Suspended",
+     "display_before_active": 0
+    }
+   }
+  }
+ ]
+}

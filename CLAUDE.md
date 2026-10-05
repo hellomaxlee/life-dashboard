@@ -36,9 +36,9 @@ ruff is the authority (format + lint). Type hints on every public function. No c
 
 ## Invariants
 Rules that survive any refactor. Break one and the dashboard is wrong even if the tests pass.
-- **Health data stays home.** Raw samples never leave the LAN. Outbound calls are the Goodreads pull and the summary call, which sends daily aggregates only, never raw samples or sub-day timestamps. An egress test enforces the allowlist.
+- **Health data stays home.** Raw samples never leave the LAN. Outbound calls are the Goodreads pull; the summary call, which sends daily aggregates only, never raw samples or sub-day timestamps; the monthly feature call, which sends no personal data at all; and the city panel's public feeds (MTA service alerts, Open-Meteo, National Weather Service), which receive nothing but coordinates rounded to two decimals. The street address is in no file and no request. An egress test enforces the allowlist.
 - **One canonical activity.** A workout reported by more than one HealthKit source (Watch, a phone app) merges into one record with every provenance kept; no metric counts it twice.
-- **Raw before parsed.** Every inbound payload is archived verbatim in `data/raw/` before parsing, so any metric can be recomputed from scratch.
+- **Raw before parsed.** Every inbound payload is archived verbatim in `data/raw/` before parsing, so any metric can be recomputed from scratch. The city panel's transit and weather feeds are display-only, feed no metric, and are stored as the latest parsed snapshot only.
 - **Day and week boundaries are America/New_York local.** Weeks run Monday to Sunday. A sleep session belongs to the day you wake.
 - **Progress is weekly.** A quality workout is any type whose effort load (minutes in each HR zone, weighted 1 to 5, zones as percent of max HR 189) meets the load bar calibrated to a 4-mile run. No HR samples, no credit. Three per week is the target; the streak counts weeks that hit it. Any day without one is rest, and rest never breaks anything. See `notes.txt § Goal model`.
 - **Every displayed number traces to a metrics row.** The model never computes or invents a figure; a grounding gate rejects any summary whose numbers are not in its payload.
@@ -78,8 +78,8 @@ Every render or summary test cycle uses a NEW fixture combination across: day ty
 - **source-replay** — replay archived raw payloads through ingest and diff the metrics table; the idempotency and dedupe proof.
 
 ## Structure
-- `app/` — FastAPI service: `ingest/`, `metrics/`, `render/`, `summary/`, `web/`, `main.py`
-- `tools/` — CLIs per workflow (`render`, `replay`, `sync`, `backup`); `workflows/` — one markdown spec per tool
+- `app/` — FastAPI service: `ingest/`, `metrics/`, `render/`, `summary/`, `month/` (monthly feature), `city/` (transit and weather), `jobs/`, `web/`, `main.py`
+- `tools/` — CLIs per workflow (`render`, `replay`, `sync`, `backup`, `summary`, `month`, `city`, `pixoo_check`); `workflows/` — one markdown spec per tool
 - `fixtures/` — sanitized raw payloads and golden metric cases; `tests/` — pytest
 - `data/` — SQLite db, `raw/` archive, backups (git-ignored)
 - `agents/` — `[Role] First Last.md`; `agents/_old/` fired/demoted; `agents/performance/` reviews

@@ -12,7 +12,7 @@ DAYS = Path(__file__).resolve().parent.parent.parent / "fixtures" / "days"
 SNAPSHOTS = Path(__file__).resolve().parent / "snapshots"
 MONTHS = DAYS.parent / "month"
 SAMPLE_FEATURE = "sample-2026-10"
-ORDER = ["today", "week", "month", "books"]
+ORDER = ["today", "city", "week", "month", "books"]
 
 WEEK_41 = "train__all-sources__alive__base"
 NO_READING = "rest__sleep-missing__broken-last-week__base"
@@ -33,7 +33,7 @@ def rotation(view: DayView, now: datetime) -> dict[str, Clip]:
 
 def record_text(monkeypatch) -> list[tuple[str, int, int, str, int]]:
     """Record every string a renderer draws as (text, x, y, font name, scale), still drawing it."""
-    from app.render import celebrate, font, month, screens, usage
+    from app.render import celebrate, city, font, month, screens, usage
 
     drawn: list[tuple[str, int, int, str, int]] = []
     original = font.draw_text
@@ -42,6 +42,6 @@ def record_text(monkeypatch) -> list[tuple[str, int, int, str, int]]:
         drawn.append((text, x, y, font_.name, scale))
         return original(frame, x, y, text, color, font_, scale)
 
-    for module in (font, screens, usage, celebrate, month):
+    for module in (font, screens, usage, celebrate, month, city):
         monkeypatch.setattr(module, "draw_text", recording)
     return drawn

@@ -1,5 +1,5 @@
-"""GET /preview: every screen (Today, Week, Month, Books) and both celebrations, at 1x and 8x,
-raw and through LED gamma.
+"""GET /preview: every screen (Today, City, Week, Month, Books) and both celebrations, at 1x
+and 8x, raw and through LED gamma. A paged screen (City, Books, Month) is a GIF of its pages.
 
 /preview?date=YYYY-MM-DD reads the database for that home-timezone day (default: today).
 /preview?fixture=<combo> shows a fixtures/days file by its name, with the fixture's own "now".

@@ -3,9 +3,10 @@
 python -m tools.render --fixture fixtures/days/<combo>.json --out data/preview/<combo>
 python -m tools.render --date YYYY-MM-DD --scale 8
 
-One folder per screen under --out (today, week, month, books, sparkle, party), each holding
+One folder per screen under --out (today, city, week, month, books, sparkle, party), each holding
 frame_1x.png, frame_<scale>x.png, frame_gamma_1x.png, frame_gamma_<scale>x.png and, for an
-animated clip, clip_1x.gif, clip_<scale>x.gif, clip_gamma_1x.gif, clip_gamma_<scale>x.gif.
+animated clip, clip_1x.gif, clip_<scale>x.gif, clip_gamma_1x.gif, clip_gamma_<scale>x.gif; a
+paged screen (city, month, books) also gets page_<n>_1x.png and page_<n>_gamma_1x.png.
 A celebration the day's data did not earn is printed as "(sample)".
 See workflows/render.md.
 """
@@ -23,7 +24,7 @@ from app.render.adapters.file import gif_bytes, png_bytes
 from app.render.celebrate import celebrations_for
 from app.render.frame import Clip
 from app.render.gamma import led_gamma
-from app.render.rotation import rotation_clips
+from app.render.rotation import device_parts, rotation_clips
 from app.render.view import DayView, load_fixture
 from app.render.view_db import view_from_db
 from app.timeutil import from_utc_iso, now_utc
@@ -46,6 +47,10 @@ def write_clip(clip: Clip, directory: Path, scale: int) -> list[Path]:
         "frame_gamma_1x.png": png_bytes(led_gamma(clip.poster)),
         f"frame_gamma_{scale}x.png": png_bytes(led_gamma(clip.poster), scale),
     }
+    if clip.animated and len(device_parts(clip)) > 1:
+        for number, page in enumerate(clip.frames, start=1):
+            files[f"page_{number}_1x.png"] = png_bytes(page)
+            files[f"page_{number}_gamma_1x.png"] = png_bytes(led_gamma(page))
     if clip.animated:
         files["clip_1x.gif"] = gif_bytes(clip)
         files[f"clip_{scale}x.gif"] = gif_bytes(clip, scale)

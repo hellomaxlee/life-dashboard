@@ -62,7 +62,7 @@ def test_rotation_json_lists_the_sequence_with_valid_frames(client, settings):
     clips = {name: clip for name, clip, _ in sequence}
     holds = {name: hold for name, _, hold in sequence}
     names = [s["name"] for s in body["screens"]]
-    assert names == ["today", "week", "month", "books", "win-workout", "win-sleep"]
+    assert names == ["today", "city", "week", "month", "books", "win-workout", "win-sleep"]
     assert body["dwell_ms"] == settings.device.screen_seconds * 1000 == 6000
     assert body["source"] == {"fixture": WEEK_41}
     assert body["day_local"] == view.day_local and body["as_of_local"] == "2026-09-30 18:10 EDT"
@@ -99,7 +99,7 @@ def test_rotation_json_lists_the_sequence_with_valid_frames(client, settings):
     assert complete["celebrations"][1]["earned"]
     done, done_now = load(WEEK_COMPLETE, settings)
     assert [s["name"] for s in complete["screens"]] == list(sequence_names(done))
-    assert [s["name"] for s in complete["screens"]][3:] == [
+    assert [s["name"] for s in complete["screens"]][4:] == [
         "books",
         "win-workout",
         "win-sleep",
@@ -230,3 +230,20 @@ def test_brightness_and_gamma_are_client_side(client):
     assert (
         client.get(f"/pixoo/frame/today/0.png?fixture={WEEK_41}&gamma=0").content == plain.content
     )
+
+
+def test_city_pages_are_served_frame_by_frame_and_named_on_the_page(client, settings):
+    view, now = load(WEEK_41, settings)
+    city = render_screen("city", view, now)
+    assert len(city.frames) == 4
+    for index, frame in enumerate(city.frames):
+        image = _png(client.get(f"/pixoo/frame/city/{index}.png?fixture={WEEK_41}"))
+        assert ImageChops.difference(image, frame).getbbox() is None
+    assert client.get(f"/pixoo/frame/city/4.png?fixture={WEEK_41}").status_code == 404
+    body = client.get(f"/pixoo/rotation.json?fixture={WEEK_41}").json()
+    screen = body["screens"][1]
+    assert screen["name"] == "city" and screen["hold_ms"] == screen["total_ms"] == 22000
+    assert [f["ms"] for f in screen["frames"]] == [6000, 6000, 5000, 5000]
+    page = client.get(f"/pixoo?fixture={WEEK_41}").text
+    assert "Today, City, Week, Month, Books" in page
+    assert "screen=([a-z-]+)" in page, "#screen=city starts there: any rotation name matches"

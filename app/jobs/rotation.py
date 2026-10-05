@@ -1,9 +1,9 @@
 """The scheduled display rotation: a tick sends the next screen once the last one's hold is up.
 
-Today, Week, Month, Books, one sparkle per small win the day earned, then the week-complete
-party once the week's target is met, wrapping (the sequence and its holds are
-`app.render.rotation`; a restart begins at Today). A paged screen (Books, Month with a note)
-goes page by page as stills. The scheduler runs one tick, then moves the next run to
+Today, City, Week, Month, Books, one sparkle per small win the day earned, then the
+week-complete party once the week's target is met, wrapping (the sequence and its holds are
+`app.render.rotation`; a restart begins at Today). A paged screen (City, Books, Month with a
+note) goes page by page as stills. The scheduler runs one tick, then moves the next run to
 `due()`: the moment the screen just sent has had its hold, so no tick overlaps a slow send.
 A tick renders only its own screen from a fresh connection, so a renderer or a device that
 fails costs that one slot: the slot is spent before any work, the error goes to the
@@ -14,7 +14,10 @@ on a failed tick, so the device keeps whatever it showed last.
 from __future__ import annotations
 
 import sqlite3
+import time
+from collections import deque
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Protocol
 from zoneinfo import ZoneInfo
@@ -24,7 +27,7 @@ from app.render.adapters.pixoo import FRAME_BUDGET_S, PixooAdapter, PixooError
 from app.render.frame import Clip
 from app.render.rotation import device_parts, hold_ms, render_screen, sequence_names
 from app.render.view_db import view_from_db
-from app.timeutil import local_day
+from app.timeutil import local_day, to_utc_iso
 
 ROTATION_JOB = "device_rotation"
 MIN_SCREEN_SECONDS = 3
@@ -32,6 +35,7 @@ DEVICE_TIMEOUT_S = 5.0
 ROTATION_FALLBACK_S = 300
 ROTATION_MISFIRE_GRACE_S = 24 * 3600
 HOLDING = "holding"
+SEND_LOG_SIZE = 80
 SEND_ERRORS = (PixooError,)
 
 
@@ -51,6 +55,21 @@ def brightness_at(now: datetime, settings: Settings) -> int:
     return device.night_brightness if night else device.brightness
 
 
+@dataclass(frozen=True)
+class SendRecord:
+    """One send to the panel, kept for the status page: when it started, what it was, how
+    long the panel took to accept it, how long it is then held, and the error if it failed."""
+
+    at_utc: str
+    name: str
+    page: int
+    pages: int
+    frames: int
+    seconds: float
+    hold_ms: int
+    error: str | None = None
+
+
 class DeviceRotation:
     def __init__(
         self,
@@ -68,6 +87,22 @@ class DeviceRotation:
         self._brightness: int | None = None
         self._pages: list[Clip] = []
         self._page_of = ""
+        self._page_count = 1
+        self.sends: deque[SendRecord] = deque(maxlen=SEND_LOG_SIZE)
+
+    def _send(self, clip: Clip, name: str, page: int, pages: int, hold: int) -> None:
+        at, started = to_utc_iso(self._clock()), time.monotonic()
+        error = None
+        try:
+            self._adapter.send(clip)
+        except Exception as exc:
+            error = f"{type(exc).__name__}: {exc}"
+            raise
+        finally:
+            took = round(time.monotonic() - started, 2)
+            self.sends.append(
+                SendRecord(at, name, page, pages, len(clip.frames), took, hold, error)
+            )
 
     def tick(self) -> str:
         """Send the next screen and return its name, or HOLDING while the last one's hold runs."""
@@ -78,8 +113,9 @@ class DeviceRotation:
         self._hold_until = now + timedelta(seconds=dwell)
         if self._pages:
             page = self._pages.pop(0)
+            number = self._page_count - len(self._pages)
             try:
-                self._adapter.send(page)
+                self._send(page, self._page_of, number, self._page_count, page.total_ms)
             except Exception:
                 self._pages = []
                 raise
@@ -102,12 +138,10 @@ class DeviceRotation:
             self._adapter.set_brightness(level)
             self._brightness = level
         first, *rest = device_parts(clip)
-        self._adapter.send(first)
-        if rest:
-            self._pages, self._page_of = rest, name
-            self._hold_until = self._clock() + timedelta(milliseconds=first.total_ms)
-        else:
-            self._hold_until = self._clock() + timedelta(milliseconds=hold_ms(name, clip, dwell))
+        hold = first.total_ms if rest else hold_ms(name, clip, dwell)
+        self._send(first, name, 1, 1 + len(rest), hold)
+        self._pages, self._page_of, self._page_count = rest, name, 1 + len(rest)
+        self._hold_until = self._clock() + timedelta(milliseconds=hold)
         return name
 
     def due(self) -> datetime:

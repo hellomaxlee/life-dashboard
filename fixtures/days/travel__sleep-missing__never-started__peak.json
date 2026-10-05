@@ -1,0 +1,19 @@
+{
+  "combo": "travel / sleep missing / never started / peak",
+  "day_local": "2027-02-06",
+  "now_utc": "2027-02-07T03:40:00Z",
+  "as_of_utc": "2027-02-06T23:55:00Z",
+  "city": "storm",
+  "daily_metrics": {
+    "quality_workout": false,
+    "workout_count": 0,
+    "workout_load": null,
+    "steps": 14210,
+    "books_ytd": 1,
+    "summary_device_line": "A long travel day on foot and no sleep record. Arriving is enough for today."
+  },
+  "weekly_metrics": {
+    "quality_workouts": 0,
+    "weeks_hit_streak": 0
+  }
+}

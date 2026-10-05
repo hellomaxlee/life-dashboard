@@ -4,7 +4,7 @@ Owner: Diego Almeida. QA: Lucía Ferrer. Tool: `tools/render.py`. Skill: `/frame
 
 ## What it does
 
-Renders the four rotation screens (Today, Week, Month, Books + summary) and the two celebration
+Renders the five rotation screens (Today, City, Week, Month, Books + summary) and the two celebration
 clips (sparkle, party) to files, raw and through the LED gamma emulator, at 1x and enlarged.
 Nothing is sent to a device and nothing leaves the machine.
 
@@ -27,7 +27,7 @@ enlarged files; the 1x files are always written.
 One folder per screen, in rotation order, then the celebrations:
 
 ```
-<out>/today/    <out>/week/    <out>/month/    <out>/books/    <out>/sparkle/    <out>/party/
+<out>/today/    <out>/city/    <out>/week/    <out>/month/    <out>/books/    <out>/sparkle/    <out>/party/
 ```
 
 Each folder holds:
@@ -39,10 +39,12 @@ Each folder holds:
 | `frame_gamma_1x.png` | through the LED gamma emulator at native size: **the one to judge** |
 | `frame_gamma_8x.png` | emulator output enlarged |
 | `clip_1x.gif`, `clip_8x.gif`, `clip_gamma_1x.gif`, `clip_gamma_8x.gif` | only when the clip has more than one frame, with each frame's own duration |
+| `page_<n>_1x.png`, `page_<n>_gamma_1x.png` | only for a paged screen (City, Month with a note, Books): every page as its own still, so each can be judged at 1x |
 
 Which screens animate: Books when the summary needs more than one page (two word-wrapped
 lines per page, 2 s each; a 110-character line is about seven pages); Week only when the
-Claude reading is stale (pulsing dot, label alternating with its age); Today never; Month is
+Claude reading is stale (pulsing dot, label alternating with its age); Today never; City is always paged (weather 6 s, lines 6 s, then 5 s for each of up to three
+affected lines) unless there is no city status, which is one still; Month is
 two pages (the plate 6 s, the note 5 s) only when the day's plate has a note; both
 celebrations always. No clip may exceed 59 frames, the most one device animation is assumed
 to hold; a test holds every fixture to it and the Pixoo adapter refuses a longer clip.
@@ -95,6 +97,33 @@ to come grey. No metric is read.
 The month is always the requested day's. When Today falls back to yesterday on the first of a
 month, the Month screen still shows the new month.
 
+## The City screen
+
+`app/render/city.py`, drawn from the view's `city` (`app/city/model.py`; `view_db` reads it with
+`app.city.store.load_status` for the requested day). Pages:
+
+- **weather**: condition icon, the current temperature large, `H`/`L`, one notice line (the
+  first NWS alert in amber, wrapped to a second line in place of the step temperatures when it
+  is long; otherwise the condition in words), and six 3-hour steps: temperature, a small
+  icon, a rain gauge and the hour. Steps past midnight are in the as-of colour behind a dotted
+  rule. Temperatures are rounded half up; a gauge is `floor(percent * 10 / 100)` of 10 px.
+- **lines**: one row per line: a badge in the MTA colour (disc for a subway, blue pill for a
+  bus), the name in white beside it, and the status as a word in a colour: `OK` green, `WORK`
+  amber (a clock mark when it starts later today), `DELAYS` red, `NO SVC` red. Seven lines
+  use the body face for the name; eight use a tighter row in the small face; more than eight
+  end in `+N MORE`.
+- **detail**, at most three: one per line that is not ok, most severe first, then in effect
+  now before later: that line's row as the header and the alert's headline wrapped under it
+  (body face, then small face, then cut with `...`). More affected lines than pages: the last
+  page ends `+N MORE`.
+
+All ok with no alert is two pages. A part never fetched says `WEATHER NO DATA` or `TRANSIT NO
+DATA` on its page. A part older than `[city] stale_minutes` (45) replaces its page's header
+with an amber `AS OF 14:05` (weekday and clock for earlier days, whole days past six; `AGE
+UNKNOWN` when the time cannot be read), and detail pages carry it on their last line. No city
+status at all is one still: `CITY`, the weekday and date, `NO DATA`. Every city page keeps its
+header on row 2 in the small face.
+
 ## Fixtures
 
 `fixtures/days/<day type>__<completeness>__<streak state>__<season>.json`. `daily_metrics` and
@@ -104,7 +133,11 @@ the reader (two audit fixtures use it to say their summary lines are display dat
 summary-gate goldens). An optional `month_feature` names a file under `fixtures/month/`
 (`sample-2026-10`, a hand-made moon over water); the loader re-dates that sample to the
 fixture's own month, cutting its days to the month's length, so one sample serves any fixture
-day. A fixture without the key renders the calendar. A key left out is a missing
+day. A fixture without the key renders the calendar. An optional `city` names a file under
+`fixtures/city_view/` (`busy`, `all-ok`, `storm`, `stale`, `weather-only`: hand-written
+display samples, not the raw payloads under `fixtures/city/`); the loader dates it to the
+fixture's day and counts its `*_minutes_ago` back from the fixture's `now_utc`. A fixture
+without the key renders `CITY NO DATA`. A key left out is a missing
 value and must render as a stated fallback. Use a new cell each cycle (CLAUDE.md § Iteration Rule).
 Every file in the folder is rendered and snapshot-tested, so a new fixture needs its goldens:
 render it, look at it (next section), then run the `UPDATE_SNAPSHOTS=1` command and commit them.
@@ -127,12 +160,12 @@ Until then `tests/render/test_snapshots.py` fails for that fixture by design; no
 
 `GET /pixoo` is the display as a Pixoo-64 on a desk: a dark bezel, a 64x64 matrix drawn as
 round LEDs with black gaps and a soft glow, and the rotation running live the way the device
-job runs it: Today → Week → Month → Books → one sparkle per small win the day earned
+job runs it: Today → City → Week → Month → Books → one sparkle per small win the day earned
 (workout, sleep, book) → the week-complete party once the week's target is met, repeating
-(day, week, month, year, then the wins). `app.render.rotation.sequence_names` is the one
+(day, the day's city, week, month, year, then the wins). `app.render.rotation.sequence_names` is the one
 definition; a restart begins at Today. A still holds for `device.screen_seconds` (6 s). Anything animated holds
 for whole plays and is never replaced part way: Books until its summary has paged through
-exactly once (2 s a page), Month's plate 6 s then its note 5 s, each sparkle three plays
+exactly once (2 s a page), City's pages once each (6 s, 6 s, then 5 s a detail page), Month's plate 6 s then its note 5 s, each sparkle three plays
 (4.2 s), the party one play (3.4 s). On the device a paged screen goes as one still per page. The workout sparkle reads "WORKOUT DONE / SMALL WIN", and once the week's target is met
 it stays in the sequence every day through Sunday, and so does the party. `/preview` stays the engineering view; the
 three pages link each other on their first line.
@@ -151,7 +184,7 @@ gamma are client-side: the server ships `led_lut(brightness=b)` for every step a
 `led_gamma(frame, brightness=b)` does, and changing either redraws from cached pixels without
 another request. The strip under the device shows both celebrations with earned or sample
 marked; a button plays either on the panel. The page starts at Today, as the device does.
-`#screen=month` (or `today`, `week`, `books`, `win-sleep`, `party`) in the URL starts the
+`#screen=month` (or `today`, `city`, `week`, `books`, `win-sleep`, `party`) in the URL starts the
 rotation on that screen so a screenshot can target one; a celebration the day did not earn
 is played once as a sample instead. `#paused` holds it.
 

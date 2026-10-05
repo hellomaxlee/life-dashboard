@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
@@ -121,6 +122,23 @@ class MetricsConfig:
 
 
 @dataclass(frozen=True)
+class CityConfig:
+    """The city panel (app/city/): which lines to watch and where the weather is for.
+    `latitude` and `longitude` are a neighbourhood, rounded to two decimals; never an address."""
+
+    enabled: bool = False
+    latitude: float = 40.77
+    longitude: float = -73.94
+    subway: tuple[str, ...] = ()
+    subway_weekday: tuple[str, ...] = ()
+    subway_weekend: tuple[str, ...] = ()
+    bus: tuple[str, ...] = ()
+    transit_poll_minutes: int = 5
+    weather_poll_minutes: int = 30
+    stale_minutes: int = 45
+
+
+@dataclass(frozen=True)
 class Settings:
     home_tz: str
     hr_max: int
@@ -143,6 +161,7 @@ class Settings:
     device: DeviceConfig = DeviceConfig()
     anthropic_api_key: str = ""
     metrics: MetricsConfig = MetricsConfig()
+    city: CityConfig = CityConfig()
 
 
 def _resolve(path_str: str) -> Path:
@@ -271,12 +290,63 @@ def _metrics(raw: dict) -> MetricsConfig:
     )
 
 
+_LINE_NAME = re.compile(r"^[A-Z0-9]{1,5}\+?$")
+
+
+def _lines(key: str, value: object) -> tuple[str, ...]:
+    names = tuple(value) if isinstance(value, list) else None
+    ok = names is not None and all(isinstance(n, str) and _LINE_NAME.match(n) for n in names)
+    if not ok or len(set(names)) != len(names):
+        raise _fail(key, value, 'a list of distinct line names such as ["N", "Q69"]')
+    return names
+
+
+def _coordinate(key: str, value: object, limit: float) -> float:
+    number = _number(key, value, -limit, limit)
+    if round(number, 2) != number:
+        raise _fail(key, value, "rounded to two decimals (a neighbourhood, not an address)")
+    return number
+
+
+def _city(raw: dict) -> CityConfig:
+    section = raw.get("city", {})
+    defaults = CityConfig()
+
+    def lines(name: str) -> tuple[str, ...]:
+        return _lines(f"city.{name}", section.get(name, []))
+
+    def minutes(name: str, top: int) -> int:
+        value = _whole(f"city.{name}", section.get(name, getattr(defaults, name)), 1)
+        if value > top:
+            raise _fail(f"city.{name}", value, f"a whole number from 1 to {top}")
+        return value
+
+    subway, weekday, weekend = lines("subway"), lines("subway_weekday"), lines("subway_weekend")
+    for name, group in (("subway_weekday", weekday), ("subway_weekend", weekend)):
+        if set(group) & set(subway):
+            raise _fail(f"city.{name}", list(group), "lines that are not also in city.subway")
+    return CityConfig(
+        enabled=_env_switch(
+            "LIFE_CITY_ENABLED", _flag("city.enabled", section.get("enabled", False))
+        ),
+        latitude=_coordinate("city.latitude", section.get("latitude", defaults.latitude), 90),
+        longitude=_coordinate("city.longitude", section.get("longitude", defaults.longitude), 180),
+        subway=subway,
+        subway_weekday=weekday,
+        subway_weekend=weekend,
+        bus=lines("bus"),
+        transit_poll_minutes=minutes("transit_poll_minutes", 60),
+        weather_poll_minutes=minutes("weather_poll_minutes", 180),
+        stale_minutes=minutes("stale_minutes", 24 * 60),
+    )
+
+
 def load_settings(config_path: Path | None = None) -> Settings:
     """Load config.toml into a frozen Settings.
 
     Environment overrides: LIFE_CONFIG_PATH (file), LIFE_DB_PATH, LIFE_RAW_DIR (storage),
-    LIFE_BACKUP_DIR, LIFE_PIXOO_HOST (empty = no device), LIFE_SCHEDULER_ENABLED (1/true/yes
-    or 0/false/no),
+    LIFE_BACKUP_DIR, LIFE_PIXOO_HOST (empty = no device), LIFE_SCHEDULER_ENABLED and
+    LIFE_CITY_ENABLED (1/true/yes or 0/false/no),
     HEALTH_EXPORT_TOKEN, GOODREADS_RSS_URL, ANTHROPIC_API_KEY (secrets, from .env or the env).
     """
     load_dotenv(REPO_ROOT / ".env")
@@ -375,4 +445,5 @@ def load_settings(config_path: Path | None = None) -> Settings:
         ),
         anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY", "").strip(),
         metrics=_metrics(raw),
+        city=_city(raw),
     )

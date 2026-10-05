@@ -481,3 +481,93 @@ def test_scheduler_env_switch_rejects_anything_else(monkeypatch):
     monkeypatch.setenv("LIFE_SCHEDULER_ENABLED", "maybe")
     with pytest.raises(ValueError, match="LIFE_SCHEDULER_ENABLED"):
         load_settings()
+
+
+def city_on(jobs_settings):
+    return replace(jobs_settings, city=replace(jobs_settings.city, enabled=True))
+
+
+def test_city_jobs_are_registered_only_when_the_panel_is_enabled(jobs_settings):
+    open_conn = lambda: open_db(jobs_settings.storage.db_path)  # noqa: E731
+    assert jobs_settings.city.enabled is False
+    off = jobs.build_scheduler(jobs_settings, open_conn)
+    assert {job.id for job in off.get_jobs()} == jobs.CORE_JOBS
+    assert not jobs.CITY_JOBS & jobs.CORE_JOBS
+
+    start = datetime(2026, 10, 5, 3, 0, tzinfo=UTC)
+    on = jobs.build_scheduler(city_on(jobs_settings), open_conn, now=start)
+    on.start(paused=True)
+    try:
+        by_id = {job.id: job for job in on.get_jobs()}
+        assert set(by_id) == jobs.CORE_JOBS | {"city_transit", "city_weather"}
+        transit, weather = by_id[jobs.CITY_TRANSIT_JOB], by_id[jobs.CITY_WEATHER_JOB]
+        assert transit.trigger.interval == timedelta(minutes=5)
+        assert weather.trigger.interval == timedelta(minutes=30)
+        assert (transit.misfire_grace_time, weather.misfire_grace_time) == (300, 1800)
+        assert transit.next_run_time == start + timedelta(seconds=20)
+        assert weather.next_run_time == start + timedelta(seconds=30)
+        assert all(job.max_instances == 1 and job.coalesce for job in (transit, weather))
+    finally:
+        on.shutdown(wait=False)
+
+
+def test_city_jobs_store_a_snapshot_and_log_a_dead_network_once(
+    db, jobs_settings, monkeypatch, caplog
+):
+    import httpx
+
+    from app.city import fetch as city_fetch
+    from app.city import store as city_store
+    from tests.city.test_fetch import Feeds
+
+    feeds = Feeds()
+    monkeypatch.setattr(city_fetch, "new_client", feeds.client)
+    monkeypatch.setattr(city_fetch, "now_utc", lambda: datetime(2026, 10, 5, 3, 0, tzinfo=UTC))
+    settings = city_on(jobs_settings)
+    scheduler = jobs.build_scheduler(settings, lambda: open_db(settings.storage.db_path))
+    transit = scheduler.get_job(jobs.CITY_TRANSIT_JOB).func
+    weather = scheduler.get_job(jobs.CITY_WEATHER_JOB).func
+
+    transit()
+    weather()
+    good = city_store.load_status(db, "2026-10-04")
+    assert len(good.lines) == 7 and good.weather.temp_f == 56.6
+    assert scheduler.job_stats[jobs.CITY_TRANSIT_JOB] == JobStats(runs=1)
+
+    feeds.broken["api-endpoint.mta.info"] = httpx.ConnectError("network is down")
+    feeds.broken["api.open-meteo.com"] = httpx.Response(200, json={"error": True})
+    caplog.clear()
+    for _ in range(3):
+        transit()
+        weather()
+    stats = scheduler.job_stats
+    assert (stats[jobs.CITY_TRANSIT_JOB].runs, stats[jobs.CITY_TRANSIT_JOB].failures) == (4, 3)
+    assert (stats[jobs.CITY_WEATHER_JOB].runs, stats[jobs.CITY_WEATHER_JOB].failures) == (4, 3)
+    assert [record.getMessage() for record in caplog.records] == [
+        "job city_transit failed: FetchError: api-endpoint.mta.info: ConnectError: "
+        "network is down (repeats are not logged)",
+        "job city_weather failed: ParseError: the forecast reply is not an Open-Meteo forecast "
+        "(no hourly block) (repeats are not logged)",
+    ]
+    assert all(record.exc_info is None for record in caplog.records), "no traceback"
+    assert city_store.load_status(db, "2026-10-04") == good, "the last good snapshot stays"
+
+    feeds.broken.clear()
+    transit()
+    assert stats[jobs.CITY_TRANSIT_JOB].last_error is None
+
+
+def test_a_city_job_bug_is_logged_with_its_traceback_and_never_raised(
+    jobs_settings, monkeypatch, caplog
+):
+    from app.city import fetch as city_fetch
+
+    def broken(conn, settings):
+        raise KeyError("a bug, not a network failure")
+
+    monkeypatch.setattr(city_fetch, "poll_transit", broken)
+    settings = city_on(jobs_settings)
+    scheduler = jobs.build_scheduler(settings, lambda: open_db(settings.storage.db_path))
+    scheduler.get_job(jobs.CITY_TRANSIT_JOB).func()
+    assert scheduler.job_stats[jobs.CITY_TRANSIT_JOB].failures == 1
+    assert "job city_transit failed" in caplog.text and "Traceback" in caplog.text

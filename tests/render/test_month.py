@@ -100,16 +100,16 @@ def test_title_and_caption_are_drawn_whole_inside_the_frame(monkeypatch):
     assert plate.caption == "FULL MOON"
     title = next(r for r in recorded if r[0] == "MOON OVER WATER")
     caption = next(r for r in recorded if r[0] == "FULL MOON")
-    assert (title[2], title[3]) == (1, SMALL.name) and (caption[2], caption[3]) == (58, SMALL.name)
+    assert (title[2], title[3]) == (2, SMALL.name) and (caption[2], caption[3]) == (58, SMALL.name)
     for text in ("MOON OVER WATER", "FULL MOON"):
         left, right = extent(recorded, text)
         assert 0 <= left and right <= SIZE - 1
         assert abs(left - (SIZE - 1 - right)) <= 1, "centred"
     first = clip.frames[0]
-    assert first.getpixel((title[1], 1)) == feature.palette[0], "the title in the first colour"
+    assert first.getpixel((title[1], 2)) == feature.palette[0], "the title in the first colour"
     caption_colours = {first.getpixel((x, y)) for x in range(SIZE) for y in range(58, 63)}
     assert caption_colours == {BLACK, feature.palette[1]}, "the caption in the second"
-    assert all(first.getpixel((x, y)) == BLACK for x in range(SIZE) for y in (0, 6, 7, 56, 57, 63))
+    assert all(first.getpixel((x, y)) == BLACK for x in range(SIZE) for y in (0, 1, 7, 56, 57, 63))
 
 
 @pytest.mark.parametrize("day", range(1, 32))
@@ -385,7 +385,7 @@ def test_no_stored_feature_or_a_broken_one_is_the_calendar_never_an_error(
     view = view_from_db(db, settings, "2026-10-02")
     assert view.month_feature is None and view.day_local == "2026-10-02"
     names = [name for name, _, _ in rotation_sequence(view, NOW, 6)]
-    assert names == ["today", "week", "month", "books"]
+    assert names == ["today", "city", "week", "month", "books"]
 
     wrong_month = DayView(day_local="2026-10-02", month_feature=sample("2026-09"))
     assert render_month(wrong_month, NOW).poster.tobytes() == calendar_frame
@@ -404,7 +404,7 @@ def test_no_stored_feature_or_a_broken_one_is_the_calendar_never_an_error(
 
 def test_the_sequence_is_day_week_month_year_then_the_wins_then_the_party():
     plain = DayView(day_local="2026-10-02")
-    base = ("today", "week", "month", "books")
+    base = ("today", "city", "week", "month", "books")
     assert sequence_names(plain) == base
     wins = replace(plain, today_dot=True, sleep_hours=7.5, book_finished=True, week_dots=2)
     assert sequence_names(wins) == (*base, "win-workout", "win-sleep", "win-book")
@@ -415,6 +415,7 @@ def test_the_sequence_is_day_week_month_year_then_the_wins_then_the_party():
     holds = {name: hold for name, _, hold in slots}
     assert holds == {
         "today": 6000,
+        "city": 6000,
         "week": 6000,
         "month": 6000,
         "books": 6000,

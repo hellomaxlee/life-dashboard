@@ -53,7 +53,7 @@ def test_clip_contract_rejects_bad_frames():
 
 def test_the_display_never_blanks_on_an_empty_view():
     clips = rotation(DayView(day_local="2026-10-02"), NOW)
-    assert list(clips) == ["today", "week", "month", "books"]
+    assert list(clips) == ["today", "city", "week", "month", "books"]
     for name, clip in clips.items():
         for frame in clip.frames:
             assert frame.size == (SIZE, SIZE) and frame.mode == "RGB"
@@ -66,7 +66,15 @@ def test_the_display_never_blanks_on_an_empty_view():
 def test_every_screen_and_clip_renders_at_1x_and_8x(combo, settings):
     view, now = load(combo, settings)
     clips = rotation_clips(view, now) + [(c.name, c.clip) for c in celebrations_for(view)]
-    assert [name for name, _ in clips] == ["today", "week", "month", "books", "sparkle", "party"]
+    assert [name for name, _ in clips] == [
+        "today",
+        "city",
+        "week",
+        "month",
+        "books",
+        "sparkle",
+        "party",
+    ]
     for _, clip in clips:
         for scale in (1, 8):
             still_image = Image.open(io.BytesIO(png_bytes(clip.poster, scale)))

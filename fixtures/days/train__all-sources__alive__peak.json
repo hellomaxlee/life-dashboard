@@ -4,6 +4,7 @@
   "now_utc": "2026-06-14T21:00:00Z",
   "as_of_utc": "2026-06-14T20:45:00Z",
   "month_feature": "sample-2026-10",
+  "city": "all-ok",
   "daily_metrics": {
     "quality_workout": true,
     "sleep_hours": 8.2,

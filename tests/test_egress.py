@@ -1,7 +1,9 @@
 """Static egress allowlist.
 
 Walks app/ and tools/ without importing them, so it passes on an empty tree and
-on any tree whose only outbound hosts are Goodreads and the Anthropic API.
+on any tree whose only outbound hosts are Goodreads, the Anthropic API and the city panel's
+three public feeds (MTA service alerts, Open-Meteo, the National Weather Service; see
+workflows/city.md for what each request carries).
 Health data stays home: any other host is a failing test.
 
 Also banned in app/ and tools/: the network modules that bypass httpx (`requests`,
@@ -25,7 +27,8 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SCAN_DIRS = ("app", "tools")
 
-ALLOWED_HOSTS = frozenset({"www.goodreads.com", "goodreads.com", "api.anthropic.com"})
+CITY_HOSTS = frozenset({"api-endpoint.mta.info", "api.open-meteo.com", "api.weather.gov"})
+ALLOWED_HOSTS = frozenset({"www.goodreads.com", "goodreads.com", "api.anthropic.com"}) | CITY_HOSTS
 LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "0.0.0.0"})
 LAN_NETWORKS = tuple(
     ipaddress.ip_network(net) for net in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16")
@@ -290,6 +293,30 @@ def test_allowlisted_and_lan_hosts_pass(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     assert scan_tree(tmp_path) == []
+
+
+def test_city_feeds_pass_and_their_lookalikes_do_not(tmp_path: Path) -> None:
+    from app.city import fetch
+
+    assert fetch.ALLOWED_HOSTS == CITY_HOSTS, "the code's allowlist and the gate's must agree"
+    ok = "".join(f'httpx.get("https://{host}/x")\n' for host in sorted(CITY_HOSTS))
+    assert _scan_one(tmp_path / "ok", "app/city", "import httpx\n\n" + ok) == []
+    lookalikes = (
+        "api.mta.info",
+        "mta.info",
+        "api-endpoint.mta.info.example.com",
+        "open-meteo.com",
+        "customer-api.open-meteo.com",
+        "weather.gov",
+        "api.weather.com",
+        "api.weather.gov.example.net",
+    )
+    for host in lookalikes:
+        assert not host_allowed(host), host
+        violations = _scan_one(
+            tmp_path / host, "app/city", f'import httpx\n\nhttpx.get("https://{host}/x")\n'
+        )
+        assert [(v.kind, v.detail) for v in violations] == [("url", host)]
 
 
 def test_a_hostname_that_starts_like_a_lan_address_is_not_a_lan_host(tmp_path: Path) -> None:

@@ -31,6 +31,25 @@ PINK: Color = (255, 90, 190)
 SKY: Color = (80, 170, 255)
 WOOD: Color = (150, 100, 50)
 
+# The city panel. Weather: rain is the one blue that is a quantity, clouds are light and dark.
+RAIN: Color = (40, 120, 255)
+CLOUD: Color = (205, 210, 225)
+CLOUD_DARK: Color = (120, 126, 150)
+MOONLIGHT: Color = (235, 225, 160)
+# MTA bullet colours. The brown (#996633) is lifted so it reads on LEDs; the rest are the
+# standard values. The bus blue is brighter than the A/C/E blue so a bus is never an A train.
+MTA_BLUE: Color = (0, 57, 166)
+MTA_ORANGE: Color = (255, 99, 25)
+MTA_LIGHT_GREEN: Color = (108, 190, 69)
+MTA_BROWN: Color = (190, 128, 64)
+MTA_GREY: Color = (167, 169, 172)
+MTA_YELLOW: Color = (252, 204, 10)
+MTA_RED: Color = (238, 53, 46)
+MTA_GREEN: Color = (0, 147, 60)
+MTA_PURPLE: Color = (185, 51, 173)
+BUS_BLUE: Color = (20, 110, 235)
+BULLET_INK: Color = (0, 0, 0)
+
 DOTS: tuple[Color, ...] = (CORAL, GOLD, TEAL)
 SPINES: tuple[Color, ...] = (CORAL, GOLD, TEAL, VIOLET, PINK, SKY, GREEN)
 CONFETTI: tuple[Color, ...] = (CORAL, GOLD, TEAL, VIOLET, PINK, SKY, GREEN, WHITE)

@@ -1,13 +1,13 @@
 """Send the rotation to a Pixoo once, by hand, and time every send: the hardware smoke test.
 
 python -m tools.pixoo_check --host 192.168.1.50
-python -m tools.pixoo_check --host 192.168.1.50 --screen month --screen win-workout --screen party
+python -m tools.pixoo_check --host 192.168.1.50 --screen city --screen win-workout --screen party
 python -m tools.pixoo_check --host 192.168.1.50 --date 2026-10-04
 
 Without --date the screens come from a fixture day, so no Health data is needed. Nothing is
 read from or written to `config.toml` and the service is not involved: the rotation job
 stays off until `device.pixoo_host` is set. Each screen is held as the job would hold it, in the
-job's order (Today, Week, Month, Books, the earned small wins, the party); a paged screen goes
+job's order (Today, City, Week, Month, Books, the earned small wins, the party); a paged screen goes
 page by page as stills.
 See workflows/run-service.md section 15.
 """

@@ -100,3 +100,22 @@ brightness = 100
 night_brightness = 10
 night_from = "22:00"
 night_until = "05:30"
+
+# The city panel (workflows/city.md): MTA service alerts for the lines Max rides and the
+# day's weather. Display-only; nothing here is a metric. latitude/longitude are Astoria
+# rounded to two decimals (about a kilometre) on purpose: they are sent to the two weather
+# services, so no street address goes here.
+[city]
+enabled = true
+latitude = 40.77
+longitude = -73.94
+# Shown every day; then the weekday-only or the weekend-only lines (Saturday and Sunday in
+# the home timezone are the weekend); then the buses.
+subway = ["N", "W"]
+subway_weekday = ["M"]
+subway_weekend = ["F"]
+bus = ["Q103", "Q66", "Q69", "B62"]
+transit_poll_minutes = 5
+weather_poll_minutes = 30
+# The renderer treats a snapshot older than this as stale.
+stale_minutes = 45

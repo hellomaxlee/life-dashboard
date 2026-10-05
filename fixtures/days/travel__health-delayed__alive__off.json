@@ -3,6 +3,7 @@
   "day_local": "2026-12-17",
   "now_utc": "2026-12-17T23:30:00Z",
   "as_of_utc": "2026-12-16T03:10:00Z",
+  "city": "stale",
   "daily_metrics": {
     "books_ytd": 11,
     "summary_device_line": "Health data has not arrived; last night's sleep is unknown. Not knowing is fine.",

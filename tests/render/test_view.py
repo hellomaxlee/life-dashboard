@@ -20,7 +20,8 @@ def test_fixture_builds_the_expected_view(settings):
     view, now = load(WEEK_41, settings)
     assert now == from_utc_iso("2026-09-30T22:15:00Z")
     assert view.month_feature is not None and view.month_feature.month == "2026-09"
-    assert replace(view, month_feature=None) == DayView(
+    assert view.city is not None and view.city.day_local == "2026-09-30"
+    assert replace(view, month_feature=None, city=None) == DayView(
         day_local="2026-09-30",
         home_tz="America/New_York",
         week_target=3,
@@ -36,6 +37,7 @@ def test_fixture_builds_the_expected_view(settings):
         summary_line="Second dot this week, 7.4 h of sleep. What you repeat is what you become.",
         claude=ClaudeUsage(41.2, "2026-10-03T20:00:00Z", "2026-09-30T21:40:00Z"),
         stale_hours=24,
+        city_stale_minutes=45,
     )
 
 
