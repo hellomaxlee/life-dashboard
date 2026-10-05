@@ -281,59 +281,50 @@ see.
 
 ## 15. Display (Pixoo-64)
 
-`[device] pixoo_host` is empty until the steps below are done: the `device_rotation` job is
-not registered, no adapter is built, and nothing is sent anywhere.
+Connected 2026-10-04: `[device] pixoo_host = "192.168.1.185"` in `config.toml`, so the
+`device_rotation` job is registered and the panel shows the live rotation. Empty the value
+and restart to turn it off: no job, no adapter, nothing sent. `LIFE_PIXOO_HOST` overrides
+the file (the test suite sets it empty so no test can reach the panel).
 
-First connection, in this order:
+This panel does not speak the community-documented Pixoo-64 API (port 80, `/post`): it
+answers JSON POSTs on **port 9000 at `/divoom_api`** with `ReturnCode` 0 on success. Find
+its IP in the Divoom app under the device's settings and reserve it in the router (as in
+section 7); if the IP changes, the display freezes on its last screen and the err log says
+`job device_rotation failed`.
 
-1. Set the Pixoo up in the Divoom app and join it to the home Wi-Fi (2.4 GHz only). Its IP
-   is in the app under the device's settings; give it a DHCP reservation in the router (as
-   in section 7).
-2. Smoke test by hand, with the service untouched and fixture data:
-
-```sh
-uv run python -m tools.pixoo_check --host 192.168.1.50
-```
-
-   It sends Week, Today, the fixture day's sparkles and Books once, holds each as the job
-   would, and prints how long every send took. Look at each screen on the panel at arm's
-   length (this is the 1x eye test on real LEDs). A send that fails names the command.
-   `--screen books` repeats one screen; `--date YYYY-MM-DD` uses the live database.
-3. Only when step 2 looks right, in `config.toml`: `pixoo_host = "192.168.1.50"` (the
-   literal IP; a hostname or any address outside 10/8, 172.16/12, 192.168/16 is refused).
-   Leave `screen_seconds = 6`.
-4. `launchctl kickstart -k gui/$(id -u)/com.maxlee.life-dashboard`
+Hand check, with the service untouched (fixture data unless `--date`):
 
 ```sh
+uv run python -m tools.pixoo_check --host 192.168.1.185
+uv run python -m tools.pixoo_check --host 192.168.1.185 --screen books --date 2026-10-04
 grep -n "device_rotation" data/logs/life-dashboard.err.log | tail   # failures and refusals
 ```
 
-What it does: the first screen goes out at start, then Week, Today, one sparkle for each
-small win the day earned, Books, wrapping, each rendered for today's America/New_York day
-from a fresh db connection. A still stays `screen_seconds`; Books (pages are 2 s each, about
-14 s at most) stays until it has played through; a sparkle plays three times (4.2 s). After
-each screen the job moves its own next run to the end of that hold; a failed send waits one
-dwell and then tries the next screen. A restart begins again at Week. `screen_seconds` under 3 or a bad host logs
+What the job does: Week, Today, one sparkle for each small win the shown day earned, Books,
+wrapping, each rendered for today's America/New_York day from a fresh db connection. A still
+stays `screen_seconds`; Books (pages are 2 s each) stays until it has played through; a
+sparkle plays three times (4.2 s). After each screen the job moves its own next run to the
+end of that hold; a failed send waits one dwell and then tries the next screen. A restart
+begins again at Week. `screen_seconds` under 3 or a bad host logs
 `device_rotation not registered: bad [device] config` and the rest of the service runs.
 
-When something fails (device off, timeout, refused clip, one screen's renderer raising):
-`job device_rotation failed` plus a traceback in the err log, nothing is sent on that tick,
-and the next tick tries the next screen. Each command to the device times out after 2 s
-and a whole clip gets 7.5 s (half the dwell if that is longer); the next tick is scheduled
-only after a send returns, so sends never stack. The adapter sends `Draw/ResetHttpGifId`
-before its first clip and every 32 clips after: without it community clients report the
-panel stops answering after about 300 animations.
+Measured on the panel (2026-10-04): it takes a request in at about 12 KB/s, so a still is
+1.4 s to send, a 4-page Books 5.9 s, and a 20-frame sparkle 32 s, during which the previous
+screen stays up. Each command times out after 5 s per phase and 10 s overall; a clip gets
+4 s per frame. A refused connection is retried twice. The adapter sends
+`Draw/ResetHttpGifId` before its first clip and every 32 clips after.
+
+When something fails (device off, timeout, one screen's renderer raising): one
+`job device_rotation failed: ...` line per distinct error in the err log (repeats are not
+logged), nothing is sent on that tick, and the next tick tries the next screen.
 
 The week-complete party clip exists but is not in the rotation.
 
-Unverified on hardware until step 2 has been run (every test uses a fake transport):
-- the whole local API in `app/render/adapters/pixoo.py` (commands, 59-frame limit, PicSpeed);
-- that the device loops a clip and keeps showing the last one when a tick fails or the
-  service is down ("never blanks" rests on this);
-- what the device shows when a send is cut off part-way by the send budget;
-- how long a real 7-page Books or 20-frame sparkle send takes (`tools.pixoo_check` prints
-  it), and so whether 2 s / 7.5 s are the right limits;
-- brightness, gamma and legibility on the panel (Phase 5).
+Still unverified on the panel:
+- that a sparkle animates at its 70 ms frame time and Books pages at 2 s (PicSpeed);
+- that it keeps showing the last clip while the service is down ("never blanks");
+- the reset interval of 32 (a community figure for the older API);
+- brightness, gamma and legibility over a full day (Phase 5).
 
 ## 16. Upgrading (new code, new migration)
 

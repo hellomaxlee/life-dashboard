@@ -24,7 +24,9 @@ from app.config import Settings
 from app.ingest import goodreads
 from app.ingest.claude_usage import read_usage_file
 from app.jobs.rotation import (
+    ROTATION_FALLBACK_S,
     ROTATION_JOB,
+    ROTATION_MISFIRE_GRACE_S,
     SEND_ERRORS,
     ClipAdapter,
     DeviceRotation,
@@ -353,7 +355,8 @@ def build_scheduler(
 
             def run_rotation() -> None:
                 """One slot, then move the next run to when its hold is up, so no run
-                overlaps a slow send. The interval is only the fallback cadence."""
+                overlaps a slow send. The interval is only the fallback cadence, longer
+                than any send can take."""
                 try:
                     tick()
                 finally:
@@ -364,10 +367,10 @@ def build_scheduler(
 
             scheduler.add_job(
                 run_rotation,
-                IntervalTrigger(seconds=settings.device.screen_seconds, timezone=tz),
+                IntervalTrigger(seconds=ROTATION_FALLBACK_S, timezone=tz),
                 id=ROTATION_JOB,
                 next_run_time=moment,
-                misfire_grace_time=settings.device.screen_seconds,
+                misfire_grace_time=ROTATION_MISFIRE_GRACE_S,
             )
 
     return scheduler

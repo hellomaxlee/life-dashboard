@@ -88,9 +88,9 @@ max_sample_gap_s = 300
 # Which band crossing becomes the day's one wellness fact when several cross.
 wellness_priority = ["hrv_ms", "resting_hr", "daylight_min"]
 
-# Pixoo-64 on the LAN. Empty = no device; nothing is ever pushed. Not yet purchased.
+# Pixoo-64 on the LAN (port 9000). Empty = no device; nothing is ever pushed.
 [device]
-pixoo_host = ""
+pixoo_host = "192.168.1.185"
 # Seconds a still screen stays up (3 or more). The Books screen stays until its summary has
 # paged through once; each small-win sparkle plays for about 4 seconds.
 screen_seconds = 6

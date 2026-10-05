@@ -88,7 +88,7 @@ def set_day(db, day: str, **metrics: object) -> None:
 def fake_device(seen: list[httpx.Request]) -> httpx.Client:
     def handler(request: httpx.Request) -> httpx.Response:
         seen.append(request)
-        return httpx.Response(200, json={"error_code": 0, "PicId": 7})
+        return httpx.Response(200, json={"ReturnCode": 0})
 
     return httpx.Client(transport=httpx.MockTransport(handler))
 
@@ -294,10 +294,10 @@ def test_with_a_host_the_job_is_registered_and_sends_through_the_pixoo_adapter(d
     scheduler.start(paused=True)
     try:
         job = scheduler.get_job(ROTATION_JOB)
-        assert job.trigger.interval == timedelta(seconds=20)
+        assert job.trigger.interval == timedelta(seconds=rotation_job.ROTATION_FALLBACK_S)
         assert job.max_instances == 1 and job.coalesce
         assert job.next_run_time == NOON
-        assert job.misfire_grace_time == 20
+        assert job.misfire_grace_time == 24 * 3600
         before = datetime.now(UTC)
         job.func()
         booked = scheduler.get_job(ROTATION_JOB)
@@ -306,20 +306,18 @@ def test_with_a_host_the_job_is_registered_and_sends_through_the_pixoo_adapter(d
     finally:
         scheduler.shutdown(wait=False)
     assert scheduler.job_stats[ROTATION_JOB] == jobs.JobStats(runs=1)
-    assert {str(request.url) for request in seen} == {f"http://{HOST}/post"}
+    assert {str(request.url) for request in seen} == {f"http://{HOST}:9000/divoom_api"}
     commands = [json.loads(request.content)["Command"] for request in seen]
-    assert commands[:2] == ["Draw/ResetHttpGifId", "Draw/GetHttpGifId"]
-    assert commands[2:] == ["Draw/SendHttpGif"] * (len(seen) - 2) and len(seen) >= 3
+    assert commands[0] == "Draw/ResetHttpGifId"
+    assert commands[1:] == ["Draw/SendHttpGif"] * (len(seen) - 1) and len(seen) >= 2
 
 
 def test_the_real_adapter_is_built_for_the_host_with_short_timeouts(jobs_settings):
     adapter = device_adapter(with_device(jobs_settings, seconds=20))
     assert isinstance(adapter, PixooAdapter)
     assert adapter.host == HOST
-    assert adapter._client.timeout == httpx.Timeout(2.0)
-    assert adapter._send_budget_s == 10
-    short = device_adapter(with_device(jobs_settings, seconds=rotation_job.MIN_SCREEN_SECONDS))
-    assert short._send_budget_s == rotation_job.MIN_SEND_BUDGET_S == 7.5
+    assert adapter._client.timeout == httpx.Timeout(5.0)
+    assert adapter._frame_budget_s == 4.0
 
 
 @pytest.mark.parametrize(
@@ -347,7 +345,7 @@ def test_the_job_comes_back_after_a_restart_and_starts_from_the_first_screen(
         seen.append(body)
         if body.get("PicOffset") == body.get("PicNum", 0) - 1:
             sent_whole.set()
-        return httpx.Response(200, json={"error_code": 0, "PicId": 7})
+        return httpx.Response(200, json={"ReturnCode": 0})
 
     def mock_adapter(settings):
         return PixooAdapter(HOST, httpx.Client(transport=httpx.MockTransport(handler)))
@@ -367,8 +365,8 @@ def test_the_job_comes_back_after_a_restart_and_starts_from_the_first_screen(
         assert running.job_stats[ROTATION_JOB] == jobs.JobStats(runs=1)
         today = local_day(datetime.now(UTC), settings.home_tz)
         week = render_screen("week", view_from_db(db, settings, today), NOON)
-        assert seen[:2] == [{"Command": "Draw/ResetHttpGifId"}, {"Command": "Draw/GetHttpGifId"}]
-        assert len(seen) == 2 + len(week.frames)
+        assert seen[0] == {"Command": "Draw/ResetHttpGifId"}
+        assert len(seen) == 1 + len(week.frames)
     assert schedulers[0] is not schedulers[1]
 
 

@@ -59,7 +59,9 @@ def test_pixoo_client_ignores_proxy_environment(monkeypatch):
     client = adapter._client
     assert client.trust_env is False
     assert client._mounts == {}
-    assert client._transport_for_url(httpx.URL(f"http://{HOST}/post")) is client._transport
+    assert (
+        client._transport_for_url(httpx.URL(f"http://{HOST}:9000/divoom_api")) is client._transport
+    )
 
 
 # 3. the label states the dot, not the day
@@ -305,12 +307,12 @@ def test_adapter_sends_each_frame_its_own_duration():
 
     def handler(request: httpx.Request) -> httpx.Response:
         bodies.append(json.loads(request.content))
-        return httpx.Response(200, json={"error_code": 0, "PicId": 3})
+        return httpx.Response(200, json={"ReturnCode": 0})
 
     client = httpx.Client(transport=httpx.MockTransport(handler))
     frame = new_frame()
     PixooAdapter(HOST, client).send(Clip((frame,) * 3, (100, 250, 1200)))
-    assert [b["PicSpeed"] for b in bodies[2:]] == [100, 250, 1200]
+    assert [b["PicSpeed"] for b in bodies[1:]] == [100, 250, 1200]
 
 
 def test_party_is_earned_at_the_target_not_only_above(settings):

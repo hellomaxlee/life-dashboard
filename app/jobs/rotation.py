@@ -18,7 +18,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Protocol
 
 from app.config import Settings
-from app.render.adapters.pixoo import PixooAdapter, PixooError
+from app.render.adapters.pixoo import FRAME_BUDGET_S, PixooAdapter, PixooError
 from app.render.frame import Clip
 from app.render.rotation import hold_ms, render_screen, sequence_names
 from app.render.view_db import view_from_db
@@ -26,8 +26,9 @@ from app.timeutil import local_day
 
 ROTATION_JOB = "device_rotation"
 MIN_SCREEN_SECONDS = 3
-MIN_SEND_BUDGET_S = 7.5
-DEVICE_TIMEOUT_S = 2.0
+DEVICE_TIMEOUT_S = 5.0
+ROTATION_FALLBACK_S = 300
+ROTATION_MISFIRE_GRACE_S = 24 * 3600
 HOLDING = "holding"
 SEND_ERRORS = (PixooError,)
 
@@ -81,14 +82,11 @@ class DeviceRotation:
 
 
 def device_adapter(settings: Settings) -> PixooAdapter:
-    """The Pixoo adapter for the configured host. One clip may take half the dwell to send, and
-    never less than MIN_SEND_BUDGET_S, so a short dwell does not cut an animation off.
+    """The Pixoo adapter for the configured host, with the timeouts measured on the panel.
     Raises ValueError for a host off the LAN or a dwell under MIN_SCREEN_SECONDS."""
     dwell = settings.device.screen_seconds
     if dwell < MIN_SCREEN_SECONDS:
         raise ValueError(f"device.screen_seconds must be {MIN_SCREEN_SECONDS} or more, got {dwell}")
     return PixooAdapter(
-        settings.device.pixoo_host,
-        timeout_s=DEVICE_TIMEOUT_S,
-        send_budget_s=max(dwell / 2, MIN_SEND_BUDGET_S),
+        settings.device.pixoo_host, timeout_s=DEVICE_TIMEOUT_S, frame_budget_s=FRAME_BUDGET_S
     )

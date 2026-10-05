@@ -21,7 +21,7 @@ from pathlib import Path
 from app.config import REPO_ROOT, load_settings
 from app.db import SchemaMismatch, connect_live
 from app.jobs.rotation import DEVICE_TIMEOUT_S
-from app.render.adapters.pixoo import PixooAdapter, PixooError
+from app.render.adapters.pixoo import FRAME_BUDGET_S, PixooAdapter, PixooError
 from app.render.rotation import WIN_NAMES, rotation_sequence
 from app.render.view import load_fixture
 from app.render.view_db import view_from_db
@@ -42,7 +42,7 @@ def main(argv: list[str] | None = None) -> int:
 
     settings = load_settings()
     try:
-        adapter = PixooAdapter(args.host, timeout_s=DEVICE_TIMEOUT_S)
+        adapter = PixooAdapter(args.host, timeout_s=DEVICE_TIMEOUT_S, frame_budget_s=FRAME_BUDGET_S)
         if args.date:
             day_local = date.fromisoformat(args.date).isoformat()
             conn = connect_live(settings.storage.db_path)

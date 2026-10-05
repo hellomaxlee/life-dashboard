@@ -265,7 +265,8 @@ def load_settings(config_path: Path | None = None) -> Settings:
     """Load config.toml into a frozen Settings.
 
     Environment overrides: LIFE_CONFIG_PATH (file), LIFE_DB_PATH, LIFE_RAW_DIR (storage),
-    LIFE_BACKUP_DIR, LIFE_SCHEDULER_ENABLED (1/true/yes or 0/false/no),
+    LIFE_BACKUP_DIR, LIFE_PIXOO_HOST (empty = no device), LIFE_SCHEDULER_ENABLED (1/true/yes
+    or 0/false/no),
     HEALTH_EXPORT_TOKEN, GOODREADS_RSS_URL, ANTHROPIC_API_KEY (secrets, from .env or the env).
     """
     load_dotenv(REPO_ROOT / ".env")
@@ -347,7 +348,9 @@ def load_settings(config_path: Path | None = None) -> Settings:
             keep=_whole("backup.keep", raw["backup"]["keep"], 1),
         ),
         device=DeviceConfig(
-            pixoo_host=str(raw.get("device", {}).get("pixoo_host", "")).strip(),
+            pixoo_host=str(
+                os.environ.get("LIFE_PIXOO_HOST", raw.get("device", {}).get("pixoo_host", ""))
+            ).strip(),
             screen_seconds=int(raw.get("device", {}).get("screen_seconds", 6)),
         ),
         anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY", "").strip(),

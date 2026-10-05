@@ -21,11 +21,11 @@ def device(monkeypatch):
         if state["fail"]:
             raise httpx.ConnectTimeout("timed out", request=request)
         seen.append(json.loads(request.content))
-        return httpx.Response(200, json={"error_code": 0, "PicId": len(seen)})
+        return httpx.Response(200, json={"ReturnCode": 0})
 
     real = pixoo_check.PixooAdapter
 
-    def fake(host: str, timeout_s: float):
+    def fake(host: str, timeout_s: float, frame_budget_s: float):
         return real(host, httpx.Client(transport=httpx.MockTransport(handler)))
 
     monkeypatch.setattr(pixoo_check, "PixooAdapter", fake)
@@ -44,8 +44,9 @@ def test_the_fixture_day_goes_out_in_rotation_order_with_timings(device, capsys)
         "books",
     ]
     assert all("sent in" in line and "hold" in line for line in lines)
-    assert [body["Command"] for body in seen].count("Draw/GetHttpGifId") == 5
-    assert {body["PicWidth"] for body in seen if body["Command"] == "Draw/SendHttpGif"} == {64}
+    sends = [body for body in seen if body["Command"] == "Draw/SendHttpGif"]
+    assert sorted({body["PicID"] for body in sends}) == [1, 2, 3, 4, 5]
+    assert {body["PicWidth"] for body in sends} == {64}
 
 
 def test_one_named_screen_and_an_unearned_win_is_skipped(device, capsys):

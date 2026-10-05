@@ -101,7 +101,7 @@ def test_pixoo_refuses_a_clip_over_the_frame_limit():
 
     def handler(request: httpx.Request) -> httpx.Response:
         sent.append(request)
-        return httpx.Response(200, json={"error_code": 0, "PicId": 1})
+        return httpx.Response(200, json={"ReturnCode": 0})
 
     adapter = pixoo.PixooAdapter(
         "192.168.1.50", httpx.Client(transport=httpx.MockTransport(handler))
