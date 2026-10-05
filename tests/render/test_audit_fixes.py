@@ -425,12 +425,12 @@ def test_a_null_sleep_row_is_not_overridden_by_a_stored_session(settings):
 
 
 def test_a_word_one_mark_too_wide_drops_the_mark_instead_of_splitting(settings):
-    from app.render.screens import LINE_WIDTH
 
-    lines = wrap_lines("sleep unrecorded; the walking counts")
-    assert lines[:2] == ["sleep", "unrecorded"]
+    lines = wrap_lines("so Yesterday's, the walking counts")
+    assert lines[:2] == ["so", "Yesterday's"]
     assert lines[2].startswith("the")
-    assert all(text_width(line, BODY) <= LINE_WIDTH for line in lines)
+    assert wrap_lines("sleep unrecorded; the walking")[1] == "unrecorded;"
+    assert all(text_width(line, BODY) <= 62 for line in lines)
     assert wrap_lines("rest day; walk")[0] == "rest day;"
 
 
@@ -453,3 +453,17 @@ def test_the_yesterday_header_never_touches_the_date(day, settings):
     gap = frame.crop((title_end, 0, title_end + 3, 9))
     assert gap.getbbox() is None
     assert frame.crop((title_end + 3, 0, 64, 9)).getbbox() is not None
+
+
+def test_a_word_two_pixels_too_wide_keeps_its_line_and_the_dash_keeps_its_author(settings):
+    line = 'Yesterday\'s sleep data has not arrived. "Of things some are not." - Epictetus'
+    lines = wrap_lines(line)
+    assert lines[0] == "Yesterday's" and lines[1].startswith("sleep")
+    assert lines[-1] == "- Epictetus"
+    assert all(text_width(text, BODY) <= 62 for text in lines)
+    view, _ = load(WEEK_41, settings)
+    for frame in render_books(replace(view, summary_line=line)).frames:
+        assert frame.crop((0, 45, 2, 62)).getbbox() is None
+    assert wrap_lines('so "said" - Heraclitus')[-2:] == ['so "said" -', "Heraclitus"]
+    assert wrap_lines("sleep. It's enough - rest is work")[:2] == ["sleep. It's", "enough -"]
+    assert wrap_lines("Rest Supercalifragilistic day")[1] != "Supercalifragilistic"

@@ -53,6 +53,7 @@ DOT_ROW_Y = 17
 STREAK_Y = 28
 SLEEP_BAR_HOURS = 10
 LINE_WIDTH = 60
+WORD_WIDTH = SIZE - LEFT
 PAGE_MS = 2000
 TITLE_GAP = 3
 SUMMARY_MAX_CHARS = 220
@@ -420,15 +421,36 @@ def _glue_numbers(words: list[str]) -> list[str]:
     return groups
 
 
+def _glue_attribution(words: list[str]) -> list[str]:
+    """Keep the dash after a quotation with the author's first name when they fit. A dash in
+    the middle of a sentence is left alone."""
+    units: list[str] = []
+    index = 0
+    while index < len(words):
+        word = words[index]
+        after_quote = index > 0 and words[index - 1].rstrip(".,;:").endswith('"')
+        if word == "-" and after_quote and index + 1 < len(words):
+            joined = f"- {words[index + 1]}"
+            if text_width(joined, BODY) <= WORD_WIDTH:
+                units.append(joined.replace(" ", _GLUE))
+                index += 2
+                continue
+        units.append(word)
+        index += 1
+    return units
+
+
 def wrap_lines(text: str) -> list[str]:
     """Greedy word wrap to LINE_WIDTH pixels.
 
-    Only a word wider than a line is ever split, and a number stays on the same line as its
-    unit or its "of N" whenever the group fits a line.
+    A number stays on the same line as its unit or its "of N" whenever the group fits a
+    line, and an attribution dash stays with its name. A word alone on a line may run into
+    the right margin (WORD_WIDTH), so "Yesterday's" is not cut before its "s"; only a word
+    wider than that is ever split.
     """
     lines: list[str] = []
     current = ""
-    for unit in _glue_numbers(text.split()):
+    for unit in _glue_attribution(_glue_numbers(text.split())):
         word = unit.replace(_GLUE, " ")
         candidate = f"{current} {word}" if current else word
         if text_width(candidate, BODY) <= LINE_WIDTH:
@@ -437,9 +459,9 @@ def wrap_lines(text: str) -> list[str]:
         if current:
             lines.append(current)
         bare = word.rstrip(_TRAILING)
-        if bare and text_width(bare, BODY) <= LINE_WIDTH < text_width(word, BODY):
+        if bare and text_width(bare, BODY) <= WORD_WIDTH < text_width(word, BODY):
             word = bare
-        while text_width(word, BODY) > LINE_WIDTH:
+        while text_width(word, BODY) > WORD_WIDTH:
             cut = len(word) - 1
             while cut > 1 and text_width(word[:cut], BODY) > LINE_WIDTH:
                 cut -= 1
