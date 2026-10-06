@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 from datetime import timedelta
 
+from app.config import load_settings
 from app.metrics.engine import recompute
 from tests.conftest import post_fixture
 from tests.metrics.golden import metrics_rows
@@ -33,6 +34,7 @@ def test_verify_compares_the_derived_rows_once_the_engine_has_run(
     client, db, settings, tmp_path, capsys, monkeypatch
 ):
     ingest(client, monkeypatch)
+    settings = load_settings()  # the verify CLI recomputes with config.toml's bar
     recompute(db, settings, now=AFTER_INGEST)
     assert metrics_rows(db, "daily_metrics", "day_local")["2026-09-22"]["quality_workout"] is True
 

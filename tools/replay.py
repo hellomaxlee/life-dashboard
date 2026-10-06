@@ -30,7 +30,10 @@ output, not a function of the raw archive (the model's words differ run to run):
 never compares them. --snapshot and --diff, which compare live with live, keep them.
 The month feature (table `month_features`) is authored the same way: --verify leaves it out,
 --snapshot, --diff and the backup checksum include it once a feature is stored, and
---rebuild-live never touches it.
+--rebuild-live never touches it. Manual workout overrides (table `manual_workouts`) are
+authored too, but the engine reads them: --verify copies live's rows into the scratch db
+before recomputing (so the derived rows can match) and never compares the table itself;
+--rebuild-live leaves it in place and the recompute that follows sees it.
 
 Replay order is raw_archive.id order (the order payloads were applied) whenever a db with
 raw_archive rows is available. Only payloads that were parsed are replayed. Files on disk
@@ -72,7 +75,8 @@ DATA_TABLES = (
 DERIVED_TABLES = ("load_bar_history",)
 DERIVED_KEYS = {"daily_metrics": DAILY_KEYS, "weekly_metrics": WEEKLY_KEYS}
 AUTHORED_KEYS = {"daily_metrics": SUMMARY_KEYS}
-AUTHORED_TABLES = ("month_features",)
+AUTHORED_TABLES = ("month_features", "manual_workouts")
+AUTHORED_INPUTS = ("manual_workouts",)
 PROVENANCE_COLUMNS = {"activity_sources": {"raw_archive_id"}}
 SCRATCH_DB = REPO_ROOT / "data" / "replay" / "scratch.db"
 INGESTERS = {
@@ -295,6 +299,7 @@ def verify(settings: Settings, scratch_db: Path) -> tuple[list[str], list[str]]:
         scratch = replay(settings.storage.raw_dir, scratch_db, settings, plan=plan)
         try:
             if clock is not None:
+                copy_authored_inputs(live, scratch)
                 recompute(scratch, settings, clock[0], from_utc_iso(clock[1]))
             lines = diff(
                 snapshot(live, derived=clock is not None, authored=False),
@@ -311,16 +316,23 @@ def verify(settings: Settings, scratch_db: Path) -> tuple[list[str], list[str]]:
     return lines, notes
 
 
+def copy_authored_inputs(live: sqlite3.Connection, scratch: sqlite3.Connection) -> None:
+    """The authored tables the engine reads, copied into the scratch db so its recompute
+    sees what live's did. They are never compared."""
+    for table in AUTHORED_INPUTS:
+        _copy_rows(live, scratch, table, {})
+
+
 def _copy_rows(
-    scratch: sqlite3.Connection, live: sqlite3.Connection, table: str, archive_ids: dict[int, int]
+    source: sqlite3.Connection, target: sqlite3.Connection, table: str, archive_ids: dict[int, int]
 ) -> int:
-    rows = [dict(row) for row in scratch.execute(f'SELECT * FROM "{table}"')]
+    rows = [dict(row) for row in source.execute(f'SELECT * FROM "{table}"')]
     for row in rows:
         if "raw_archive_id" in row and row["raw_archive_id"] is not None:
             row["raw_archive_id"] = archive_ids.get(row["raw_archive_id"])
         columns = ", ".join(f'"{name}"' for name in row)
         marks = ", ".join("?" for _ in row)
-        live.execute(f'INSERT INTO "{table}" ({columns}) VALUES ({marks})', list(row.values()))
+        target.execute(f'INSERT INTO "{table}" ({columns}) VALUES ({marks})', list(row.values()))
     return len(rows)
 
 

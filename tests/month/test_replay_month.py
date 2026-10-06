@@ -24,7 +24,7 @@ def ingest(client) -> None:
 def test_migration_adds_both_tables(db):
     assert CODE_SCHEMA_VERSION >= 6
     assert {"month_features", "month_feature_attempts"} <= set(table_names(db))
-    assert replay.AUTHORED_TABLES == ("month_features",)
+    assert "month_features" in replay.AUTHORED_TABLES
     assert not set(replay.AUTHORED_TABLES) & set(replay.DATA_TABLES + replay.DERIVED_TABLES)
 
 

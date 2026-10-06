@@ -6,9 +6,13 @@ hr_max = 189
 pct = [0.50, 0.60, 0.70, 0.80, 0.90]
 
 [workout]
-load_bar = 100
+# The bar is what 30 minutes mostly in zone 2 costs: 30 min x zone-2 weight 2 = 60
+# (Max, 2026-10-05; was a 4-mile run, placeholder 100). With `calibrate = false` the bar
+# is never moved by the run-based calibration.
+load_bar = 60
 recalibrate_months = 3
 calibration_min_runs = 3
+calibrate = false
 
 [week]
 target = 3

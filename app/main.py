@@ -14,6 +14,7 @@ from app.jobs.scheduler import start_scheduler, stop_scheduler
 from app.web.pixoo import router as pixoo_router
 from app.web.preview import router as preview_router
 from app.web.status import router as status_router
+from app.web.workouts import router as workouts_router
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -49,6 +50,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(status_router)
     app.include_router(preview_router)
     app.include_router(pixoo_router)
+    app.include_router(workouts_router)
     return app
 
 

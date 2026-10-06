@@ -9,6 +9,16 @@ calibration in one `BEGIN IMMEDIATE` transaction. It rewrites only the keys in
 the summary's line) is kept. Run twice on the same data and clock it changes nothing.
 
 A workout belongs to the home-timezone day its start falls on, and to that day's week.
+
+A manual override (`manual_workouts`, app/metrics/manual.py) credits its day with one quality
+workout when no scored activity already earned it: `quality_workout` true, `workout_count` at
+least 1, `manual_workout` true, and one entry in the week's count timed at the override's
+recorded moment. It carries no load figure (`workout_load` stays what the scored activities
+say) but, on a day with no scored activity at all, the week's load bar stands in as the day's
+TRIMP so the acute/chronic balance does not read the day as rest. A day that already has a
+scored quality workout is unchanged by an override except for the two manual keys. A day
+whose row still says `manual_workout` after its override was removed is recomputed once more
+even when it lies before the first stored sample, so the credit does not linger.
 """
 
 from __future__ import annotations
@@ -35,6 +45,7 @@ from app.metrics.calibration import (
 )
 from app.metrics.keys import STATE_CHECK, STATE_NOW, STATE_TODAY, WELLNESS_KEYS, round_half_up
 from app.metrics.load import load_rows
+from app.metrics.manual import Override, read_overrides
 from app.metrics.sleep import SleepFragment, night_seconds
 from app.metrics.weekly import WeekInput, WeekRow, week_rows
 from app.metrics.wellness import Series, wellness_json
@@ -66,10 +77,13 @@ class Inputs:
     book_dates: list[date] = field(default_factory=list)
     pushes_utc: list[datetime] = field(default_factory=list)
     bar_history: list[BarEntry] = field(default_factory=list)
+    manual: dict[date, Override] = field(default_factory=dict)
+    formerly_manual: list[date] = field(default_factory=list)
 
     def first_day(self) -> date | None:
         candidates = [a.day_local for a in self.activities]
-        candidates += list(self.sleep_s) + list(self.steps)
+        candidates += list(self.sleep_s) + list(self.steps) + list(self.manual)
+        candidates += self.formerly_manual
         for values in self.wellness.values():
             candidates += list(values)
         return min(candidates) if candidates else None
@@ -150,6 +164,15 @@ def read_inputs(conn: sqlite3.Connection, settings: Settings) -> Inputs:
         inputs.pushes_utc.append(from_utc_iso(row["received_at_utc"]))
     for row in conn.execute("SELECT * FROM load_bar_history ORDER BY effective_from_week"):
         inputs.bar_history.append(entry_from_row(dict(row)))
+    inputs.manual = read_overrides(conn)
+    inputs.formerly_manual = [
+        date.fromisoformat(row["day_local"])
+        for row in conn.execute(
+            "SELECT day_local FROM daily_metrics "
+            "WHERE json_extract(metrics_json, '$.manual_workout') = 1"
+        )
+        if date.fromisoformat(row["day_local"]) not in inputs.manual
+    ]
     return inputs
 
 
@@ -250,11 +273,26 @@ def compute_rows(
         load = loads[activity.id]
         return load is not None and load >= bars[week_start(activity.day_local)][0]
 
+    by_day: dict[date, list[Activity]] = {}
+    for activity in activities:
+        by_day.setdefault(activity.day_local, []).append(activity)
+    manual = {day: row for day, row in inputs.manual.items() if first <= day <= today}
+    credited_by_hand = {
+        day: row
+        for day, row in manual.items()
+        if not any(is_quality(a) for a in by_day.get(day, []))
+    }
+
     week_inputs = [
         WeekInput(
             week,
             tuple(
                 a.end_utc for a in activities if week_start(a.day_local) == week and is_quality(a)
+            )
+            + tuple(
+                row.created_at_utc
+                for day, row in credited_by_hand.items()
+                if week_start(day) == week
             ),
             bar,
             source,
@@ -270,18 +308,22 @@ def compute_rows(
         tz,
     )
 
-    by_day: dict[date, list[Activity]] = {}
-    for activity in activities:
-        by_day.setdefault(activity.day_local, []).append(activity)
     days = list(days_between(first, today))
-    trimps = [sum(loads[a.id] or 0.0 for a in by_day.get(day, [])) for day in days]
-    load_by_day = dict(zip(days, load_rows(trimps), strict=True))
+
+    def trimp(day: date) -> float:
+        scored = [loads[a.id] for a in by_day.get(day, []) if loads[a.id] is not None]
+        if not scored and day in credited_by_hand:
+            return bars[week_start(day)][0]
+        return sum(scored)
+
+    load_by_day = dict(zip(days, load_rows([trimp(day) for day in days]), strict=True))
 
     daily: dict[str, dict[str, object]] = {}
     for day in days:
         todays = by_day.get(day, [])
         scored = [loads[a.id] for a in todays if loads[a.id] is not None]
-        quality = any(is_quality(a) for a in todays)
+        by_hand = manual.get(day)
+        quality = any(is_quality(a) for a in todays) or day in credited_by_hand
         asleep = inputs.sleep_s.get(day)
         sleep_hours = round_half_up(asleep / 3600, 2) if asleep is not None else None
         slept = sleep_win(sleep_hours, settings.sleep_target_hours)
@@ -289,9 +331,11 @@ def compute_rows(
         load = load_by_day[day]
         row: dict[str, object] = {
             "quality_workout": quality,
-            "workout_count": len(todays),
+            "workout_count": max(len(todays), 1) if by_hand else len(todays),
             "workout_load": max(scored) if scored else None,
             "workout_ids": [a.id for a in todays],
+            "manual_workout": by_hand is not None,
+            "manual_note": by_hand.note if by_hand else None,
             "sleep_hours": sleep_hours,
             "sleep_win": slept,
             "steps": inputs.steps.get(day),

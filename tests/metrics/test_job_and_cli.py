@@ -65,7 +65,8 @@ def test_cli_recompute_show_and_history(db, settings, capsys):
     assert '"workout_load": 104.0' in out and "weekly_metrics 2026-10-12" in out
 
     assert metrics_tool.main(["--history"]) == 0
-    assert "placeholder 100.0" in capsys.readouterr().out
+    shipped = load_settings().workout.load_bar  # the CLI reads config.toml, not the fixture
+    assert f"placeholder {shipped}" in capsys.readouterr().out
 
 
 def test_cli_refuses_a_db_behind_the_code(settings, capsys, tmp_path, monkeypatch):

@@ -18,6 +18,7 @@ class WorkoutConfig:
     load_bar: float
     recalibrate_months: int
     calibration_min_runs: int
+    calibrate: bool = True
 
 
 @dataclass(frozen=True)
@@ -364,6 +365,7 @@ def load_settings(config_path: Path | None = None) -> Settings:
             load_bar=float(raw["workout"]["load_bar"]),
             recalibrate_months=int(raw["workout"]["recalibrate_months"]),
             calibration_min_runs=int(raw["workout"]["calibration_min_runs"]),
+            calibrate=_flag("workout.calibrate", raw["workout"].get("calibrate", True)),
         ),
         week_target=int(raw["week"]["target"]),
         sleep_target_hours=float(raw["sleep"]["target_hours"]),

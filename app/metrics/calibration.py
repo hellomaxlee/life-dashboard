@@ -111,6 +111,8 @@ def plan_with_checks(
     ordered = sorted(runs, key=lambda r: (r.end_utc, r.id))
     entries = list(stored)
     checks: list[Check] = []
+    if not settings.workout.calibrate:
+        return entries, checks
 
     if not entries:
         if len(ordered) < min_runs:
