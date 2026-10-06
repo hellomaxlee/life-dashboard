@@ -64,7 +64,15 @@ def draw_twinkle(frame: Frame, x: int, y: int, size: int, color: Color) -> None:
             _put(frame, x + dx, y + dy, shade)
 
 
-def _win_icon(frame: Frame, win: str, grow: float) -> None:
+def nth_dot_color(dot: int | None) -> Color:
+    """The colour of the week's Nth dot (1-based), as the Week screen draws it: coral, gold,
+    teal. None or 0 (count unknown) is gold."""
+    if dot is None or dot < 1:
+        return GOLD
+    return dot_color(dot - 1)
+
+
+def _win_icon(frame: Frame, win: str, grow: float, color: Color = GOLD) -> None:
     cx, cy = SIZE // 2, 26
     if win == "sleep":
         if grow >= 0.5:
@@ -81,12 +89,15 @@ def _win_icon(frame: Frame, win: str, grow: float) -> None:
                 fill_rect(frame, cx - half + 2, line_y, cx - 2, line_y, dim(TEAL, 0.45))
                 fill_rect(frame, cx + 2, line_y, cx + half - 2, line_y, dim(TEAL, 0.45))
     else:
-        draw_disc(frame, cx, cy, max(1, int(7 * grow)), GOLD)
+        draw_disc(frame, cx, cy, max(1, int(7 * grow)), color)
 
 
-def sparkle_clip(win: Win = "workout", seed: int = 11) -> Clip:
-    """The small-win clip, about 1.4 s. `win` picks the icon and the label."""
+def sparkle_clip(win: Win = "workout", seed: int = 11, dot: int | None = None) -> Clip:
+    """The small-win clip, about 1.4 s. `win` picks the icon and the label; for a workout,
+    `dot` (the week's count including this one) colours the disc and its ring like the Week
+    screen's Nth dot (Max, 2026-10-06: a different colour for the 1st, 2nd and 3rd)."""
     rng = random.Random(seed)
+    accent = nth_dot_color(dot) if win == "workout" else GOLD
     lines = WIN_LABELS[win]
     star_floor = 46 - 7 * (len(lines) - 1)
     stars = []
@@ -101,9 +112,11 @@ def sparkle_clip(win: Win = "workout", seed: int = 11) -> Clip:
         frame = new_frame()
         grow = min(1.0, (tick + 1) / 6)
         overshoot = 1.15 if tick in (5, 6) else 1.0
-        _win_icon(frame, win, min(1.0, grow) * overshoot if win == "workout" else grow)
+        _win_icon(frame, win, min(1.0, grow) * overshoot if win == "workout" else grow, accent)
         if 4 <= tick <= 11:
-            draw_ring(frame, SIZE // 2, 26, 6 + (tick - 4) * 2, dim(GOLD, 1.0 - (tick - 4) * 0.12))
+            draw_ring(
+                frame, SIZE // 2, 26, 6 + (tick - 4) * 2, dim(accent, 1.0 - (tick - 4) * 0.12)
+            )
         for x, y, phase, colour_at in stars:
             step = (tick + phase) % 6
             size = (0, 1, 2, 1, 0, -1)[step]
@@ -259,6 +272,6 @@ def celebrations_for(view: DayView) -> list[Celebration]:
     done = week_complete(view)
     count = view.week_dots if done else view.week_target
     return [
-        Celebration("sparkle", sparkle_clip(win or "workout"), win is not None),
+        Celebration("sparkle", sparkle_clip(win or "workout", dot=view.week_dots), win is not None),
         Celebration("party", party_clip(count, view.week_target), done),
     ]

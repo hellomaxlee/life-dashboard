@@ -3,6 +3,11 @@
 Running log, newest first. The Lead reads this to find root causes and prioritize.
 Entry format: `## YYYY-MM-DD · <Title> (<Author>)` followed by terse bullets. Name the fixture combo on render/summary cycles.
 
+## 2026-10-06 · Fetched clips withdrawn; the workout sparkle takes the colour of the week's Nth dot (Lucía Ferrer)
+- The panel showed its cloud channel ("HOT" heart) persistently once every screen went as a fetched GIF, and the sparkle was absent even with only animations fetched: the panel fetched every file (access log) and displayed none. Delivery is back to frame uploads for everything; the fetch path stays in the code behind `[device] fetch_clips = false` for a test with someone watching. Max will see the loading cycle before a sparkle again, and the heart between a sparkle and the next still is gone with the mode switching.
+- Max: "make the workout complete animation a different color depending on whether it's the 1st, 2nd or 3rd workout." `sparkle_clip(..., dot=)` colours the disc and its ring like the Week screen's Nth dot: coral, gold, teal (`nth_dot_color`); the rotation and the preview pass the week's count. Read at 1x under gamma: three sparkles, coral, gold, teal, label unchanged.
+- Gate: ruff clean; 1517 passed. Mutant red: colour fixed to gold (1 failed).
+
 ## 2026-10-06 · Every screen delivered as a fetched GIF; no more cloud-channel flash (Lucía Ferrer)
 - Max: "Why do I see a heart HOT before the daily panel?" That is the panel's own cloud channel ("Hot" gallery, SelectIndex 1). After a fetched GIF (`Device/PlayTFGif`), the next uploaded frame (`Draw/SendHttpGif`) made the panel drop back to that channel for the 1.5 s the upload took, so the heart showed between the sleep sparkle and Today.
 - `DeviceRotation._deliver` now sends every clip, stills included, as a GIF the panel fetches from the service (one-frame GIFs of 650 to 750 bytes; every frame decodes back pixel-exact, checked over a whole fixture rotation). No `Draw/SendHttpGif` at all while the panel accepts the fetch command; the upload path remains the fallback for a firmware that does not.

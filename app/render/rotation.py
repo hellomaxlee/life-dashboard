@@ -64,7 +64,8 @@ def render_screen(name: str, view: DayView, now: datetime) -> Clip:
     if name == "books":
         return render_books(view)
     if name in WIN_NAMES:
-        return sparkle_clip(name.removeprefix(WIN_PREFIX))
+        win = name.removeprefix(WIN_PREFIX)
+        return sparkle_clip(win, dot=view.week_dots if win == "workout" else None)
     if name == PARTY:
         return party_for(view)
     raise KeyError(name)
