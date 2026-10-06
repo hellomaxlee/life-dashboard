@@ -3,9 +3,10 @@
 Uploading an animation to the panel costs about 1.5 s a frame and the panel shows a loading
 cycle while it waits (Max, 2026-10-05: "it sometimes goes to the loading cycle before the
 small win animations"). Its `Device/PlayTFGif` command instead fetches a GIF from a URL, so
-an animated clip is published here as a GIF a few KB long, served by the LAN page at
-`/pixoo/clip/<token>.gif`, and the panel is given that address. Only the newest few clips
-are kept; the panel fetches within a second of being told.
+a clip is published here as a GIF a few KB long (adapters/panelgif, the one form the panel's
+decoder takes), served by the LAN page at `/pixoo/clip/<token>.gif`, and the panel is given
+that address. Only the newest few clips are kept; the panel fetches within a second of being
+told.
 """
 
 from __future__ import annotations
@@ -14,7 +15,7 @@ import hashlib
 import socket
 from collections import OrderedDict
 
-from app.render.adapters.file import gif_bytes
+from app.render.adapters.panelgif import panel_gif_bytes
 from app.render.adapters.pixoo import require_lan_host
 from app.render.frame import Clip
 
@@ -25,7 +26,7 @@ _clips: OrderedDict[str, bytes] = OrderedDict()
 def publish(clip: Clip) -> str:
     """Store the clip's GIF and return its token (the sha256 of the bytes, so the same clip
     is one entry)."""
-    data = gif_bytes(clip)
+    data = panel_gif_bytes(clip)
     token = hashlib.sha256(data).hexdigest()[:16]
     _clips[token] = data
     _clips.move_to_end(token)

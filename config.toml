@@ -104,6 +104,11 @@ brightness = 100
 night_brightness = 3
 night_from = "22:00"
 night_until = "05:30"
+# false: every frame is uploaded (1.5 s a frame, so a loading cycle of about 30 s before each
+# sparkle). true: the panel fetches every screen from this service as a GIF in a fifth of a
+# second, but as of 2026-10-06 it then shows its own cloud channel ("HOT" heart) instead of
+# the GIF, whatever the GIF's form. Leave false until a watched test shows a fetched GIF.
+fetch_clips = false
 
 # The city panel (workflows/city.md): MTA service alerts for the lines Max rides and the
 # day's weather. Display-only; nothing here is a metric. latitude/longitude are Astoria

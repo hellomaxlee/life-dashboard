@@ -300,6 +300,16 @@ uv run python -m tools.pixoo_check --host 192.168.1.185 --screen books --date 20
 grep -n "device_rotation" data/logs/life-dashboard.err.log | tail   # failures and refusals
 ```
 
+A plain shell on this Mac cannot reach the panel ("No route to host", macOS local-network
+privacy); a launchd job started through the same `uv` the service uses can. To run a probe
+script by hand, and to remove the job afterwards (launchd restarts it otherwise):
+
+```sh
+launchctl submit -l com.maxlee.probe -o /tmp/probe.log -e /tmp/probe.log -- \
+  /Users/maxwelllee12/.local/bin/uv run --directory /Users/maxwelllee12/life-dashboard python /path/to/probe.py
+launchctl remove com.maxlee.probe
+```
+
 What the job does: Week, Today, one sparkle for each small win the shown day earned, Books,
 wrapping, each rendered for today's America/New_York day from a fresh db connection. A still
 stays `screen_seconds`; Books (pages are 2 s each) stays until it has played through; a
@@ -313,6 +323,26 @@ Measured on the panel (2026-10-04): it takes a request in at about 12 KB/s, so a
 screen stays up. Each command times out after 5 s per phase and 10 s overall; a clip gets
 4 s per frame. A refused connection is retried twice. The adapter sends
 `Draw/ResetHttpGifId` before its first clip and every 32 clips after.
+
+Measured on the panel by direct probe (2026-10-06):
+- An upload costs about 0.17 s plus 78 ms per KB of body: a 64-pixel frame (16.4 KB) 1.45 s,
+  a 32-pixel frame (`PicWidth` 32, 4.1 KB) 0.49 s. The 32-pixel animation was accepted
+  (ReturnCode 0 on all 8 frames); whether it displays, and at what size, is unseen.
+- `Device/PlayTFGif` (FileType 2) replies ReturnCode 0 at once and the panel then fetches the
+  URL once with `DivoomApp/1.0 (compatible; curl/7.68.0)`. What it shows afterwards is its
+  cloud channel (the "HOT" heart), not the GIF: seen by Max with Pillow-written GIFs and
+  again with GIFs in the form of Divoom's own sample (`app/render/adapters/panelgif.py`).
+  `[device] fetch_clips` therefore stays false.
+- An unknown command is ReturnCode 1, "Only accept JSON parameters"; `Device/PlayGif` (the
+  Times Gate command) is unknown in every parameter form tried.
+- ReturnCode 0 does not mean done: `Draw/UseHTTPCommandSource` returns 0 and never fetches
+  its `CommandUrl`; `Draw/CommandList` returns 0 and does not run a `Device/PlayTFGif` nested
+  in it; `Channel/GetAllConf`, `Device/GetDeviceTime` and `Draw/GetHttpGifId` return 0 with
+  no fields. `Channel/GetIndex` answers 1 while uploaded frames are showing;
+  `Channel/SetIndex` 3 is accepted and read back as 3 (the panel was put back to 1).
+- Not yet seen by anyone: a single fetched GIF left alone for 20 s (is the heart a splash
+  that gives way?), Divoom's own sample URL, a fetch after `Channel/SetIndex` 3, and the
+  32-pixel upload. The four were run once, labelled TEST A to D, with nobody watching.
 
 When something fails (device off, timeout, one screen's renderer raising): one
 `job device_rotation failed: ...` line per distinct error in the err log (repeats are not

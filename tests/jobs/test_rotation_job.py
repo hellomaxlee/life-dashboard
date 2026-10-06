@@ -781,29 +781,27 @@ class FetchingAdapter(FakeAdapter):
         return self._knows
 
 
-def test_with_a_publisher_animations_are_fetched_and_stills_uploaded(db, jobs_settings):
+def test_with_a_publisher_every_clip_is_fetched_and_nothing_is_uploaded(db, jobs_settings):
     set_day(db, "2026-10-02", quality_workout=True, sleep_hours=8.0)
     clock, adapter = Clock(), FetchingAdapter()
-    urls = []
+    published = []
 
     def publish(clip):
-        urls.append(len(clip.frames))
-        return f"http://192.168.1.171:8080/pixoo/clip/{len(urls)}.gif"
+        published.append(len(clip.frames))
+        return f"http://192.168.1.171:8080/pixoo/clip/{len(published)}.gif"
 
     rotation = DeviceRotation(jobs_settings, opener(jobs_settings), adapter, clock, publish)
     names = []
     for _ in range(12):
         names.append(rotation.tick())
         clock.now = rotation.due()
-    assert "win-workout" in names and "win-sleep" in names
+    assert "win-workout" in names and "win-sleep" in names and "today" in names
     assert adapter.urls == [
-        "http://192.168.1.171:8080/pixoo/clip/1.gif",
-        "http://192.168.1.171:8080/pixoo/clip/2.gif",
+        f"http://192.168.1.171:8080/pixoo/clip/{n}.gif" for n in range(1, len(published) + 1)
     ]
-    assert urls == [20, 20], "only the sparkles were published"
-    assert all(len(clip.frames) == 1 for clip in adapter.sent), "stills are uploaded"
-    hows = {(s.name, s.how) for s in rotation.sends}
-    assert ("win-workout", "fetched") in hows and ("today", "uploaded") in hows
+    assert published.count(20) == 2 and published.count(1) == len(published) - 2
+    assert adapter.sent == [], "a still uploaded between two fetched clips flashes the heart"
+    assert {s.how for s in rotation.sends} == {"fetched"} and len(rotation.sends) == 12
 
 
 def test_a_panel_that_does_not_know_the_fetch_command_gets_uploads_and_is_not_asked_again(
