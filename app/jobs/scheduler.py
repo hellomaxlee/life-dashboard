@@ -448,9 +448,8 @@ def build_scheduler(
         except ValueError:
             log.exception("%s not registered: bad [device] config", ROTATION_JOB)
         else:
-            rotation = DeviceRotation(
-                settings, open_conn, adapter, clip_url=clip_publisher(settings)
-            )
+            publisher = clip_publisher(settings) if settings.device.fetch_clips else None
+            rotation = DeviceRotation(settings, open_conn, adapter, clip_url=publisher)
             scheduler.rotation = rotation
             tick = guarded(ROTATION_JOB, rotation.tick, stats, quiet=SEND_ERRORS)
 

@@ -111,6 +111,7 @@ class DeviceConfig:
     night_brightness: int = 10
     night_from: str = "22:00"
     night_until: str = "05:30"
+    fetch_clips: bool = False
 
 
 @dataclass(frozen=True)
@@ -443,6 +444,9 @@ def load_settings(config_path: Path | None = None) -> Settings:
             ),
             night_until=_clock(
                 "device.night_until", raw.get("device", {}).get("night_until", "05:30")
+            ),
+            fetch_clips=_flag(
+                "device.fetch_clips", raw.get("device", {}).get("fetch_clips", False)
             ),
         ),
         anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY", "").strip(),

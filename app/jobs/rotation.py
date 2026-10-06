@@ -102,7 +102,7 @@ class DeviceRotation:
         frame and shows a loading cycle for an animation, and switching between a fetched GIF
         and an uploaded frame made the panel flash its own cloud channel ("heart HOT") in
         between (Max, 2026-10-06). A panel that does not know the command gets uploads."""
-        if self._clip_url is not None and self._fetch_works is not False:
+        if clip.animated and self._clip_url is not None and self._fetch_works is not False:
             if self._adapter.play_url(self._clip_url(clip)):
                 self._fetch_works = True
                 return "fetched"
