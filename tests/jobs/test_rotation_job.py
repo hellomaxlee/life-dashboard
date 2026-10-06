@@ -497,8 +497,9 @@ def test_with_a_host_the_job_is_registered_and_sends_through_the_pixoo_adapter(d
     assert scheduler.job_stats[ROTATION_JOB] == jobs.JobStats(runs=1)
     assert {str(request.url) for request in seen} == {f"http://{HOST}:9000/divoom_api"}
     commands = [json.loads(request.content)["Command"] for request in seen]
-    assert commands[:2] == ["Channel/SetBrightness", "Draw/ResetHttpGifId"]
-    assert commands[2:] == ["Draw/SendHttpGif"] * (len(seen) - 2) and len(seen) >= 3
+    assert commands == ["Channel/SetBrightness", "Device/PlayTFGif"], "the first still, fetched"
+    url = json.loads(seen[1].content)["FileName"]
+    assert url.startswith("http://") and url.endswith(".gif") and ":8080/pixoo/clip/" in url
 
 
 def test_the_real_adapter_is_built_for_the_host_with_short_timeouts(jobs_settings):
@@ -532,7 +533,7 @@ def test_the_job_comes_back_after_a_restart_and_starts_from_the_first_screen(
     def handler(request: httpx.Request) -> httpx.Response:
         body = json.loads(request.content)
         seen.append(body)
-        if body.get("PicOffset") == body.get("PicNum", 0) - 1:
+        if body.get("Command") == "Device/PlayTFGif":
             sent_whole.set()
         return httpx.Response(200, json={"ReturnCode": 0})
 
@@ -556,8 +557,8 @@ def test_the_job_comes_back_after_a_restart_and_starts_from_the_first_screen(
         first = render_screen("today", view_from_db(db, settings, today), NOON)
         assert sequence_names(view_from_db(db, settings, today))[0] == "today"
         assert seen[0]["Command"] == "Channel/SetBrightness"
-        assert seen[1] == {"Command": "Draw/ResetHttpGifId"}
-        assert len(seen) == 2 + len(first.frames) == 3
+        assert seen[1]["Command"] == "Device/PlayTFGif" and len(first.frames) == 1
+        assert len(seen) == 2
     assert schedulers[0] is not schedulers[1]
 
 
@@ -780,7 +781,7 @@ class FetchingAdapter(FakeAdapter):
         return self._knows
 
 
-def test_an_animation_is_fetched_by_the_panel_and_stills_are_uploaded(db, jobs_settings):
+def test_every_clip_is_fetched_by_the_panel_stills_included(db, jobs_settings):
     set_day(db, "2026-10-02", quality_workout=True, sleep_hours=8.0)
     clock, adapter = Clock(), FetchingAdapter()
     urls = []
@@ -795,14 +796,10 @@ def test_an_animation_is_fetched_by_the_panel_and_stills_are_uploaded(db, jobs_s
         names.append(rotation.tick())
         clock.now = rotation.due()
     assert "win-workout" in names and "win-sleep" in names
-    assert adapter.urls == [
-        "http://192.168.1.171:8080/pixoo/clip/1.gif",
-        "http://192.168.1.171:8080/pixoo/clip/2.gif",
-    ]
-    assert urls == [20, 20], "only the sparkles were published"
-    assert all(len(clip.frames) == 1 for clip in adapter.sent), "stills still go as uploads"
-    hows = {(s.name, s.how) for s in rotation.sends}
-    assert ("win-workout", "fetched") in hows and ("today", "uploaded") in hows
+    assert len(adapter.urls) == 12 and adapter.sent == [], "nothing is uploaded"
+    assert adapter.urls[0] == "http://192.168.1.171:8080/pixoo/clip/1.gif"
+    assert urls.count(20) == 2 and urls.count(1) == 10, "each page is its own one-frame GIF"
+    assert {s.how for s in rotation.sends} == {"fetched"}
 
 
 def test_a_panel_that_does_not_know_the_fetch_command_gets_uploads_and_is_not_asked_again(

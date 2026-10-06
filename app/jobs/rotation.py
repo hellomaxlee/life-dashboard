@@ -97,11 +97,12 @@ class DeviceRotation:
         self.sends: deque[SendRecord] = deque(maxlen=SEND_LOG_SIZE)
 
     def _deliver(self, clip: Clip) -> str:
-        """An animation goes as a GIF the panel fetches from this service when that is
-        available and the panel accepts it (a frame-by-frame upload costs about 1.5 s a frame
-        and shows a loading cycle); everything else, and a panel that does not know the
-        command, gets the frames uploaded."""
-        if clip.animated and self._clip_url is not None and self._fetch_works is not False:
+        """Every clip, stills included, goes as a GIF the panel fetches from this service when
+        a publisher is wired and the panel accepts the command: an upload costs about 1.5 s a
+        frame and shows a loading cycle for an animation, and switching between a fetched GIF
+        and an uploaded frame made the panel flash its own cloud channel ("heart HOT") in
+        between (Max, 2026-10-06). A panel that does not know the command gets uploads."""
+        if self._clip_url is not None and self._fetch_works is not False:
             if self._adapter.play_url(self._clip_url(clip)):
                 self._fetch_works = True
                 return "fetched"

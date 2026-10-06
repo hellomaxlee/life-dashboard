@@ -3,6 +3,12 @@
 Running log, newest first. The Lead reads this to find root causes and prioritize.
 Entry format: `## YYYY-MM-DD · <Title> (<Author>)` followed by terse bullets. Name the fixture combo on render/summary cycles.
 
+## 2026-10-06 · Every screen delivered as a fetched GIF; no more cloud-channel flash (Lucía Ferrer)
+- Max: "Why do I see a heart HOT before the daily panel?" That is the panel's own cloud channel ("Hot" gallery, SelectIndex 1). After a fetched GIF (`Device/PlayTFGif`), the next uploaded frame (`Draw/SendHttpGif`) made the panel drop back to that channel for the 1.5 s the upload took, so the heart showed between the sleep sparkle and Today.
+- `DeviceRotation._deliver` now sends every clip, stills included, as a GIF the panel fetches from the service (one-frame GIFs of 650 to 750 bytes; every frame decodes back pixel-exact, checked over a whole fixture rotation). No `Draw/SendHttpGif` at all while the panel accepts the fetch command; the upload path remains the fallback for a firmware that does not.
+- On the panel after the restart: every send 0.05 to 0.2 s (was 1.4 to 1.7 s), 0 failures, the access log showing the panel fetch each page. On-screen time is now the hold alone, so each page is up about 1.5 s less than before; `screen_seconds` can be raised if the stills feel brisk.
+- Gate: ruff clean; 1515 passed. The scheduler tests now assert the fetch command and URL instead of upload frames.
+
 ## 2026-10-05 · Animations: the panel fetches a GIF from the service instead of receiving 20 frames (Lucía Ferrer)
 - Max: "the transitions aren't super smooth it sometimes goes to the loading cycle before the small win animations." Cause: a 20-frame sparkle uploaded frame by frame takes about 32 s at the panel's 12 KB/s, and the panel shows its loading cycle while an animation is arriving.
 - `app/render/adapters/served.py` publishes an animated clip as a GIF (6.4 KB for a sparkle) served at `/pixoo/clip/<token>.gif`; `PixooAdapter.play_url` sends `Device/PlayTFGif` (FileType 2) with that address; `DeviceRotation._deliver` uses it for any animated clip when a publisher is wired, uploads frames for stills, and falls back to uploading, once and for all, if the panel answers the command with its unknown-command reply. The service's own LAN address is read off a UDP socket connected (never written to) towards the panel; the egress gate exempts that one file for `socket` and a test pins that it refuses any host off the LAN. `SendRecord.how` says "fetched" or "uploaded".
