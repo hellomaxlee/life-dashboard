@@ -6,7 +6,11 @@ and never as a miss: an empty dot is a quiet ring, a short night is a blue numbe
 
 The summary is shown as word-wrapped pages, two lines at a time, about two seconds each. A
 pixel scroll of a 110-character line needs some 300 frames and the device holds fewer than
-60, so pages are the form that reaches the panel as drawn.
+60, so pages are the form that reaches the panel as drawn. Its three voices are told apart by
+colour: a quotation in VOICE, its "- Author" in ATTRIBUTION, Max's own words in TEXT.
+
+Each screen's header word wears its own accent (palette.HEADERS) so the rotation reads as
+distinct places; the stamp on the right and the field labels inside keep TEXT and LABEL.
 """
 
 from __future__ import annotations
@@ -27,9 +31,11 @@ from app.render.font import (
 )
 from app.render.frame import SIZE, Clip, Color, Frame, new_frame, still
 from app.render.palette import (
+    ATTRIBUTION,
     DOTS,
     GOLD,
     GREEN,
+    HEADERS,
     LABEL,
     RING,
     SECONDARY,
@@ -38,9 +44,11 @@ from app.render.palette import (
     TEXT,
     TRACK,
     VIOLET,
+    VOICE,
     WHITE,
     WOOD,
     dim,
+    shelf_tint,
 )
 from app.render.usage import STALE_FRAME_MS, STALE_FRAMES, draw_usage, usage_state
 from app.render.view import DayView, has_health_data, valid_count, valid_sleep_hours
@@ -153,7 +161,7 @@ def _draw_streak(frame: Frame, streak: int) -> None:
 
 def _week_frame(view: DayView, now: datetime, tick: int) -> Frame:
     frame = new_frame()
-    draw_text(frame, LEFT, 2, "WEEK", LABEL, SMALL)
+    draw_text(frame, LEFT, 2, "WEEK", HEADERS["week"], SMALL)
     centres, radius = dot_layout(view.week_target)
     dots = _count(view.week_dots)
     streak = _count(view.streak_weeks)
@@ -266,7 +274,7 @@ def render_today(view: DayView, now: datetime | None = None) -> Clip:
     frame = new_frame()
     day = date.fromisoformat(view.day_shown or view.day_local)
     title = "TODAY" if view.day_shown in (None, view.day_local) else "YESTERDAY"
-    draw_text(frame, LEFT, 2, title, LABEL, SMALL)
+    draw_text(frame, LEFT, 2, title, HEADERS["today"], SMALL)
     weekday = _WEEKDAYS[day.weekday()]
     stamp = f"{weekday} {day.day}"
     if LEFT + text_width(title, SMALL) + TITLE_GAP > RIGHT + 1 - text_width(stamp, SMALL):
@@ -335,7 +343,7 @@ def _draw_book_count(frame: Frame, count: int, target: int) -> None:
 
 def _books_base(view: DayView) -> Frame:
     frame = new_frame()
-    draw_text(frame, LEFT, 2, "BOOKS", LABEL, SMALL)
+    draw_text(frame, LEFT, 2, "BOOKS", HEADERS["books"], SMALL)
     draw_text_right(frame, RIGHT, 2, view.day_local[:4], TEXT, SMALL)
     read = _count(view.books_ytd)
     if read is None:
@@ -351,12 +359,12 @@ def _books_base(view: DayView) -> Frame:
         if x0 + spine - 1 > RIGHT:
             break
         top = 41 - _SPINE_HEIGHTS[index % len(_SPINE_HEIGHTS)]
+        color = SPINES[index % len(SPINES)]
         if index < (read or 0):
-            color = SPINES[index % len(SPINES)]
             fill_rect(frame, x0, top, x0 + spine - 1, 40, color)
             fill_rect(frame, x0, top + 2, x0 + spine - 1, top + 2, dim(color, 0.45))
         else:
-            fill_rect(frame, x0, top, x0 + spine - 1, 40, TRACK)
+            fill_rect(frame, x0, top, x0 + spine - 1, 40, shelf_tint(color))
     fill_rect(frame, LEFT, 41, RIGHT, 42, WOOD)
     return frame
 
@@ -493,6 +501,71 @@ def wrap_pages(text: str) -> list[tuple[str, ...]]:
     return [tuple(lines[i : i + per_page]) for i in range(0, len(lines), per_page)]
 
 
+_CLAUSE_END = ".,;:!?"
+
+
+def summary_colors(text: str) -> list[Color]:
+    """One colour per character of a wrapped summary (its lines joined by spaces).
+
+    Max's rule (2026-10-05): the quotation in white, the author's name in gold, his own
+    clause in a third colour. So when the text holds a double-quoted quotation, the
+    quotation, marks included, is TEXT; a "- Author" after a closing mark is ATTRIBUTION to
+    the end of its clause (the first of .,;:!? inclusive) or of the text; everything else,
+    the data clause or the reflection around the quote, is VOICE. A text with no quotation,
+    or an odd number of marks, is all TEXT as before. A space takes the colour of the
+    character before it, so runs stay whole across the words they join.
+    """
+    colors = [TEXT] * len(text)
+    if text.count('"') % 2 or '"' not in text:
+        return colors
+    colors = [VOICE] * len(text)
+    index = 0
+    while index < len(text):
+        if text[index] != '"':
+            index += 1
+            continue
+        close = text.index('"', index + 1)
+        colors[index : close + 1] = [TEXT] * (close + 1 - index)
+        index = close + 1
+        dash = index
+        while dash < len(text) and text[dash] in " .,;:":
+            dash += 1
+        if text[dash : dash + 2] != "- ":
+            continue
+        end = dash
+        while end < len(text) and text[end] not in _CLAUSE_END:
+            end += 1
+        end = min(end + 1, len(text))
+        colors[dash:end] = [ATTRIBUTION] * (end - dash)
+        index = end
+    for position in range(1, len(text)):
+        if text[position] == " ":
+            colors[position] = colors[position - 1]
+    return colors
+
+
+def line_colors(lines: list[str]) -> list[list[Color]]:
+    """The colours of every character of every wrapped line, so a quotation that crosses a
+    line or a page keeps its colour on each."""
+    colors = summary_colors(" ".join(lines))
+    out: list[list[Color]] = []
+    start = 0
+    for line in lines:
+        out.append(colors[start : start + len(line)])
+        start += len(line) + 1
+    return out
+
+
+def _draw_runs(frame: Frame, x: int, y: int, line: str, colors: list[Color]) -> None:
+    """Draw a line as runs of one colour, each starting where the last left off, so the
+    pixels are those of one draw of the whole line and a single-colour line is one call."""
+    start = 0
+    for end in range(1, len(line) + 1):
+        if end == len(line) or colors[end] != colors[start]:
+            x = draw_text(frame, x, y, line[start:end], colors[start], BODY)
+            start = end
+
+
 def _draw_page_pips(frame: Frame, page: int, pages: int) -> None:
     width = pages * 3 - 1
     x0 = (SIZE - width) // 2
@@ -505,11 +578,12 @@ def render_books(view: DayView) -> Clip:
     """Books this year on a shelf, and the day's one-line summary in pages underneath."""
     base = _books_base(view)
     pages = wrap_pages(view.summary_line or NO_SUMMARY) or wrap_pages(NO_SUMMARY)
+    colors = iter(line_colors([line for page in pages for line in page]))
     frames: list[Frame] = []
     for number, page in enumerate(pages):
         frame = base.copy()
         for line, y in zip(page, SUMMARY_LINE_YS, strict=False):
-            draw_text(frame, LEFT, y, line, TEXT, BODY)
+            _draw_runs(frame, LEFT, y, line, next(colors))
         if len(pages) > 1:
             _draw_page_pips(frame, number, len(pages))
         frames.append(frame)

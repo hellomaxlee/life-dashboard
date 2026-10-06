@@ -27,14 +27,21 @@ DOT_CENTRES = ((11, 17), (32, 17), (53, 17))
 
 
 def page_lines(drawn: list[tuple]) -> list[list[str]]:
-    """The summary lines of each page, in order: a new page starts at each y=45 line."""
+    """The summary lines of each page, in order: a new page starts at each y=45 line. A line
+    with a quotation is drawn as several runs of colour on the same row; they are joined
+    back into the line, so a page reads the same whatever its colours."""
     pages: list[list[str]] = []
+    last_y = None
     for text, _x, y, font, _scale in drawn:
         if font != B or y not in (45, 54):
             continue
-        if y == 45:
+        if y == 45 and last_y != 45:
             pages.append([])
-        pages[-1].append(text)
+        if y == last_y:
+            pages[-1][-1] += text
+        else:
+            pages[-1].append(text)
+        last_y = y
     return pages
 
 
@@ -208,6 +215,29 @@ def test_books_screen_text_and_pages_week_41(monkeypatch, settings):
         ["you repeat", "is what you"],
         ["become."],
     ]
+
+
+def test_a_quoted_summary_is_recorded_as_runs_that_join_back_into_its_lines(monkeypatch, settings):
+    view, _ = load(WEEK_41, settings)
+    drawn = record_text(monkeypatch)
+    line = 'So. "What you repeat is what you become." - Aristotle, roughly.'
+    render_books(replace(view, summary_line=line))
+    runs = [item for item in drawn if item[3] == B and item[2] in (45, 54)]
+    assert [item[:3] for item in runs] == [
+        ("So. ", 2, 45),
+        ('"What', 2 + text_width("So. ", BODY) + 1, 45),
+        ("you repeat", 2, 54),
+        ("is what you", 2, 45),
+        ('become."', 2, 54),
+        ("- Aristotle,", 2, 45),
+        ("roughly.", 2, 54),
+    ]
+    assert page_lines(drawn) == [
+        ['So. "What', "you repeat"],
+        ["is what you", 'become."'],
+        ["- Aristotle,", "roughly."],
+    ]
+    assert " ".join(line for page in page_lines(drawn) for line in page) == line
 
 
 def test_page_pips_mark_the_current_page(settings):

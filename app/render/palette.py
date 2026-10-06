@@ -54,9 +54,31 @@ DOTS: tuple[Color, ...] = (CORAL, GOLD, TEAL)
 SPINES: tuple[Color, ...] = (CORAL, GOLD, TEAL, VIOLET, PINK, SKY, GREEN)
 CONFETTI: tuple[Color, ...] = (CORAL, GOLD, TEAL, VIOLET, PINK, SKY, GREEN, WHITE)
 
+# The header word of each rotation screen, one accent each, so the rotation reads as distinct
+# places. City keeps LABEL and Month its feature palette; the right-hand stamp stays TEXT.
+HEADERS: dict[str, Color] = {"today": VIOLET, "week": CORAL, "books": GOLD}
+
+# The summary's three voices (Max, 2026-10-05: the quotation in white, the author in gold, his
+# own clause in a third colour): a quotation, marks included, in TEXT; its "- Author" in GOLD;
+# the words around it in VOICE, a cream that through the panel curve sits at (255, 234, 181),
+# midway in blue between TEXT's (246, 246, 250) and GOLD's (255, 228, 110), told apart by
+# warmth, not by dimness. (255, 230, 170) was tried first and merged with TEXT at 1x. A
+# summary with no quotation is all TEXT.
+VOICE: Color = (255, 212, 120)
+ATTRIBUTION: Color = GOLD
+
+# An unread shelf slot is this fraction of the spine colour it will take when read. Through
+# the panel curve 0.18 keeps every tint under half the lit spine's luma (worst 0.46) with its
+# hue intact (HSV saturation at least 0.32), at about the weight the old grey track had.
+SHELF_TINT = 0.18
+
 
 def dim(color: Color, factor: float) -> Color:
     return (int(color[0] * factor), int(color[1] * factor), int(color[2] * factor))
+
+
+def shelf_tint(color: Color) -> Color:
+    return dim(color, SHELF_TINT)
 
 
 def hue(position: float, value: float = 1.0) -> Color:

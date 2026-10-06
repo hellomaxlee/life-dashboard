@@ -13,6 +13,7 @@ from app.render.celebrate import celebrations_for, party_clip, sparkle_clip
 from app.render.font import BODY, SMALL, draw_text, text_width
 from app.render.frame import SIZE, Clip, new_frame, still, upscale
 from app.render.gamma import led_gamma, led_lut
+from app.render.palette import SPINES
 from app.render.rotation import rotation_clips
 from app.render.screens import as_of_label, render_books, render_today, sleep_text
 from app.render.view import DayView
@@ -116,11 +117,11 @@ def test_books_shelf_counts_spines(settings):
     view, _ = load(WEEK_41, settings)
     for read in (0, 3, 12, 15):
         frame = render_books(replace(view, books_ytd=read)).poster
-        coloured = 0
+        lit_spines = 0
         for index in range(12):
-            if frame.getpixel((2 + index * 5, 40)) != (34, 36, 54):
-                coloured += 1
-        assert coloured == min(read, 12)
+            if frame.getpixel((2 + index * 5, 40)) == SPINES[index % len(SPINES)]:
+                lit_spines += 1
+        assert lit_spines == min(read, 12)
 
 
 def test_today_states(settings):
