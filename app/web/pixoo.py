@@ -30,6 +30,7 @@ from urllib.parse import urlencode
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
+from app.render.adapters import served
 from app.render.adapters.file import png_bytes
 from app.render.celebrate import CELEBRATION_ORDER, Celebration, celebrations_for, week_complete
 from app.render.frame import Clip
@@ -131,6 +132,15 @@ def pixoo_rotation(
     view, now = _resolve(request, day, fixture)
     dwell = request.app.state.settings.device.screen_seconds
     return JSONResponse(rotation_payload(view, now, fixture, dwell))
+
+
+@router.get("/pixoo/clip/{token}.gif")
+def clip_gif(token: str) -> Response:
+    """An animated clip the device job published for the panel to fetch (adapters/served)."""
+    data = served.served(token)
+    if data is None:
+        raise HTTPException(404, "no such clip")
+    return Response(data, media_type="image/gif", headers={"Cache-Control": "no-store"})
 
 
 @router.get("/pixoo/frame/{name}/{index}.png")

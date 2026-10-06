@@ -53,6 +53,7 @@ PATH = "/divoom_api"
 TIMEOUT_S = 5.0
 FRAME_BUDGET_S = 4.0
 RESET_EVERY = 32
+UNKNOWN_COMMAND = "Only accept JSON parameters"
 NO_REUSE = {"Connection": "close"}
 CONNECT_TRIES = 3
 CONNECT_RETRY_S = 0.3
@@ -125,6 +126,20 @@ class PixooAdapter:
         if not isinstance(reply, dict) or reply.get("ReturnCode") != 0:
             raise PixooError(f"{body.get('Command')}: device replied {reply!r}")
         return reply
+
+    def play_url(self, url: str) -> bool:
+        """Ask the panel to fetch and loop a GIF from `url` (a LAN address of this service).
+        True when the panel accepted the command; False when this firmware does not know it
+        (ReturnCode 1 with its "Only accept JSON parameters" reply), so the caller can upload
+        the frames instead. Any other failure raises PixooError."""
+        body = {"Command": "Device/PlayTFGif", "FileType": 2, "FileName": url}
+        try:
+            self._command(body)
+        except PixooError as exc:
+            if UNKNOWN_COMMAND in str(exc):
+                return False
+            raise
+        return True
 
     def set_brightness(self, percent: int) -> None:
         """0 to 100. Accepted by the panel (ReturnCode 0); the effect is judged by eye."""

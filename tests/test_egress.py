@@ -24,6 +24,8 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SCAN_DIRS = ("app", "tools")
 
@@ -44,6 +46,11 @@ BANNED_IMPORTS = (
     ("telnetlib",),
 )
 BANNED_PROGRAMS = frozenset({"curl", "wget", "nc"})
+# The one file allowed `socket`: it reads this machine's own LAN address off a UDP socket
+# connected (never written to) towards the panel, whose address `require_lan_host` has
+# already confined to the home network. `test_the_served_module_only_connects_to_the_lan`
+# pins that use.
+SOCKET_EXEMPT = ("app/render/adapters/served.py",)
 PROCESS_CALLS = frozenset(
     {"run", "Popen", "call", "check_call", "check_output", "system", "popen", "getoutput"}
 )
@@ -196,6 +203,8 @@ def scan_file(path: Path) -> list[Violation]:
 
     for node in ast.walk(tree):
         banned = _banned_import(node)
+        if banned == "socket" and path.as_posix().endswith(SOCKET_EXEMPT):
+            continue
         if banned:
             found.append(Violation(path, node.lineno, "import", f"{banned} (use httpx)"))
 
@@ -379,3 +388,14 @@ def test_starting_our_own_python_is_not_a_violation(tmp_path: Path) -> None:
         'subprocess.run(["sqlite3", "data/life.db", "PRAGMA integrity_check"])\n'
     )
     assert _scan_one(tmp_path, "tools", source) == []
+
+
+def test_the_served_module_only_connects_to_the_lan() -> None:
+    from app.render.adapters import served
+
+    source = (REPO_ROOT / SOCKET_EXEMPT[0]).read_text(encoding="utf-8")
+    assert source.count("socket.socket(") == 1 and "SOCK_DGRAM" in source, "one UDP socket"
+    assert "sendto" not in source and "sendall" not in source and "create_connection" not in source
+    for host in ("8.8.8.8", "pixoo.example.com", "127.0.0.1"):
+        with pytest.raises(ValueError):
+            served.own_address(host)

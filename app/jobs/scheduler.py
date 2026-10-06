@@ -37,6 +37,8 @@ from app.jobs.rotation import (
 from app.metrics.job import RECOMPUTE_JOB, ROLLOVER_JOB, run_recompute
 from app.month import store as month_store
 from app.month.generate import ensure_month_feature
+from app.render.adapters import served
+from app.render.frame import Clip
 from app.summary import memory
 from app.summary.run import write_summary
 from app.timeutil import from_utc_iso, local_day, now_utc
@@ -446,7 +448,9 @@ def build_scheduler(
         except ValueError:
             log.exception("%s not registered: bad [device] config", ROTATION_JOB)
         else:
-            rotation = DeviceRotation(settings, open_conn, adapter)
+            rotation = DeviceRotation(
+                settings, open_conn, adapter, clip_url=clip_publisher(settings)
+            )
             scheduler.rotation = rotation
             tick = guarded(ROTATION_JOB, rotation.tick, stats, quiet=SEND_ERRORS)
 
@@ -471,6 +475,17 @@ def build_scheduler(
             )
 
     return scheduler
+
+
+def clip_publisher(settings: Settings) -> Callable[[Clip], str]:
+    """Publish an animated clip as a GIF this service serves and give back the URL the panel
+    can fetch it from."""
+    host, port = settings.device.pixoo_host, settings.server.port
+
+    def publish(clip: Clip) -> str:
+        return served.clip_url(host, port, served.publish(clip))
+
+    return publish
 
 
 def start_scheduler(settings: Settings, open_conn: OpenConn) -> BackgroundScheduler:

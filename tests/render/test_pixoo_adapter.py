@@ -172,7 +172,11 @@ def test_disabled_by_default_and_only_the_rotation_job_and_the_hand_check_call_i
                 name in text for name in ("PixooAdapter", "pixoo_from_settings", "adapters.pixoo")
             ):
                 users.append(str(path.relative_to(REPO_ROOT)))
-    assert sorted(users) == ["app/jobs/rotation.py", "tools/pixoo_check.py"]
+    assert sorted(users) == [
+        "app/jobs/rotation.py",
+        "app/render/adapters/served.py",
+        "tools/pixoo_check.py",
+    ]
 
 
 def test_a_reply_that_drips_past_the_command_budget_fails_the_send(settings):
@@ -225,3 +229,39 @@ def test_brightness_goes_as_one_channel_command():
     assert [json.loads(r.content) for r in seen] == [
         {"Command": "Channel/SetBrightness", "Brightness": 10}
     ]
+
+
+def test_play_url_is_one_command_and_an_unknown_command_reply_means_no(settings):
+    seen: list[httpx.Request] = []
+    adapter = PixooAdapter(HOST, fake_device(seen))
+    assert adapter.play_url("http://192.168.1.171:8080/pixoo/clip/abc.gif") is True
+    assert json.loads(seen[0].content) == {
+        "Command": "Device/PlayTFGif",
+        "FileType": 2,
+        "FileName": "http://192.168.1.171:8080/pixoo/clip/abc.gif",
+    }
+    deaf = PixooAdapter(HOST, fake_device([], fail_on="Device/PlayTFGif"))
+    assert deaf.play_url("http://192.168.1.171:8080/x.gif") is False
+
+    def refuse(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("no route", request=request)
+
+    with pytest.raises(PixooError):
+        PixooAdapter(HOST, httpx.Client(transport=httpx.MockTransport(refuse))).play_url("u")
+
+
+def test_published_clips_are_served_as_gifs_and_only_the_newest_are_kept(settings, client):
+    from app.render.adapters import served
+    from app.render.celebrate import sparkle_clip
+
+    served.clear()
+    token = served.publish(sparkle_clip("workout"))
+    assert served.publish(sparkle_clip("workout")) == token, "the same clip is one entry"
+    body = client.get(f"/pixoo/clip/{token}.gif")
+    assert body.status_code == 200 and body.headers["content-type"] == "image/gif"
+    assert body.content[:6] in (b"GIF87a", b"GIF89a") and len(body.content) < 20_000
+    assert client.get("/pixoo/clip/nope.gif").status_code == 404
+    for seed in range(served.KEEP + 2):
+        served.publish(sparkle_clip("sleep", seed=seed))
+    assert served.served(token) is None, "pushed out by newer clips"
+    assert served.clip_url("192.168.1.185", 8080, "t").endswith(":8080/pixoo/clip/t.gif")

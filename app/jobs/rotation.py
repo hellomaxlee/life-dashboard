@@ -44,6 +44,8 @@ class ClipAdapter(Protocol):
 
     def set_brightness(self, percent: int) -> None: ...
 
+    def play_url(self, url: str) -> bool: ...
+
 
 def brightness_at(now: datetime, settings: Settings) -> int:
     """The night level from `night_from` until `night_until`, home time, across midnight if
@@ -68,6 +70,7 @@ class SendRecord:
     seconds: float
     hold_ms: int
     error: str | None = None
+    how: str = "uploaded"
 
 
 class DeviceRotation:
@@ -77,11 +80,14 @@ class DeviceRotation:
         open_conn: Callable[[], sqlite3.Connection],
         adapter: ClipAdapter,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+        clip_url: Callable[[Clip], str] | None = None,
     ) -> None:
         self._settings = settings
         self._open_conn = open_conn
         self._adapter = adapter
         self._clock = clock
+        self._clip_url = clip_url
+        self._fetch_works: bool | None = None
         self._next = 0
         self._hold_until: datetime | None = None
         self._brightness: int | None = None
@@ -90,18 +96,32 @@ class DeviceRotation:
         self._page_count = 1
         self.sends: deque[SendRecord] = deque(maxlen=SEND_LOG_SIZE)
 
+    def _deliver(self, clip: Clip) -> str:
+        """An animation goes as a GIF the panel fetches from this service when that is
+        available and the panel accepts it (a frame-by-frame upload costs about 1.5 s a frame
+        and shows a loading cycle); everything else, and a panel that does not know the
+        command, gets the frames uploaded."""
+        if clip.animated and self._clip_url is not None and self._fetch_works is not False:
+            if self._adapter.play_url(self._clip_url(clip)):
+                self._fetch_works = True
+                return "fetched"
+            self._fetch_works = False
+        self._adapter.send(clip)
+        return "uploaded"
+
     def _send(self, clip: Clip, name: str, page: int, pages: int, hold: int) -> None:
         at, started = to_utc_iso(self._clock()), time.monotonic()
         error = None
+        how = "uploaded"
         try:
-            self._adapter.send(clip)
+            how = self._deliver(clip)
         except Exception as exc:
             error = f"{type(exc).__name__}: {exc}"
             raise
         finally:
             took = round(time.monotonic() - started, 2)
             self.sends.append(
-                SendRecord(at, name, page, pages, len(clip.frames), took, hold, error)
+                SendRecord(at, name, page, pages, len(clip.frames), took, hold, error, how)
             )
 
     def tick(self) -> str:

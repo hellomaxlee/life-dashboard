@@ -767,3 +767,63 @@ def test_the_send_log_is_served_as_json(jobs_settings, db):
     with TestClient(create_app(settings)) as client:
         body = client.get("/display/sends.json").json()
     assert body["sends"] == [] and isinstance(body["jobs"], dict)
+
+
+class FetchingAdapter(FakeAdapter):
+    def __init__(self, knows_fetch: bool = True) -> None:
+        super().__init__()
+        self.urls: list[str] = []
+        self._knows = knows_fetch
+
+    def play_url(self, url: str) -> bool:
+        self.urls.append(url)
+        return self._knows
+
+
+def test_an_animation_is_fetched_by_the_panel_and_stills_are_uploaded(db, jobs_settings):
+    set_day(db, "2026-10-02", quality_workout=True, sleep_hours=8.0)
+    clock, adapter = Clock(), FetchingAdapter()
+    urls = []
+
+    def publish(clip):
+        urls.append(len(clip.frames))
+        return f"http://192.168.1.171:8080/pixoo/clip/{len(urls)}.gif"
+
+    rotation = DeviceRotation(jobs_settings, opener(jobs_settings), adapter, clock, publish)
+    names = []
+    for _ in range(12):
+        names.append(rotation.tick())
+        clock.now = rotation.due()
+    assert "win-workout" in names and "win-sleep" in names
+    assert adapter.urls == [
+        "http://192.168.1.171:8080/pixoo/clip/1.gif",
+        "http://192.168.1.171:8080/pixoo/clip/2.gif",
+    ]
+    assert urls == [20, 20], "only the sparkles were published"
+    assert all(len(clip.frames) == 1 for clip in adapter.sent), "stills still go as uploads"
+    hows = {(s.name, s.how) for s in rotation.sends}
+    assert ("win-workout", "fetched") in hows and ("today", "uploaded") in hows
+
+
+def test_a_panel_that_does_not_know_the_fetch_command_gets_uploads_and_is_not_asked_again(
+    db, jobs_settings
+):
+    set_day(db, "2026-10-02", quality_workout=True)
+    clock, adapter = Clock(), FetchingAdapter(knows_fetch=False)
+    rotation = DeviceRotation(jobs_settings, opener(jobs_settings), adapter, clock, lambda c: "u")
+    for _ in range(14):
+        rotation.tick()
+        clock.now = rotation.due()
+    assert adapter.urls == ["u"], "asked once"
+    uploaded = [s for s in rotation.sends if s.name == "win-workout"]
+    assert len(uploaded) >= 2 and all(s.how == "uploaded" for s in uploaded)
+
+
+def test_without_a_publisher_animations_are_uploaded(db, jobs_settings):
+    set_day(db, "2026-10-02", quality_workout=True)
+    clock, adapter = Clock(), FetchingAdapter()
+    rotation = DeviceRotation(jobs_settings, opener(jobs_settings), adapter, clock)
+    for _ in range(8):
+        rotation.tick()
+        clock.now = rotation.due()
+    assert adapter.urls == [] and any(len(c.frames) == 20 for c in adapter.sent)
