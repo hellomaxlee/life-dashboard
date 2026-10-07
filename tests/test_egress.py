@@ -399,3 +399,34 @@ def test_the_served_module_only_connects_to_the_lan() -> None:
     for host in ("8.8.8.8", "pixoo.example.com", "127.0.0.1"):
         with pytest.raises(ValueError):
             served.own_address(host)
+
+
+_HTTPX_CLIENT = re.compile(r"httpx\.(?:Async)?Client\((?P<args>[^)]*)\)")
+
+
+def httpx_clients_trusting_env(root: Path) -> list[str]:
+    """Every `httpx.Client(` / `httpx.AsyncClient(` under app/ whose arguments do not carry
+    `trust_env=False`; a proxy set in the environment would otherwise route the LAN-only
+    service's requests through it. The Anthropic SDK's own clients are not httpx
+    constructions here and are not checked."""
+    found: list[str] = []
+    for path in sorted((root / "app").rglob("*.py")):
+        if any(part in ("__pycache__", ".venv") for part in path.parts):
+            continue
+        for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            for match in _HTTPX_CLIENT.finditer(line):
+                if "trust_env=False" not in match.group("args"):
+                    found.append(f"{path.relative_to(root)}:{lineno}: {line.strip()}")
+    return found
+
+
+def test_every_httpx_client_in_app_ignores_proxy_environment() -> None:
+    assert httpx_clients_trusting_env(REPO_ROOT) == []
+
+
+def test_httpx_proxy_gate_catches_a_client_without_trust_env(tmp_path: Path) -> None:
+    (tmp_path / "app").mkdir()
+    (tmp_path / "app" / "x.py").write_text(
+        "import httpx\nc = httpx.Client(timeout=5)\nd = httpx.AsyncClient(trust_env=False)\n"
+    )
+    assert httpx_clients_trusting_env(tmp_path) == ["app/x.py:2: c = httpx.Client(timeout=5)"]

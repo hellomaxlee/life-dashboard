@@ -7,7 +7,8 @@ luminance on a monitor the pixel has to be 255 * luminance^(1/2.2). With the def
 panel_gamma = 1.0 the net exponent is 1/2.2, which lifts dark tones hard: a track drawn at 34
 looks like 102, and two dim greys that differ on a monitor merge on the panel.
 
-Why 1.0. The Pixoo-64 has not been bought and its firmware gamma is unknown. Linear PWM is
+Why 1.0. The Pixoo-64 (on the LAN since 2026-10-04) has a firmware gamma nobody has
+measured. Linear PWM is
 the harsher case for a layout that leans on dim tones, so it is the default; if the firmware
 does correct to 2.2 the panel matches the raw frame, and the preview shows both. Legibility
 is judged on this output at 1x, never on the raw frame at browser zoom.

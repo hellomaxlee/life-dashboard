@@ -77,15 +77,15 @@ def test_week_screen_text_week_41(monkeypatch, settings):
     ]
 
 
-def test_stale_week_text_alternates_reset_and_age(monkeypatch, settings):
+def test_stale_week_text_is_one_still_with_the_age_on_line_2(monkeypatch, settings):
     view, now = load(DELAYED, settings)
     drawn = record_text(monkeypatch)
     clip = render_screen("week", view, now)
-    assert len(clip.frames) == 16
+    assert len(clip.frames) == 1
     per_frame = [drawn[i : i + 7] for i in range(0, len(drawn), 7)]
-    assert len(per_frame) == 16
-    for index, frame_text in enumerate(per_frame):
-        line_2 = "RESETS IN 14H" if index < 8 else "SEEN 2D AGO"
+    assert len(per_frame) == 1
+    for frame_text in per_frame:
+        line_2 = "SEEN 2D AGO"
         assert frame_text == [
             ("WEEK", 2, 2, S, 1),
             ("3 OF 3", 41, 2, S, 1),
@@ -94,7 +94,7 @@ def test_stale_week_text_alternates_reset_and_age(monkeypatch, settings):
             ("CLAUDE", 2, 47, S, 1),
             ("24%", 28, 47, S, 1),
             (line_2, 2, 54, S, 1),
-        ], index
+        ]
     assert [clip.poster.getpixel(xy) for xy in DOT_CENTRES] == [CORAL, GOLD, TEAL]
 
 

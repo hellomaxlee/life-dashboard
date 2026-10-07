@@ -434,6 +434,20 @@ def _sort_key(text: str, tz: str) -> str:
     return to_utc_iso(parse_hae_datetime(text, tz))
 
 
+def widest_label(labels: set[str]) -> str:
+    return max(sorted(labels), key=lambda s: len(s.split("|")))
+
+
+def labels_nest(labels: set[str]) -> bool:
+    """True when one label lists every source the others carry (`Watch|iPhone` beside
+    `Watch`): the phone merged the sources per stamp itself, so no stamp is reported
+    twice and summing every row counts nothing twice. Standalone labels side by side
+    (`Apple Watch` beside `iPhone`, the per-second shape) are the same steps seen by two
+    devices, and only the largest source total is safe."""
+    widest = set(widest_label(labels).split("|"))
+    return all(set(label.split("|")) <= widest for label in labels)
+
+
 def reduce_samples(
     name: str, samples: list[Sample], units: str | None, summed_by_phone: bool
 ) -> list[DailyValue]:
@@ -455,8 +469,13 @@ def reduce_samples(
             totals: dict[str, float] = defaultdict(float)
             for r in rows:
                 totals[r.source] += r.value
-            source = max(sorted(totals), key=lambda s: totals[s])
-            value, rule = totals[source], "summed"
+            if labels_nest(set(totals)):
+                source = widest_label(set(totals))
+                value = sum(totals.values())
+            else:
+                source = max(sorted(totals), key=lambda s: totals[s])
+                value = totals[source]
+            rule = "summed"
         label = source if summed_by_phone else f"{source} ({rule})"
         out.append(DailyValue(day, name, value, units, label))
     return out
@@ -541,12 +560,13 @@ def parse_heart_rate_metric(
     win across rows, the average is a mean. No samples: these are whole-day figures."""
     by_day: dict[str, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
     sources: dict[str, set[str]] = defaultdict(set)
+    day_summaries = rows_are_day_summaries(rows)
     for row in rows:
         if not isinstance(row, dict) or "date" not in row:
             out.skipped_rows += 1
             continue
         stamp = str(row["date"])
-        if is_midnight_stamp(stamp):
+        if day_summaries:
             day = aggregate_day(stamp, tz)
         else:
             moment = parse_hae_datetime(stamp, tz)

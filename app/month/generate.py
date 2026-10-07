@@ -75,6 +75,7 @@ def make_client(settings: Settings) -> anthropic.Anthropic | None:
         base_url=API_BASE_URL,
         timeout=STREAM_TIMEOUT_S,
         max_retries=0,
+        http_client=anthropic.DefaultHttpxClient(trust_env=False),
     )
 
 

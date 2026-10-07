@@ -17,6 +17,7 @@ from app.render.adapters.pixoo import (
     pixoo_from_settings,
     require_lan_host,
 )
+from app.render.frame import Clip
 from tests.render import STALE, WEEK_41, load, rotation
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -63,9 +64,16 @@ def test_still_frame_goes_as_one_send_http_gif(settings):
     assert tuple(data[:3]) == clip.poster.getpixel((0, 0))
 
 
-def test_clip_sends_each_frame_with_its_offset_and_duration(settings):
+def sixteen_frame_clip(settings) -> Clip:
+    """A multi-frame animation for the adapter's frame-by-frame path; no rotation screen is
+    an animation any more (the stale Week became a still, 2026-10-07)."""
     view, now = load(STALE, settings)
-    clip = rotation(view, now)["week"]
+    poster = rotation(view, now)["week"].poster
+    return Clip(tuple(poster.copy() for _ in range(16)), (250,) * 16)
+
+
+def test_clip_sends_each_frame_with_its_offset_and_duration(settings):
+    clip = sixteen_frame_clip(settings)
     seen: list[httpx.Request] = []
     report = PixooAdapter(HOST, fake_device(seen)).send(clip)
     assert report.frames_sent == 16
@@ -152,8 +160,7 @@ def test_lan_hosts_pass():
 
 
 def test_send_budget_stops_a_slow_clip_between_frames(settings):
-    view, now = load(STALE, settings)
-    clip = rotation(view, now)["week"]
+    clip = sixteen_frame_clip(settings)
     seen: list[httpx.Request] = []
     with pytest.raises(PixooError, match="send budget at frame 0 of 16"):
         PixooAdapter(HOST, fake_device(seen), frame_budget_s=0).send(clip)

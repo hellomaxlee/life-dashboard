@@ -411,6 +411,7 @@ def test_the_real_client_is_pinned_to_the_api_host_and_built_only_with_a_key(key
     assert str(client.base_url).rstrip("/") == "https://api.anthropic.com"
     assert client.max_retries == 0
     assert client.timeout == generate.STREAM_TIMEOUT_S
+    assert client._client.trust_env is False
     assert hasattr(client.messages, "stream")
 
 

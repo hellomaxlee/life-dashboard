@@ -98,7 +98,12 @@ class Payload:
 
 
 def lens_for(day: date) -> str:
-    return LENSES[day.toordinal() % len(LENSES)]
+    """Seven lenses over seven weekdays: a plain `ordinal % 7` would pin each lens to one
+    weekday for ever, so the sequence shifts by one each Monday-to-Sunday week; every week
+    still sees all seven, and every lens visits every weekday within 49 days."""
+    ordinal = day.toordinal()
+    week = (ordinal - 1) // len(LENSES)
+    return LENSES[(ordinal + week) % len(LENSES)]
 
 
 def described_day(shown_day: str) -> str:

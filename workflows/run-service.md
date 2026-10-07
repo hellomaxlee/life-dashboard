@@ -313,20 +313,23 @@ launchctl remove com.maxlee.probe
 What the job does: Today, City, Week, Month, Books, one sparkle for each small win the shown
 day earned, the party on a completed week, wrapping, each rendered for today's
 America/New_York day from a fresh db connection. A still stays `screen_seconds`; Books
-(pages are 2 s each) stays until it has played through; a sparkle is three stills held 0.3 s
+(pages are 2 s each) stays until it has played through; a sparkle is five stills held 0.3 s
 each and the party six, sent one at a time like Books pages, so neither ever shows the
 panel's loading cycle (which runs for as long as a multi-frame animation takes to upload:
 30 s for the 20-frame sparkle they replaced, 2026-10-07). A celebration step is on screen
-for its hold plus the 1.45 s the next still takes to upload, so a sparkle runs about 5 s and
+for its hold plus the 1.45 s the next still takes to upload, so a sparkle runs about 9 s and
 the party about 10; four steps held a second each ran 10 s and read as lag (Max,
-2026-10-07). After each screen the job moves
+2026-10-07). A stale Claude reading on the Week screen is a still too (amber dot, amber
+age line); its 16-frame blink was an animation and cost a loading cycle every rotation
+(Lucia, 2026-10-07). After each screen the job moves
 its own next run to the end of that hold; a failed send waits one dwell and then tries the
 next screen. A restart begins again at Today. `screen_seconds` under 3 or a bad host logs
 `device_rotation not registered: bad [device] config` and the rest of the service runs.
 
 Measured on the panel (2026-10-04): it takes a request in at about 12 KB/s, so a still is
 1.4 s to send and a 4-page Books 5.9 s; an animation of n frames takes 1.45 n seconds, with
-the loading cycle showing throughout (hence the celebrations as stills, above). Each command times out after 5 s per phase and 10 s overall; a clip gets
+the loading cycle showing throughout (no screen is sent as an animation any more; a still
+has no loading cycle). Each command times out after 5 s per phase and 10 s overall; a clip gets
 4 s per frame. A refused connection is retried twice. The adapter sends
 `Draw/ResetHttpGifId` before its first clip and every 32 clips after.
 
@@ -375,10 +378,20 @@ When something fails (device off, timeout, one screen's renderer raising): one
 `job device_rotation failed: ...` line per distinct error in the err log (repeats are not
 logged), nothing is sent on that tick, and the next tick tries the next screen.
 
-The week-complete party clip exists but is not in the rotation.
+Night dimming: the job sets the panel to `night_brightness` (3) from `night_from` (22:00)
+until `night_until` (05:30) home time and to `brightness` (100) the rest of the day
+(`brightness_at` in `app/jobs/rotation.py`, applied before a send when the level changes).
+Equal times mean never dimmed.
+
+`tools.pixoo_check` beside the live job: tolerated, not clean. The tool builds its own
+adapter, which sends `Draw/ResetHttpGifId` and numbers its PicIDs from 1 while the job's
+adapter keeps its own count; the panel shows whichever send landed last, a send may be
+refused while the other sender's is in flight (the adapter's connect retry covers that), and
+the timings the tool prints include that contention (the maxima in the table above). Nothing
+is left broken: the job's next `ResetHttpGifId` (every 32 clips) and its next tick put the
+rotation back. For clean timings stop the service first (`launchctl bootout`, section 5).
 
 Still unverified on the panel:
-- that a sparkle animates at its 70 ms frame time and Books pages at 2 s (PicSpeed);
 - that it keeps showing the last clip while the service is down ("never blanks");
 - the reset interval of 32 (a community figure for the older API);
 - brightness, gamma and legibility over a full day (Phase 5).

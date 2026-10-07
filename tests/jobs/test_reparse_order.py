@@ -124,5 +124,6 @@ def test_raw_write_is_flushed_and_fsynced_before_the_row_exists(db, settings, mo
     monkeypatch.setattr(health.os, "fsync", recording_fsync)
     archived = health.archive_raw(db, settings.storage.raw_dir, body)
 
-    assert synced == [(len(body), 0)]
+    assert synced[0] == (len(body), 0)
+    assert [rows for _, rows in synced] == [0, 0]  # the file, then its directory
     assert archived.path.read_bytes() == body

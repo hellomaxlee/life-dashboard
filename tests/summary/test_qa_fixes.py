@@ -321,5 +321,6 @@ def test_constant_last_resort_is_reachable_only_when_the_fact_clause_itself_fail
     everything = Recent(similarity_lines=tuple(fb.candidates(payload)))
     assert fb.fallback_line(payload, everything, TH).line != fb.ULTIMATE_LINE
     monkeypatch.setattr(fb, "fact_clause", lambda p: "Load 999, crushed it.")
-    result = fb.fallback_line(payload, everything, TH)
+    assert fb.fallback_line(payload, everything, TH).line != fb.ULTIMATE_LINE
+    result = fb.fallback_line(payload, everything, 0.0)
     assert result.line == fb.ULTIMATE_LINE and result.last_resort

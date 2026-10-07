@@ -47,12 +47,16 @@ SYSTEM_PROMPT = (
     "When hr_resolution is 'minutes' you get the day's bouts (contiguous minutes at or above "
     "zone one, ordered by load) with duration, average and peak HR, zone minutes and load; "
     "judge the longest sustained bout. When hr_resolution is 'daily' you get whole-day figures "
-    "only: credit the day only when a sustained effort is obvious (daily average well above "
-    "resting with a peak in zone four or five); otherwise answer no and say the resolution was "
-    "too low to tell. Reply with the JSON object only. The reason is one plain clause of at "
+    "only: answer no, say the resolution is too low to tell a bout from a spike, and credit "
+    "waits for minute data or a recorded workout. "
+    "Reply with the JSON object only. The reason is one plain clause of at "
     f"most {REASON_MAX} characters, may cite only numbers given in the inputs or stated here, "
-    "and names zones in words (zone three, never zone 3) so every digit in it is an input."
+    "and names zones in words (zone three, never zone 3) so every digit in it is an input. "
+    "The reason is read by Max on his dashboard: state what the numbers show in one sentence, "
+    "no advice, no praise, no blame."
 )
+DAILY_RESOLUTION_RULE = "answer no, say the resolution is too low to tell a bout from a spike"
+REASON_AUDIENCE_RULE = "no advice, no praise, no blame"
 
 VERDICT_SCHEMA = {
     "type": "object",

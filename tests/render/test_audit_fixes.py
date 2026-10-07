@@ -502,3 +502,20 @@ def test_the_workout_sparkle_takes_the_colour_of_the_weeks_nth_dot(settings):
     first = render_screen("win-workout", replace(view, week_dots=1), now)
     third = render_screen("win-workout", replace(view, week_dots=3), now)
     assert first.frames[-1].getpixel(centre) == CORAL and third.frames[-1].getpixel(centre) == TEAL
+
+
+def test_party_labels_sit_on_black_with_no_confetti_between_their_letters():
+    """Lucia's display audit (2026-10-07): on the last party step confetti landed between the
+    letters of N OF N and WEEK DONE. The boxes are cleared before the text goes down."""
+    from app.render.celebrate import PARTY_STEPS, _rainbow_wave, party_clip
+
+    for step, frame in enumerate(party_clip(3, 3).frames[3:], start=3):
+        label = "3 OF 3"
+        x = (64 - text_width(label, SMALL)) // 2
+        box = frame.crop((x - 1, 30, x + text_width(label, SMALL) + 1, 37))
+        assert set(box.getdata()) <= {(0, 0, 0), (255, 255, 255)}, step
+        wx = (64 - text_width("WEEK DONE", BODY)) // 2
+        wave_box = (wx - 1, 39, wx + text_width("WEEK DONE", BODY) + 1, 52)
+        alone = new_frame()
+        _rainbow_wave(alone, "WEEK DONE", 42, PARTY_STEPS[step])
+        assert frame.crop(wave_box).tobytes() == alone.crop(wave_box).tobytes(), step

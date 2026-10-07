@@ -593,3 +593,20 @@ def test_a_health_push_pulls_the_recompute_job_to_now(jobs_settings, monkeypatch
     finally:
         if scheduler.running:
             scheduler.shutdown(wait=False)
+
+
+def test_guarded_job_logs_the_traceback_once_and_one_line_on_repeats(caplog):
+    stats: dict[str, JobStats] = {}
+
+    def broken() -> None:
+        raise RuntimeError("schema version 9 and this code expects 8")
+
+    run = jobs.guarded("broken", broken, stats)
+    run()
+    assert caplog.text.count("Traceback") == 1
+    caplog.clear()
+    run()
+    run()
+    assert "Traceback" not in caplog.text
+    assert caplog.text.count("job broken failed again: RuntimeError: schema version 9") == 2
+    assert stats["broken"].failures == 3

@@ -50,7 +50,7 @@ def test_preview_images_are_pillow_png_or_gif_bytes(client, settings):
         gif = Image.open(io.BytesIO(response.content))
         assert gif.size == (512, 512) and gif.n_frames > 1
     stale = client.get(f"/preview/image/week?fixture={STALE}")
-    assert stale.headers["content-type"] == "image/gif"
+    assert stale.headers["content-type"] == "image/png"
 
 
 def test_preview_by_date_on_an_empty_database_still_renders(client):
@@ -88,7 +88,7 @@ def test_render_tool_writes_the_documented_files(tmp_path, settings, capsys):
     assert {p.name for p in out.iterdir()} == set(NAMES)
     assert {p.name for p in (out / "today").iterdir()} == stills
     assert {p.name for p in (out / "month").iterdir()} == stills, "no feature: the calendar"
-    assert {p.name for p in (out / "week").iterdir()} == stills | clips
+    assert {p.name for p in (out / "week").iterdir()} == stills, "stale Week is a still"
     view, now = load(STALE, settings)
     for name, count in (("sparkle", 5), ("party", 6)):
         assert {p.name for p in (out / name).iterdir()} == stills | clips | pages(count), name
@@ -102,7 +102,7 @@ def test_render_tool_writes_the_documented_files(tmp_path, settings, capsys):
     assert Image.open(out / "today" / "frame_1x.png").size == (64, 64)
     assert Image.open(out / "today" / "frame_gamma_8x.png").size == (512, 512)
     printed = capsys.readouterr().out
-    assert "week: 16 frames, 4000 ms" in printed and "month: 1 frame, 8000 ms" in printed
+    assert "week: 1 frame, 8000 ms" in printed and "month: 1 frame, 8000 ms" in printed
     names = [line.split(":")[0] for line in printed.splitlines() if not line.startswith(" ")]
     assert names == [
         "today",

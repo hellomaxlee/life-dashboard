@@ -5,8 +5,10 @@ python -m tools.pixoo_check --host 192.168.1.50 --screen city --screen win-worko
 python -m tools.pixoo_check --host 192.168.1.50 --date 2026-10-04
 
 Without --date the screens come from a fixture day, so no Health data is needed. Nothing is
-read from or written to `config.toml` and the service is not involved: the rotation job
-stays off until `device.pixoo_host` is set. Each screen is held as the job would hold it, in the
+read from or written to `config.toml` and the service is not involved: `device.pixoo_host`
+is set, so the live rotation job keeps sending beside this tool (the panel shows whichever
+send landed last and the timings printed here include that contention; stop the service for
+clean numbers). Each screen is held as the job would hold it, in the
 job's order (Today, City, Week, Month, Books, the earned small wins, the party); a paged screen goes
 page by page as stills.
 See workflows/run-service.md section 15.

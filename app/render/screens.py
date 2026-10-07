@@ -50,7 +50,7 @@ from app.render.palette import (
     dim,
     shelf_tint,
 )
-from app.render.usage import STALE_FRAME_MS, STALE_FRAMES, draw_usage, usage_state
+from app.render.usage import draw_usage, usage_state
 from app.render.view import DayView, has_health_data, valid_count, valid_sleep_hours
 from app.timeutil import from_utc_iso
 
@@ -66,7 +66,7 @@ PAGE_MS = 2000
 TITLE_GAP = 3
 SUMMARY_MAX_CHARS = 220
 SUMMARY_LINE_YS = (45, 54)
-PAGE_PIP_Y = 63
+PAGE_PIP_Y = SIZE - 1
 NO_SUMMARY = "No summary yet."
 _WEEKDAYS = ("MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN")
 _SPINE_HEIGHTS = (13, 11, 14, 12, 13, 10, 14, 12, 11, 13, 12, 14)
@@ -159,7 +159,7 @@ def _draw_streak(frame: Frame, streak: int) -> None:
     draw_text_centered(frame, STREAK_Y + 2, "MANY WK STREAK", LABEL, SMALL)
 
 
-def _week_frame(view: DayView, now: datetime, tick: int) -> Frame:
+def _week_frame(view: DayView, now: datetime) -> Frame:
     frame = new_frame()
     draw_text(frame, LEFT, 2, "WEEK", HEADERS["week"], SMALL)
     centres, radius = dot_layout(view.week_target)
@@ -182,18 +182,14 @@ def _week_frame(view: DayView, now: datetime, tick: int) -> Frame:
     else:
         _draw_streak(frame, streak)
 
-    draw_usage(frame, usage_state(view.claude, now, view.stale_hours), tick)
+    draw_usage(frame, usage_state(view.claude, now, view.stale_hours))
     return frame
 
 
 def render_week(view: DayView, now: datetime) -> Clip:
     """Three dots, the weeks-hit streak under them, the Claude usage bar at the bottom.
-    Animated only when stale."""
-    state = usage_state(view.claude, now, view.stale_hours)
-    if not state.stale:
-        return still(_week_frame(view, now, 0))
-    frames = tuple(_week_frame(view, now, tick) for tick in range(STALE_FRAMES))
-    return Clip(frames, (STALE_FRAME_MS,) * STALE_FRAMES)
+    A still even when the usage reading is stale: amber dot, amber age line."""
+    return still(_week_frame(view, now))
 
 
 def sleep_text(hours: float) -> str:

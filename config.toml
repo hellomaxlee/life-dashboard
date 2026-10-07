@@ -103,7 +103,8 @@ wellness_priority = ["hrv_ms", "resting_hr", "daylight_min"]
 [device]
 pixoo_host = "192.168.1.185"
 # Seconds a still screen stays up (3 or more). The Books screen stays until its summary has
-# paged through once; each small-win sparkle plays for about 4 seconds.
+# paged through once; a small-win sparkle is five stills sent one by one (about 9 s on the
+# panel) and the week-complete party six (about 10 s).
 screen_seconds = 6
 # Panel brightness, 0 to 100: `night_brightness` from `night_from` until `night_until`
 # (home timezone), `brightness` the rest of the day. Equal times = never dimmed.
@@ -111,8 +112,8 @@ brightness = 100
 night_brightness = 3
 night_from = "22:00"
 night_until = "05:30"
-# false: every frame is uploaded (1.5 s a frame, so a loading cycle of about 30 s before each
-# sparkle). true: the panel fetches every screen from this service as a GIF in a fifth of a
+# false: every screen is uploaded as stills, 1.45 s each, with no loading cycle (nothing is
+# sent as an animation any more). true: the panel fetches every screen from this service as a GIF in a fifth of a
 # second, but as of 2026-10-06 it then shows its own cloud channel ("HOT" heart) instead of
 # the GIF, whatever the GIF's form. Leave false until a watched test shows a fetched GIF.
 fetch_clips = false

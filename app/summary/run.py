@@ -3,7 +3,12 @@ complete day, and is stored under D's `daily_metrics` row (ruling 2026-10-02).
 
 Build the payload, check the cap, call the model (or not), gate the line,
 regenerate once, fall back, store. Idempotent per day: a stored line is returned without a
-call unless `force`.
+call unless `force`, with one exception: a line authored under an incomplete cell
+(`health-delayed`, `sleep-missing`, `workout-without-hr`) is rewritten once, with one model
+attempt, when the described day's cell has since become more complete. The job runs at 06:50,
+before the morning push; without the rewrite the day's line would describe a day with no data.
+The authoring cell lives in `attempts_json`, so the check needs no stored payload, and the
+superseded line stays in the rewrite's similarity window and in `attempts_json`.
 
 The model is "unavailable" when there is no API key, when the cap check refuses the call,
 when the call raises anything at all, and when the response's stop_reason is not end_turn;
@@ -16,7 +21,7 @@ import json
 import logging
 import re
 import sqlite3
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Any, Protocol
 
@@ -25,8 +30,8 @@ import anthropic
 from app.config import Settings
 from app.summary import memory, spend
 from app.summary.fallback import fallback_line
-from app.summary.gate import Recent, check_device_line, check_web_line
-from app.summary.payload import Payload, build_payload
+from app.summary.gate import Recent, canonical_quotes, check_device_line, check_web_line
+from app.summary.payload import COMPLETENESS, Payload, build_payload
 from app.summary.prompt import STABLE_SYSTEM_PROMPT, request_body, user_message
 from app.timeutil import now_utc
 
@@ -37,6 +42,9 @@ WEB_KEY = "summary_web_line"
 SOURCE_KEY = "summary_source"
 SUMMARY_KEYS = frozenset({DEVICE_KEY, WEB_KEY, SOURCE_KEY})
 MAX_MODEL_ATTEMPTS = 2
+REWRITE_ATTEMPTS = 1
+CELL_SOURCE = "cell"
+REWRITE_SOURCE = "rewrite"
 API_BASE_URL = "https://api.anthropic.com"
 FILLER = re.compile(r"^(?:sure|certainly|of course|okay|ok)[\s,.]*$", re.IGNORECASE)
 WRAP_OPEN = '"“'
@@ -72,7 +80,11 @@ def make_client(settings: Settings) -> anthropic.Anthropic | None:
     if not settings.anthropic_api_key:
         return None
     return anthropic.Anthropic(
-        api_key=settings.anthropic_api_key, base_url=API_BASE_URL, timeout=30, max_retries=1
+        api_key=settings.anthropic_api_key,
+        base_url=API_BASE_URL,
+        timeout=30,
+        max_retries=1,
+        http_client=anthropic.DefaultHttpxClient(trust_env=False),
     )
 
 
@@ -176,6 +188,37 @@ def store(
     )
 
 
+def authored_completeness(attempts: list[dict]) -> str | None:
+    for attempt in attempts:
+        if attempt.get("source") == CELL_SOURCE:
+            return attempt.get("completeness")
+    return None
+
+
+def rewrite_due(stored: memory.StoredLine, payload: Payload) -> bool:
+    """Once per day: the stored line was authored under a less complete cell than the
+    described day shows now, and no rewrite has been attempted yet."""
+    authored = authored_completeness(stored.attempts)
+    if authored not in COMPLETENESS or any(
+        a.get("source") == REWRITE_SOURCE for a in stored.attempts
+    ):
+        return False
+    return COMPLETENESS.index(payload.cell.completeness) < COMPLETENESS.index(authored)
+
+
+def _stored_result(stored: memory.StoredLine, called: bool = False, usd: float = 0.0):
+    return SummaryResult(
+        stored.day_local,
+        stored.line,
+        stored.web_line,
+        "stored",
+        stored.gate_result,
+        stored.attempts,
+        called,
+        usd,
+    )
+
+
 def write_summary(
     conn: sqlite3.Connection,
     settings: Settings,
@@ -185,22 +228,34 @@ def write_summary(
     now: datetime | None = None,
 ) -> SummaryResult:
     moment = now or now_utc()
-    if not force:
-        stored = memory.stored_line(conn, day_local)
-        if stored is not None:
-            return SummaryResult(
-                day_local,
-                stored.line,
-                stored.web_line,
-                "stored",
-                stored.gate_result,
-                stored.attempts,
-            )
-
+    stored = None if force else memory.stored_line(conn, day_local)
     payload = build_payload(conn, settings, day_local)
+    if stored is not None and not rewrite_due(stored, payload):
+        return _stored_result(stored)
+
     recent = memory.recent_before(conn, day_local)
     threshold = settings.summary.similarity_threshold
     attempts: list[dict] = []
+    rounds = MAX_MODEL_ATTEMPTS
+    if stored is not None:
+        rounds = REWRITE_ATTEMPTS
+        recent = replace(
+            recent,
+            opening_lines=(stored.line, *recent.opening_lines),
+            similarity_lines=(stored.line, *recent.similarity_lines),
+        )
+        attempts.append(
+            {
+                "source": REWRITE_SOURCE,
+                "superseded": stored.line,
+                "result": f"authored under {authored_completeness(stored.attempts)}",
+            }
+        )
+    cell_record = {
+        "source": CELL_SOURCE,
+        "label": payload.cell.name,
+        "completeness": payload.cell.completeness,
+    }
     called = False
     usd = 0.0
 
@@ -209,7 +264,7 @@ def write_summary(
         attempts.append({"source": "model", "result": "unavailable: no api key"})
     else:
         rejection: str | None = None
-        for _ in range(MAX_MODEL_ATTEMPTS):
+        for _ in range(rounds):
             request = build_request(payload, recent, settings, rejection)
             cap = spend.cap_check(conn, settings, request, moment)
             if not cap.allowed:
@@ -235,6 +290,8 @@ def write_summary(
                 web = None
             attempts.append({"source": "model", "line": line, "result": verdict.reason})
             if verdict.ok:
+                line = canonical_quotes(line)
+                attempts.append(cell_record)
                 memory.remember(
                     conn, day_local, line, web, payload.lens, "model", verdict.reason, attempts
                 )
@@ -244,8 +301,22 @@ def write_summary(
                 )
             rejection = verdict.reason
 
+    if stored is not None:
+        memory.remember(
+            conn,
+            day_local,
+            stored.line,
+            stored.web_line,
+            stored.lens,
+            stored.source,
+            stored.gate_result,
+            stored.attempts + attempts,
+        )
+        return _stored_result(replace(stored, attempts=stored.attempts + attempts), called, usd)
+
     fallback = fallback_line(payload, recent, threshold)
     attempts.append({"source": "fallback", "line": fallback.line, "result": fallback.gate.reason})
+    attempts.append(cell_record)
     memory.remember(
         conn,
         day_local,

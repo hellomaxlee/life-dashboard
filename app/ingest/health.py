@@ -8,11 +8,14 @@ again from its raw file, in one write transaction.
 
 from __future__ import annotations
 
+import fcntl
 import hashlib
+import hmac
 import json
 import logging
 import os
 import sqlite3
+import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
@@ -28,6 +31,7 @@ from app.ingest.store import IngestStats, store_payload
 from app.timeutil import UTC_ISO, now_utc
 
 SOURCE = "health"
+MAX_BODY_BYTES = 16 * 1024 * 1024  # the largest real push is ~4 MB; a 16 MB body is not a push
 RAW_SUFFIXES = {"goodreads": ".xml"}
 log = logging.getLogger(__name__)
 router = APIRouter()
@@ -71,11 +75,24 @@ def raw_file(raw_dir: Path, source: str, recorded_path: str) -> Path:
 
 
 def _write_durably(target: Path, body: bytes) -> None:
+    """The bytes and the directory entry both reach the platter before returning. On
+    darwin, fsync only pushes to the drive's cache; F_FULLFSYNC asks the drive to flush."""
     target.parent.mkdir(parents=True, exist_ok=True)
     with target.open("wb") as fh:
         fh.write(body)
         fh.flush()
-        os.fsync(fh.fileno())
+        _fsync(fh.fileno())
+    dir_fd = os.open(target.parent, os.O_RDONLY)
+    try:
+        _fsync(dir_fd)
+    finally:
+        os.close(dir_fd)
+
+
+def _fsync(fd: int) -> None:
+    os.fsync(fd)
+    if sys.platform == "darwin":
+        fcntl.fcntl(fd, fcntl.F_FULLFSYNC)
 
 
 def _unrecorded_copy(
@@ -245,9 +262,9 @@ def authorized(request: Request, token: str) -> bool:
     if not token:
         return True
     header = request.headers.get("authorization", "")
-    if header.lower().startswith("bearer ") and header[7:].strip() == token:
+    if header.lower().startswith("bearer ") and hmac.compare_digest(header[7:].strip(), token):
         return True
-    return request.headers.get("x-api-key", "").strip() == token
+    return hmac.compare_digest(request.headers.get("x-api-key", "").strip(), token)
 
 
 def _busy(settings: Settings, body: bytes, exc: Exception, status: str = "busy") -> Response:
@@ -272,6 +289,9 @@ async def ingest_health(request: Request) -> Response:
     settings: Settings = request.app.state.settings
     if not authorized(request, settings.health_export_token):
         return JSONResponse({"status": "unauthorized"}, status_code=401)
+    declared = request.headers.get("content-length", "0")
+    if declared.isdigit() and int(declared) > MAX_BODY_BYTES:
+        return JSONResponse({"status": "too_large", "max_bytes": MAX_BODY_BYTES}, status_code=413)
     body = await request.body()
     try:
         conn: sqlite3.Connection = request.app.state.open_conn()

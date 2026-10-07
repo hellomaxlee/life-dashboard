@@ -92,8 +92,9 @@ def guarded(
     quiet: tuple[type[Exception], ...] = (),
 ) -> Callable[[], None]:
     """Wrap a job so an exception is logged and counted, never raised into the scheduler.
-    A `quiet` exception is one line with no traceback, and only when it differs from the
-    last failure, so a device that is switched off does not fill the log."""
+    A new failure gets its traceback once; the same failure again is one line, so a device
+    that is switched off or a schema that is wrong does not fill the log. A `quiet`
+    exception gets no traceback at all and its repeats are not logged."""
     record = stats.setdefault(name, JobStats())
 
     def run() -> None:
@@ -104,10 +105,14 @@ def guarded(
         except Exception as exc:
             record.failures += 1
             error = f"{type(exc).__name__}: {exc}"
-            if not isinstance(exc, quiet):
+            repeat = error == record.last_error
+            if isinstance(exc, quiet):
+                if not repeat:
+                    log.error("job %s failed: %s (repeats are not logged)", name, error)
+            elif repeat:
+                log.error("job %s failed again: %s", name, error)
+            else:
                 log.exception("job %s failed", name)
-            elif error != record.last_error:
-                log.error("job %s failed: %s (repeats are not logged)", name, error)
             record.last_error = error
 
     return run

@@ -7,8 +7,9 @@ label says when it resets and never "this week". An absent reading is drawn as "
 dashed track. Not a target, not a win.
 
 Stale means the percent is known to be out of date: the reading is older than `stale_hours`,
-or it has no capture time, or its reset time has already passed. A stale reading gets a
-pulsing dot and an amber second line that alternates with its age.
+or it has no capture time, or its reset time has already passed. A stale reading gets an
+amber dot and an amber second line with its age. It is a still: the panel's loading cycle
+(workflows/run-service.md section 15) made the old blink cost more than it told.
 
 Nothing overstates. The label is the percent truncated and the fill is floored
 (floor(0.412 * 60) = 24 px), with one pixel for any use above zero and the last pixel only
@@ -33,7 +34,7 @@ from datetime import datetime
 
 from app.render.font import SMALL, draw_text
 from app.render.frame import Color, Frame
-from app.render.palette import AMBER, GREEN, LABEL, RED, SECONDARY, TEXT, TRACK, dim
+from app.render.palette import AMBER, GREEN, LABEL, RED, SECONDARY, TEXT, TRACK
 from app.render.view import ClaudeUsage, valid_percent
 from app.timeutil import from_utc_iso
 
@@ -47,10 +48,6 @@ STALE_DOT_X = 59
 AMBER_FROM_PCT = 60.0
 RED_FROM_PCT = 85.0
 MAX_RESET_DAYS = 7
-STALE_FRAMES = 16
-STALE_FRAME_MS = 250
-_PULSE = (1.0, 0.6, 0.25, 0.6)
-_TEXT_SWAP_EVERY = 8
 
 
 @dataclass(frozen=True)
@@ -150,8 +147,8 @@ def percent_text(used_pct: float) -> str:
     return f"{int(clamped)}%"
 
 
-def draw_usage(frame: Frame, state: UsageState, tick: int = 0) -> None:
-    """Draw the bar and its two label lines. `tick` is the frame number of a stale clip."""
+def draw_usage(frame: Frame, state: UsageState) -> None:
+    """Draw the bar and its two label lines."""
     pixels = frame.load()
     for y in range(BAR_TOP, BAR_TOP + BAR_HEIGHT):
         for offset in range(BAR_WIDTH):
@@ -172,10 +169,8 @@ def draw_usage(frame: Frame, state: UsageState, tick: int = 0) -> None:
 
     line_2 = state.reset_label
     if state.stale:
-        if (tick // _TEXT_SWAP_EVERY) % 2 == 1:
-            line_2 = state.age_label
-        dot = dim(AMBER, _PULSE[tick % len(_PULSE)])
+        line_2 = state.age_label
         for dy in range(3):
             for dx in range(3):
-                pixels[STALE_DOT_X + dx, LINE_1_Y + 1 + dy] = dot
+                pixels[STALE_DOT_X + dx, LINE_1_Y + 1 + dy] = AMBER
     draw_text(frame, BAR_LEFT, LINE_2_Y, line_2, AMBER if state.stale else SECONDARY, SMALL)

@@ -8,9 +8,12 @@ from datetime import timedelta
 import pytest
 from PIL import Image, ImageChops
 
+from app.render.font import SMALL, draw_text
+from app.render.frame import new_frame
 from app.render.gamma import led_gamma
+from app.render.rotation import device_parts
 from app.render.screens import render_week
-from app.render.usage import reset_label
+from app.render.usage import reset_label, usage_state
 from app.render.view import ClaudeUsage, view_from_metrics
 from app.timeutil import from_utc_iso, to_utc_iso
 from tests.render import NO_READING, RED_91, STALE, WEEK_41, WEEK_COMPLETE, load
@@ -107,20 +110,21 @@ def test_extremes_never_overflow_the_track(settings):
         assert lit == list(range(2, 2 + width)), pct
 
 
-def test_stale_reading_pulses_and_shows_its_age(settings):
+def test_stale_reading_is_one_still_with_an_amber_dot_and_its_age(settings):
+    """Display audit (Lucia, 2026-10-07): the old 16-frame blink at 250 ms went to the panel
+    whole and cost a loading cycle every rotation. Stale is a still: amber dot, amber age."""
     view, now = load(STALE, settings)
     clip = render_week(view, now)
-    assert len(clip.frames) == 16
-    assert set(clip.durations_ms) == {250}
-    dot = [frame.getpixel(STALE_DOT) for frame in clip.frames]
-    assert len(set(dot)) == 3
-    assert (0, 0, 0) not in dot
-    assert dot[0] == AMBER
-    bars = {tuple(bar_row(frame, 42)) for frame in clip.frames}
-    assert len(bars) == 1
-    line_2 = (0, 54, 64, 59)
-    assert ImageChops.difference(clip.frames[0].crop(line_2), clip.frames[8].crop(line_2)).getbbox()
-    assert all(frame.crop(line_2).getbbox() for frame in clip.frames)
+    assert len(clip.frames) == 1 and not clip.animated
+    assert device_parts(clip) == [clip]
+    frame = clip.poster
+    assert frame.getpixel(STALE_DOT) == AMBER
+    line_2 = frame.crop((0, 54, 64, 59))
+    state = usage_state(view.claude, now, view.stale_hours)
+    assert state.stale and state.age_label.startswith("SEEN ")
+    expected = new_frame()
+    draw_text(expected, 2, 54, state.age_label, AMBER, SMALL)
+    assert ImageChops.difference(line_2, expected.crop((0, 54, 64, 59))).getbbox() is None
 
 
 def test_stale_boundary_uses_config_hours_and_explicit_now(settings):
@@ -131,7 +135,8 @@ def test_stale_boundary_uses_config_hours_and_explicit_now(settings):
     past_limit = render_week(view, captured + timedelta(hours=24, seconds=1))
     assert len(at_limit.frames) == 1
     assert at_limit.poster.getpixel(STALE_DOT) == (0, 0, 0)
-    assert len(past_limit.frames) == 16
+    assert len(past_limit.frames) == 1
+    assert past_limit.poster.getpixel(STALE_DOT) == AMBER
     longer = render_week(replace(view, stale_hours=48), captured + timedelta(hours=30))
     assert len(longer.frames) == 1
 

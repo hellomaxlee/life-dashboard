@@ -58,3 +58,69 @@ def test_token_required_when_configured(settings, monkeypatch):
         assert ok.status_code == 200
         dup = post_fixture(client, "workouts_v2_run.json", **{"x-api-key": "s3cret"})
         assert dup.json()["status"] == "duplicate"
+
+
+def test_a_body_over_the_cap_is_refused_before_it_is_read(client, settings, monkeypatch):
+    import os
+
+    from app.ingest import health
+
+    read: list[int] = []
+    real_write = health._write_durably
+
+    def spy(target, body):
+        read.append(len(body))
+        real_write(target, body)
+
+    monkeypatch.setattr(health, "_write_durably", spy)
+    body = b"x" * (17 * 1024 * 1024)
+    resp = client.post(
+        "/ingest/health",
+        content=body,
+        headers={"content-type": "application/json", "content-length": str(len(body))},
+    )
+    assert resp.status_code == 413
+    assert resp.json()["max_bytes"] == 16 * 1024 * 1024
+    assert read == []
+    assert not os.path.isdir(settings.storage.raw_dir / "health") or not os.listdir(
+        settings.storage.raw_dir / "health"
+    )
+    ok = post_fixture(client, "workouts_v2_run.json")
+    assert ok.status_code == 200 and read == [len(fixture_bytes("workouts_v2_run.json"))]
+
+
+def test_the_token_is_compared_in_constant_time(settings, monkeypatch):
+    import hmac
+
+    from app.ingest import health
+
+    calls: list[tuple[str, str]] = []
+    real = hmac.compare_digest
+
+    def spy(a, b):
+        calls.append((a, b))
+        return real(a, b)
+
+    monkeypatch.setattr(health.hmac, "compare_digest", spy)
+    request = type("R", (), {"headers": {"authorization": "Bearer nope", "x-api-key": "s3cret"}})()
+    assert health.authorized(request, "s3cret") is True
+    assert calls == [("nope", "s3cret"), ("s3cret", "s3cret")]
+
+
+def test_write_durably_fsyncs_the_file_and_its_directory(tmp_path, monkeypatch):
+    import os
+
+    from app.ingest import health
+
+    synced: list[int] = []
+    real_fsync = os.fsync
+
+    def spy(fd: int) -> None:
+        synced.append(os.fstat(fd).st_ino)
+        real_fsync(fd)
+
+    monkeypatch.setattr(health.os, "fsync", spy)
+    target = tmp_path / "raw" / "health" / "a.json"
+    health._write_durably(target, b"{}")
+    assert target.read_bytes() == b"{}"
+    assert synced == [target.stat().st_ino, target.parent.stat().st_ino]

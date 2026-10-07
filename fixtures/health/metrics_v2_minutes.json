@@ -1,0 +1,33 @@
+{
+  "data": {
+    "metrics": [
+      {
+        "name": "step_count",
+        "units": "count",
+        "data": [
+          {"date": "2026-10-06 08:00:00 -0400", "qty": 100, "source": "Apple Watch|iPhone"},
+          {"date": "2026-10-06 08:01:00 -0400", "qty": 200.5, "source": "Apple Watch|iPhone"},
+          {"date": "2026-10-06 08:02:00 -0400", "qty": 50, "source": "Apple Watch"},
+          {"date": "2026-10-06 08:03:00 -0400", "qty": 25, "source": "Apple Watch"}
+        ]
+      },
+      {
+        "name": "time_in_daylight",
+        "units": "min",
+        "data": [
+          {"date": "2026-10-06 08:00:00 -0400", "qty": 1, "source": "Apple Watch|iPhone"},
+          {"date": "2026-10-06 08:01:00 -0400", "qty": 0.5, "source": "Apple Watch"}
+        ]
+      },
+      {
+        "name": "heart_rate",
+        "units": "count/min",
+        "data": [
+          {"date": "2026-10-06 00:00:00 -0400", "Min": 55, "Avg": 56, "Max": 57, "source": "Apple Watch"},
+          {"date": "2026-10-06 00:01:00 -0400", "Min": 58, "Avg": 59, "Max": 60, "source": "Apple Watch"}
+        ]
+      }
+    ],
+    "workouts": []
+  }
+}

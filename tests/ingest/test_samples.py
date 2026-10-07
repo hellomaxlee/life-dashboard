@@ -338,7 +338,7 @@ def test_a_real_sized_push_parses_in_seconds():
     print(f"\nparsed {rows} rows / {len(body) / 1e6:.1f} MB in {elapsed:.2f} s")
     assert elapsed < 15, f"parse took {elapsed:.1f} s"
     assert len(parsed.steps) == 7 and len(parsed.sleep) == 7
-    assert round(parsed.steps[0].value) == round((12000 - 1715) * 0.41666666666666669)
+    assert round(parsed.steps[0].value) == 5000  # every slice counted: 12000 * 5/12
     assert parsed.steps[0].source == "Someone’s Apple Watch|Someone’s iPhone (summed)"
     assert parsed.unknown_metrics == []
 
@@ -389,3 +389,29 @@ def test_the_configured_gap_reaches_the_parser(client, db, settings):
     assert settings.ingest.sleep_gap_min == 60
     post(client, json.dumps(two_segments(61)).encode())
     assert count(db, "sleep_sessions") == 2
+
+
+def test_minute_grouped_rows_with_nested_labels_sum_every_row(client, db):
+    """`fixtures/health/metrics_v2_minutes.json`: the phone merged the sources per minute
+    (`Apple Watch|iPhone` for two minutes, `Apple Watch` alone for two), so every row is a
+    distinct minute. Steps 100 + 200.5 + 50 + 25 = 375.5, stored rounded as 376; the old
+    largest-label rule would drop the Watch-only minutes and store 300.
+    Daylight 1 + 0.5 = 1.5 (old: 1)."""
+    resp = post_fixture(client, "metrics_v2_minutes.json")
+    assert resp.status_code == 200, resp.text
+    assert steps(db) == [("2026-10-06", 376, "Apple Watch|iPhone (summed)")]
+    assert wellness(db, "time_in_daylight") == [("2026-10-06", 1.5, "Apple Watch|iPhone (summed)")]
+
+
+def test_midnight_heart_rate_minute_lands_in_hr_minutes(client, db):
+    """A minute-resolution heart_rate row stamped 00:00:00 local is a minute, not a day
+    summary, when its siblings are minutes: it is stored in hr_minutes like the rest."""
+    post_fixture(client, "metrics_v2_minutes.json")
+    rows = db.execute(
+        "SELECT minute_utc, hr_avg FROM hr_minutes WHERE day_local = '2026-10-06' ORDER BY 1"
+    ).fetchall()
+    assert [tuple(r) for r in rows] == [
+        ("2026-10-06T04:00:00Z", 56.0),
+        ("2026-10-06T04:01:00Z", 59.0),
+    ]
+    assert wellness(db, "heart_rate_min") == [("2026-10-06", 55.0, "Apple Watch")]

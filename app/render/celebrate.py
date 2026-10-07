@@ -19,8 +19,8 @@ The cadence: a step is on screen for its hold (STEP_MS) plus the 1.45 s its succ
 to upload, and no transport makes that upload faster (httpx, a raw one-write socket, nodelay,
 chunked and keep-alive all measured within noise of each other, 2026-10-07, run-service.md
 section 15). So the hold is as short as paging allows and the upload itself is most of the
-step: three steps are on screen about 5 s, which four steps held a second each made 10
-(Max, 2026-10-07: "very laggy").
+step: the sparkle's five steps are on screen about 9 s and the party's six about 10; four
+steps held a second each made 10 and read as lag (Max, 2026-10-07: "very laggy").
 """
 
 from __future__ import annotations
@@ -30,9 +30,9 @@ import random
 from dataclasses import dataclass
 from typing import Literal
 
-from app.render.font import BODY, SMALL, draw_text, draw_text_centered, text_width
+from app.render.font import BODY, SMALL, Font, draw_text, draw_text_centered, text_width
 from app.render.frame import SIZE, Clip, Color, Frame, new_frame
-from app.render.palette import CONFETTI, GOLD, LABEL, TEAL, TEXT, VIOLET, WHITE, dim, hue
+from app.render.palette import BLACK, CONFETTI, GOLD, LABEL, TEAL, TEXT, VIOLET, WHITE, dim, hue
 from app.render.screens import (
     DOT_ROW_Y,
     MOON,
@@ -59,6 +59,9 @@ SPARKLE_STEPS = (1, 4, 7, 10, 14)
 PARTY_TICKS = 56
 PARTY_STEPS = (3, 11, 13, 17, 28, 44)
 STEP_MS = 300
+_LABEL_Y = 31
+_WAVE_Y = 42
+_WAVE_BOB_PX = 2
 _DROP_FRAMES = 12
 _FLASH_FRAMES = 4
 _GRAVITY = 0.16
@@ -114,7 +117,7 @@ def _steps(ticks: list[Frame], steps: tuple[int, ...], poster: int) -> Clip:
 
 def sparkle_clip(win: Win = "workout", seed: int = 11, dot: int | None = None) -> Clip:
     """The small-win clip: the icon arriving, ringed at full size, settled among the stars,
-    three stills of STEP_MS each. `win` picks the icon and the label; for a workout,
+    five stills of STEP_MS each. `win` picks the icon and the label; for a workout,
     `dot` (the week's count including this one) colours the disc and its ring like the Week
     screen's Nth dot (Max, 2026-10-06: a different colour for the 1st, 2nd and 3rd)."""
     rng = random.Random(seed)
@@ -161,6 +164,15 @@ def _bounce_y(tick: int) -> int:
         u = (t - 0.85) / 0.15
         height = 0.08 * (1 - (2 * u - 1) ** 2)
     return int(DOT_ROW_Y - height * (DOT_ROW_Y + 8) + 0.5)
+
+
+def _clear_text_box(
+    frame: Frame, text: str, y: int, height: int, margin: int, font: Font = SMALL
+) -> None:
+    """Black out where a label is about to go, so confetti never lands between its letters."""
+    width = text_width(text, font)
+    x = (SIZE - width) // 2
+    fill_rect(frame, x - margin, y - margin, x + width - 1 + margin, y + height - 1 + margin, BLACK)
 
 
 def _rainbow_wave(frame: Frame, text: str, y: int, tick: int) -> None:
@@ -246,8 +258,13 @@ def party_clip(count: int = 3, target: int = 3, seed: int = 7) -> Clip:
             if wide:
                 _put(frame, x + 1, y, shade)
         if tick >= burst_at:
-            draw_text_centered(frame, 31, f"{count} OF {target}", WHITE, SMALL)
-            _rainbow_wave(frame, "WEEK DONE", 42, tick)
+            label = f"{count} OF {target}"
+            _clear_text_box(frame, label, _LABEL_Y, SMALL.height, 1)
+            draw_text_centered(frame, _LABEL_Y, label, WHITE, SMALL)
+            _clear_text_box(
+                frame, "WEEK DONE", _WAVE_Y - _WAVE_BOB_PX, BODY.height + 2 * _WAVE_BOB_PX, 1, BODY
+            )
+            _rainbow_wave(frame, "WEEK DONE", _WAVE_Y, tick)
         frames.append(frame)
     return _steps(frames, PARTY_STEPS, poster=4)
 

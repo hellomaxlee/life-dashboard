@@ -80,7 +80,7 @@ def fetch_feed(url: str, client: httpx.Client | None = None) -> bytes:
     if target.scheme != "https" or target.host not in ALLOWED_HOSTS:
         raise FeedError(f"refusing to fetch from {target.host!r}: not a Goodreads https URL")
     own = client is None
-    session = client or httpx.Client(timeout=TIMEOUT_S)
+    session = client or httpx.Client(timeout=TIMEOUT_S, trust_env=False)
     try:
         request = session.build_request("GET", target)
         response = session.send(request, follow_redirects=False)

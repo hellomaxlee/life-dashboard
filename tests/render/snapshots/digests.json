@@ -1,7 +1,7 @@
 {
   "celebrations/party": {
     "frames": 6,
-    "sha256": "0bc501321b237add2889c3f50439b93762f8c099bb7572053fdb154d99af7dea"
+    "sha256": "82d21085a10f529ba20c5a99b768c5d921cc661984a1948a0e5bbbbc2c96294a"
   },
   "celebrations/sparkle_book": {
     "frames": 5,
@@ -92,8 +92,8 @@
     "sha256": "64307f71bc62c339776cff8e104a3fc9559b5b6e76be0fb82e0953ab19863569"
   },
   "rest__health-delayed__alive__peak/week": {
-    "frames": 16,
-    "sha256": "81dbd58bf5ab996718994f964dc4e7a4e5a4cfd2e0ce8bea7379748761f9b2c1"
+    "frames": 1,
+    "sha256": "6b68001f1bc85c63bdd82ae5927690abbf1ebe2591d51acd3f449cedad9a06bd"
   },
   "rest__health-delayed__broken-last-week__off/books": {
     "frames": 5,
@@ -192,8 +192,8 @@
     "sha256": "ad5ee6a030c4f1461aecfcc643fa981c83fa7c710450438bac9387a5268a1b3f"
   },
   "travel__health-delayed__alive__off/week": {
-    "frames": 16,
-    "sha256": "8ae86f56b0280d156de2007c831f729396442b50e3f62028abca1a0b01018215"
+    "frames": 1,
+    "sha256": "9f4d15f6777e016acc44b565cab7fe7ab20adde5add894a822fb8a1cab8b6f16"
   },
   "travel__sleep-missing__never-started__peak/books": {
     "frames": 5,

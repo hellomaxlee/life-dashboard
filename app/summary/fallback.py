@@ -26,7 +26,7 @@ never blanks. No thought refers to a time of day or tells him what he feels (Ing
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 
 from app.summary.gate import (
@@ -43,7 +43,7 @@ from app.summary.gate import (
     check_wellness,
     without_title,
 )
-from app.summary.payload import Payload
+from app.summary.payload import LENSES, Payload
 from app.summary.quotes import display, for_lens
 
 FACT_MAX = 60
@@ -408,12 +408,21 @@ def candidates(payload: Payload) -> list[str]:
     ][ordinal % 3]
 
 
+def _lens_order(payload: Payload) -> list[str]:
+    """The day's lens first, then the others from where the rotation stands, so a lens whose
+    pool the window has used up (lenses return every six days, not seven) borrows a line
+    before the last resort."""
+    start = LENSES.index(payload.lens)
+    return list(LENSES[start:] + LENSES[:start])
+
+
 def fallback_line(payload: Payload, recent: Recent, threshold: float) -> FallbackResult:
     web = web_fact(payload)
-    for line in candidates(payload):
-        result = check_device_line(line, payload, recent, threshold)
-        if result.ok:
-            return FallbackResult(line, web, result)
+    for lens in _lens_order(payload):
+        for line in candidates(replace(payload, lens=lens)):
+            result = check_device_line(line, payload, recent, threshold)
+            if result.ok:
+                return FallbackResult(line, web, result)
     fact = fact_clause(payload)
     text = without_title(fact, payload)
     reasons = (

@@ -647,6 +647,20 @@ def quotations_in(text: str) -> list[str]:
     return QUOTED.findall(fold_quotes(text))
 
 
+def canonical_quotes(line: str) -> str:
+    """The line with each bank quotation's words replaced by the bank's exact text, so a
+    model's drift in punctuation or case inside a quote never reaches the display. A line
+    quoting nothing from the bank comes back untouched."""
+    folded = fold_quotes(line)
+
+    def exact(match: re.Match[str]) -> str:
+        entry = bank_entry(match.group(1))
+        return f'"{entry.text}"' if entry else match.group(0)
+
+    swapped = QUOTED.sub(exact, folded)
+    return line if swapped == folded else swapped
+
+
 def persons_in(text: str) -> list[str]:
     """The persons named in `text`, longest alias first, each once: a bank author as the
     lowercased bank name ("marcus aurelius"), any other listed source as listed."""

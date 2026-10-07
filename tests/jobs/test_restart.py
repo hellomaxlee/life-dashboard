@@ -3,8 +3,10 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
+from app.db import CODE_SCHEMA_VERSION, open_db
 from app.jobs.scheduler import CORE_JOBS
 from app.main import create_app
 from tests.conftest import fixture_bytes, post_fixture
@@ -60,3 +62,17 @@ def test_kill_9_after_a_push_restarts_onto_the_wal_with_nothing_lost(tmp_path):
         more = client.post("/ingest/health", content=fixture_bytes("metrics_v2_days.json"))
         assert more.json()["status"] == "ok"
     assert drill._parsed_flags(settings) == ("ok", [1, 1])
+
+
+def test_a_db_ahead_of_the_code_exits_non_zero_instead_of_serving_503s(settings, caplog):
+    conn = open_db(settings.storage.db_path)
+    conn.execute(
+        "INSERT INTO schema_version (version, applied_at_utc, name) VALUES (?, ?, ?)",
+        (CODE_SCHEMA_VERSION + 1, "2026-10-07T00:00:00Z", "from_newer_code"),
+    )
+    conn.commit()
+    conn.close()
+    with pytest.raises(SystemExit) as exited:
+        create_app(settings)
+    assert exited.value.code != 0
+    assert f"ahead of this code's {CODE_SCHEMA_VERSION}" in caplog.text

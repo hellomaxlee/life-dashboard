@@ -42,8 +42,8 @@ Each folder holds:
 | `page_<n>_1x.png`, `page_<n>_gamma_1x.png` | only for a paged screen (City, Month with a note, Books): every page as its own still, so each can be judged at 1x |
 
 Which screens animate: Books when the summary needs more than one page (two word-wrapped
-lines per page, 2 s each; a 110-character line is about seven pages); Week only when the
-Claude reading is stale (pulsing dot, label alternating with its age); Today never; City is always paged (weather 6 s, lines 6 s, then 5 s for each of up to three
+lines per page, 2 s each; a 110-character line is about seven pages); Week never (a stale
+Claude reading is a still: amber dot, amber age line in place of the reset line); Today never; City is always paged (weather 6 s, lines 6 s, then 5 s for each of up to three
 affected lines) unless there is no city status, which is one still; Month is
 two pages (the plate 6 s, the note 5 s) only when the day's plate has a note; both
 celebrations always. No clip may exceed 59 frames, the most one device animation is assumed
@@ -117,7 +117,9 @@ month, the Month screen still shows the new month.
 ## The City screen
 
 `app/render/city.py`, drawn from the view's `city` (`app/city/model.py`; `view_db` reads it with
-`app.city.store.load_status` for the requested day). Pages:
+`app.city.store.load_status` for the requested day). `--date` does not back-date it: the store
+keeps only the latest transit and weather snapshot, and the day picks which weekday's alert
+lines apply, so a past date renders today's city on that weekday. Pages:
 
 - **weather**: condition icon, the current temperature large, `H`/`L`, one notice line (the
   first NWS alert in amber, wrapped to a second line in place of the step temperatures when it
@@ -182,8 +184,8 @@ job runs it: Today → City → Week → Month → Books → one sparkle per sma
 (day, the day's city, week, month, year, then the wins). `app.render.rotation.sequence_names` is the one
 definition; a restart begins at Today. A still holds for `device.screen_seconds` (6 s). Anything animated holds
 for whole plays and is never replaced part way: Books until its summary has paged through
-exactly once (2 s a page), City's pages once each (6 s, 6 s, then 5 s a detail page), Month's plate 6 s then its note 5 s, each sparkle three plays
-(4.2 s), the party one play (3.4 s). On the device a paged screen goes as one still per page. The workout sparkle reads "WORKOUT DONE / SMALL WIN", and once the week's target is met
+exactly once (2 s a page), City's pages once each (6 s, 6 s, then 5 s a detail page), Month's plate 6 s then its note 5 s, each sparkle one pass
+of five stills at 300 ms (about 9 s on the device, each still's 1.45 s upload included), the party one pass of six stills at 300 ms (about 10 s). On the device a paged screen goes as one still per page. The workout sparkle reads "WORKOUT DONE / SMALL WIN", and once the week's target is met
 it stays in the sequence every day through Sunday, and so does the party. `/preview` stays the engineering view; the
 three pages link each other on their first line.
 
@@ -205,10 +207,9 @@ marked; a button plays either on the panel. The page starts at Today, as the dev
 rotation on that screen so a screenshot can target one; a celebration the day did not earn
 is played once as a sample instead. `#paused` holds it.
 
-`tools/pixoo_window.py` draws the same look in a native window with stdlib tkinter
-(`python -m tools.pixoo_window --url http://<service>:8080 --fixture <combo>`; keys: space
-pause, n next, s sparkle, p party, q quit). It reads the service's rotation JSON and frames,
-so it shows what the page shows.
+The tkinter window that drew the same look natively (`pixoo_window.py`, with its test) is
+archived in `_old/` since 2026-10-07: the real panel has been on the LAN since 2026-10-04 and
+the `/preview` page covers the rest.
 
 What the LED look cannot settle: the glow strength, dot size and unlit grey are a guess at a
 panel nobody here has photographed; they are display chrome, not the emulator. Legibility is

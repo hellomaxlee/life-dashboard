@@ -680,3 +680,26 @@ def test_a_kept_yes_is_counted_as_a_call(db: sqlite3.Connection, settings: Setti
     run = judge.judge_window(db, settings, FakeClient(later), set(), NOW)
     assert run.kept == 1 and run.judged == 1 and run.verdicts == []
     assert "kept 1" in run.describe() and judge.stored(db, DAY).credited
+
+
+def test_judge_day_under_haiku_writes_a_haiku_priced_ledger_row(
+    db: sqlite3.Connection, settings: Settings
+) -> None:
+    settings = replace(settings, judge_model="claude-haiku-4-5")
+    seed(db)
+    client = FakeClient(YES)
+    assert not isinstance(judge.judge_day(db, settings, client, DAY, NOW), str)
+    rows = db.execute("SELECT model, usd FROM model_spend").fetchall()
+    assert len(rows) == 1 and client.messages.last["model"] == "claude-haiku-4-5"
+    assert rows[0]["model"] == "claude-haiku-4-5"
+    assert rows[0]["usd"] == pytest.approx((50 * 1.0 + 20 * 5.0) / 1_000_000)
+
+
+def test_prompt_says_no_at_daily_resolution_and_reason_is_for_max() -> None:
+    from app.metrics.judge_prompt import DAILY_RESOLUTION_RULE, REASON_AUDIENCE_RULE
+
+    assert DAILY_RESOLUTION_RULE in SYSTEM_PROMPT
+    assert "credit waits for minute data or a recorded workout" in SYSTEM_PROMPT
+    assert "credit the day only when a sustained effort is obvious" not in SYSTEM_PROMPT
+    assert REASON_AUDIENCE_RULE in SYSTEM_PROMPT
+    assert "read by Max on his dashboard" in SYSTEM_PROMPT

@@ -149,7 +149,7 @@ def test_a_passed_reset_time_marks_the_reading_stale(settings):
     later = from_utc_iso(view.claude.resets_at_utc) + timedelta(minutes=5)
     fresh_capture = replace(view.claude, captured_at_utc=to_utc_iso(later - timedelta(hours=1)))
     clip = render_week(replace(view, claude=fresh_capture), later)
-    assert len(clip.frames) == 16
+    assert len(clip.frames) == 1
     assert clip.frames[0].getpixel((60, 49)) == AMBER
     assert AMBER in {clip.frames[0].getpixel((x, 56)) for x in range(2, 62)}
 
@@ -162,7 +162,7 @@ def test_a_reading_with_no_capture_time_is_stale(settings):
     state = usage_state(reading, now, 24)
     assert state.stale and state.age_label == "AGE UNKNOWN"
     clip = render_week(replace(view, claude=reading), now)
-    assert len(clip.frames) == 16
+    assert len(clip.frames) == 1
     assert clip.frames[0].getpixel((60, 49)) == AMBER
 
 

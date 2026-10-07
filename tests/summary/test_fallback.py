@@ -68,8 +68,12 @@ def test_fallback_skips_candidates_too_similar_to_recent_lines(db, settings):
 
 def test_last_resort_when_every_candidate_collides_still_shows_a_line(db, settings):
     payload = with_lens(payload_for(db, settings, golden_cases()[1]), "rest-as-work")
-    recent = Recent(similarity_lines=tuple(candidates(payload)))
-    result = fallback_line(payload, recent, THRESHOLD)
+    own = tuple(candidates(payload))
+    borrowed = fallback_line(payload, Recent(similarity_lines=own), THRESHOLD)
+    assert not borrowed.last_resort and borrowed.line not in own
+    every = {c for lens in LENSES for c in candidates(with_lens(payload, lens))}
+    assert borrowed.line in every
+    result = fallback_line(payload, Recent(similarity_lines=tuple(every)), 0.0)
     assert result.last_resort
     assert result.line == "7.4 h of sleep yesterday."
     assert "similarity not checked" in result.gate.reason
@@ -105,11 +109,17 @@ def test_wellness_fact_goes_to_the_web_line_only(db, settings):
     assert result.web_line == "HRV 38 ms against a 52 ms baseline, below the band."
 
 
-def test_lens_cycles_over_seven_days():
-    days = [date(2026, 10, 1) + timedelta(days=i) for i in range(14)]
-    seen = [lens_for(d) for d in days]
-    assert set(seen[:7]) == set(LENSES)
-    assert seen[:7] == seen[7:]
+def test_every_week_sees_all_lenses_and_no_lens_is_pinned_to_a_weekday():
+    monday = date(2026, 9, 28)
+    assert monday.weekday() == 0
+    days = [monday + timedelta(days=i) for i in range(49)]
+    for start in range(0, 49, 7):
+        assert set(lens_for(d) for d in days[start : start + 7]) == set(LENSES)
+    weekdays_seen = {lens: set() for lens in LENSES}
+    for d in days:
+        weekdays_seen[lens_for(d)].add(d.weekday())
+    assert all(seen == set(range(7)) for seen in weekdays_seen.values())
+    assert lens_for(days[0]) != lens_for(days[7])
 
 
 def test_classification_reads_flags_and_infers_only_what_the_data_supports(db, settings):
