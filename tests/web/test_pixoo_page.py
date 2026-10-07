@@ -84,7 +84,7 @@ def test_rotation_json_lists_the_sequence_with_valid_frames(client, settings):
     assert holds["month"] == 11000, "one pass through both pages"
     assert holds["week"] == holds["today"] == 6000
     assert holds["books"] == clips["books"].total_ms > 6000, "the whole message pages through"
-    assert holds["win-workout"] == holds["win-sleep"] == 900, "three steps of 300 ms, one pass"
+    assert holds["win-workout"] == holds["win-sleep"] == 1500, "five steps of 300 ms, one pass"
     expected = {c.name: c for c in celebrations_for(view)}
     assert [c["name"] for c in body["celebrations"]] == ["sparkle", "party"]
     for celebration in body["celebrations"]:
@@ -148,9 +148,9 @@ def test_hold_is_the_dwell_or_the_clip_length_if_longer(settings):
     assert hold_ms("books", long, 30) == 25000, "never a second pass"
     assert hold_ms("books", short, 30) == 1000, "a short summary is not repeated either"
     sparkle = sparkle_clip("book")
-    assert sparkle.total_ms == 900
-    assert hold_ms("win-book", sparkle, settings.device.screen_seconds) == 900, "paged: one pass"
-    assert hold_ms("win-book", sparkle, 45) == 900, "a sparkle never waits out the dwell"
+    assert sparkle.total_ms == 1500
+    assert hold_ms("win-book", sparkle, settings.device.screen_seconds) == 1500, "paged: one pass"
+    assert hold_ms("win-book", sparkle, 45) == 1500, "a sparkle never waits out the dwell"
     paged = Clip((new_frame(),) * 2, (6000, 5000))
     assert hold_ms("month", paged, 6) == hold_ms("month", paged, 45) == 11000, "one pass"
     assert hold_ms("month", still, 45) == 45000, "the plate alone, or the calendar: the dwell"
@@ -167,7 +167,7 @@ def test_rotation_json_dwell_follows_device_config(settings):
     assert holds["week"][0] == holds["today"][0] == 45000
     books_hold, books_total, pages = holds["books"]
     assert pages > 1 and books_hold == books_total < 45000
-    assert holds["win-workout"][0] == 900
+    assert holds["win-workout"][0] == 1500
 
 
 def test_date_and_fixture_selection(client, settings):

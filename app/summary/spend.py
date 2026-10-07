@@ -67,6 +67,7 @@ class Rates:
 # overstate every cheaper model's, so the cap errs safe.
 RATES: dict[str, Rates] = {
     "claude-sonnet-5-5": Rates(2.0, 10.0, 0.20, 2.50),
+    "claude-haiku-4-5": Rates(1.0, 5.0, 0.10, 1.25),
 }
 
 

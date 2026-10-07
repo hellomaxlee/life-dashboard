@@ -331,19 +331,19 @@ def test_a_finished_week_ends_the_cycle_with_one_whole_party(db, jobs_settings):
     clock, adapter = Clock(), FakeAdapter()
     rotation = DeviceRotation(settings, opener(settings), adapter, clock)
     shown = []
-    for _ in range(15):
+    for _ in range(17):
         shown.append(rotation.tick())
         last_due = rotation.due() - clock.now
         clock.now = rotation.due()
     assert shown == [
         *["today", "city", "week", "month", "books"],
-        *["win-workout"] * 3,
+        *["win-workout"] * 5,
         *["party"] * 6,
         "today",
     ]
     party = party_clip(3, 3)
     assert len(party.frames) == 6
-    for step, sent in zip(party.frames, adapter.sent[8:14], strict=True):
+    for step, sent in zip(party.frames, adapter.sent[10:16], strict=True):
         assert same(sent, still(step, STEP_MS)), "the party goes as six stills of STEP_MS"
     view = view_from_db(db, settings, "2026-10-02")
     holds = {name: hold for name, _, hold in rotation_sequence(view, NOON, 6)}
@@ -388,7 +388,7 @@ def test_a_page_that_fails_drops_the_rest_and_the_rotation_moves_on(db, jobs_set
 
 def test_a_fast_animation_still_goes_whole_and_a_celebration_goes_as_steps(db, jobs_settings):
     sparkle = sparkle_clip("workout")
-    assert [len(part.frames) for part in device_parts(sparkle)] == [1, 1, 1]
+    assert [len(part.frames) for part in device_parts(sparkle)] == [1] * 5
     assert [len(part.frames) for part in device_parts(party_clip(3, 3))] == [1] * 6
     week = render_screen("week", view_from_db(db, jobs_settings, "2026-10-02"), NOON)
     assert device_parts(week) == [week]
@@ -437,12 +437,12 @@ def test_each_earned_small_win_gets_its_own_slot_after_books(db, jobs_settings):
         ("month", 18),
         ("books", 24),
         ("win-workout", 30),
-        ("win-sleep", 33),
-        ("win-book", 36),
-        ("today", 39),
-    ], "each sparkle is three steps of STEP_MS, sent one still at a time"
+        ("win-sleep", 35),
+        ("win-book", 40),
+        ("today", 45),
+    ], "each sparkle is five steps of STEP_MS, sent one still at a time"
     assert same(adapter.sent[5], still(sparkle_clip("workout").frames[0], STEP_MS))
-    assert same(adapter.sent[11], still(sparkle_clip("book").frames[0], STEP_MS))
+    assert same(adapter.sent[15], still(sparkle_clip("book").frames[0], STEP_MS))
 
     db.execute(
         "UPDATE daily_metrics SET metrics_json = ? WHERE day_local = '2026-10-02'",
@@ -617,7 +617,7 @@ def test_holds_are_whole_plays_and_due_is_exact(db, jobs_settings):
     assert list(slots) == ["today", "city", "week", "month", "books", "win-workout"]
     books, books_hold = slots["books"]
     assert (len(books.frames), books.total_ms, books_hold) == (2, 4000, 4000), "one pass, never two"
-    assert slots["win-workout"][1] == 3 * STEP_MS == 900, "one pass of its steps"
+    assert slots["win-workout"][1] == 5 * STEP_MS == 1500, "one pass of its steps"
 
     clock = Clock()
     rotation = DeviceRotation(settings, opener(settings), FakeAdapter(), clock)
@@ -631,6 +631,8 @@ def test_holds_are_whole_plays_and_due_is_exact(db, jobs_settings):
         ("win-workout", 28300),
         ("win-workout", 28600),
         ("win-workout", 28900),
+        ("win-workout", 29200),
+        ("win-workout", 29500),
     )
     for name, offset_ms in steps:
         assert rotation.tick() == name
@@ -653,11 +655,11 @@ def test_a_sequence_that_shrinks_restarts_at_today_instead_of_skipping_it(db, jo
         (json.dumps({"quality_workout": False, "sleep_hours": 6.0, "steps": 4000}),),
     )
     db.commit()
-    for _ in range(7):
+    for _ in range(9):
         shown.append(rotation.tick())
         clock.now = rotation.due()
-    assert shown[6:8] == ["win-workout"] * 2, "the celebration under way finishes its steps"
-    assert shown[8:] == PLAIN
+    assert shown[6:10] == ["win-workout"] * 4, "the celebration under way finishes its steps"
+    assert shown[10:] == PLAIN
 
 
 def test_every_win_belongs_to_the_day_the_today_screen_shows(db, jobs_settings):
@@ -833,11 +835,11 @@ def test_without_a_publisher_animations_are_uploaded(db, jobs_settings):
     set_day(db, "2026-10-02", quality_workout=True)
     clock, adapter = Clock(), FetchingAdapter()
     rotation = DeviceRotation(jobs_settings, opener(jobs_settings), adapter, clock)
-    for _ in range(9):
+    for _ in range(11):
         rotation.tick()
         clock.now = rotation.due()
     steps = [c for c in adapter.sent if c.durations_ms == (STEP_MS,)]
-    assert adapter.urls == [] and len(steps) == 3, "the sparkle's three steps, uploaded"
+    assert adapter.urls == [] and len(steps) == 5, "the sparkle's five steps, uploaded"
 
 
 def test_the_scheduler_wires_a_publisher_only_when_fetch_clips_is_on(db, jobs_settings):

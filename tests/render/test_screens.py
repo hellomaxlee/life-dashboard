@@ -162,8 +162,8 @@ def test_celebrations_are_deterministic_colourful_and_short():
         assert first.total_ms <= 6000
         assert all(lit(frame) > 20 for frame in first.frames)
         assert min(first.durations_ms) >= PAGED_FRAME_MS, "steps, sent as stills: no loading"
-    assert len(sparkle_clip().frames) == 3
-    assert sparkle_clip().total_ms == 900, "three steps of 300 ms: about 5 s on the panel"
+    assert len(sparkle_clip().frames) == 5
+    assert sparkle_clip().total_ms == 1500, "five steps of 300 ms: about 9 s on the panel"
     assert len(party_clip().frames) == 6
     assert party_clip(5, 5).poster.size == (64, 64)
 

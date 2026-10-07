@@ -51,6 +51,7 @@ MINUTE_MAX_TOLERANCE = 0.10
 log = logging.getLogger(__name__)
 _NUMBER = re.compile(r"\d+(?:\.\d+)?")
 _REASON_TAIL = re.compile(r"""[\s{}'"\]\[]+$""")
+_NON_ASCII = re.compile(r"[^\x20-\x7e]+")
 
 
 @dataclass(frozen=True)
@@ -288,9 +289,11 @@ def clean_reason(reason: str) -> str:
     """The model sometimes closes the JSON object inside the reason string (seen live
     2026-10-07: `session.}`, `evident.}`, `170.0.','x':''}`). A brace or quote after the
     last sentence-ending period (one not followed by a digit) cuts the reason at that
-    period; any bare tail of braces, quotes or brackets is stripped either way. A reason
+    period; any bare tail of braces, quotes or brackets is stripped either way; anything
+    outside printable ASCII is dropped first (seen live 2026-10-07: "occurred.Â ĂŻ"). A reason
     over REASON_MAX is cut at the last sentence end that fits, never mid-word (seen live:
     "...sustained effort.Day too c")."""
+    reason = _NON_ASCII.sub("", reason)
     at_limit = len(reason) >= REASON_MAX
     ends = [m.end() for m in _SENTENCE_END.finditer(reason)]
     if ends and any(c in reason[ends[-1] :] for c in "{}'\""):

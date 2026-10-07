@@ -55,7 +55,7 @@ WIN_LABELS: dict[str, tuple[str, ...]] = {
 }
 WIN_ORDER: tuple[Win, ...] = ("workout", "sleep", "book")
 SPARKLE_TICKS = 20
-SPARKLE_STEPS = (2, 6, 14)
+SPARKLE_STEPS = (1, 4, 7, 10, 14)
 PARTY_TICKS = 56
 PARTY_STEPS = (3, 11, 13, 17, 28, 44)
 STEP_MS = 300

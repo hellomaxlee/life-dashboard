@@ -233,14 +233,7 @@ def test_judge_payload_is_day_level_aggregates_only(
     client = FakeClient(YES)
     judge.judge_window(db, settings, client, set(), NOW)
     request = client.messages.last
-    assert set(request) == {
-        "model",
-        "max_tokens",
-        "system",
-        "messages",
-        "output_config",
-        "thinking",
-    }
+    assert set(request) == {"model", "max_tokens", "system", "messages", "output_config"}
     assert len(request["messages"]) == 1
     text = request["messages"][0]["content"]
     assert isinstance(text, str)
@@ -509,8 +502,17 @@ def test_a_stray_brace_inside_a_complete_reason_is_dropped_but_junk_after_the_js
     )
 
 
+def test_haiku_gets_no_thinking_or_effort_fields_and_a_stray_byte_tail_is_dropped() -> None:
+    request = request_body({"heart_rate_max": 160.0}, "claude-haiku-4-5")
+    assert "thinking" not in request and "effort" not in request["output_config"]
+    assert request["output_config"]["format"]["type"] == "json_schema"
+    assert judge.clean_reason("no sustained effort occurred.\u00c2 \u0102\u017b") == (
+        "no sustained effort occurred."
+    )
+
+
 def test_request_turns_thinking_off_at_low_effort_with_the_schema() -> None:
-    request = request_body({"heart_rate_max": 160.0, "bouts": []}, "m")
+    request = request_body({"heart_rate_max": 160.0, "bouts": []}, "claude-sonnet-5-5")
     assert request["thinking"] == {"type": "between_tools"}
     assert request["output_config"]["effort"] == "low"
     assert request["output_config"]["format"]["type"] == "json_schema"

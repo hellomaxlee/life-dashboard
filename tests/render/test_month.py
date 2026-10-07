@@ -419,8 +419,8 @@ def test_the_sequence_is_day_week_month_year_then_the_wins_then_the_party():
         "week": 6000,
         "month": 6000,
         "books": 6000,
-        "win-workout": 900,
-        "win-sleep": 900,
+        "win-workout": 1500,
+        "win-sleep": 1500,
         "party": 1800,
     }
     party = slots[-1][1]

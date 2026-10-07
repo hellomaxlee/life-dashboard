@@ -79,20 +79,28 @@ INPUT_KEYS = (
 )
 
 
+THINKING_OFF: dict[str, dict] = {
+    "claude-sonnet-5-5": {"thinking": {"type": "between_tools"}, "effort": "low"},
+}
+
+
 def request_body(inputs: dict[str, object], model: str) -> dict:
-    """Thinking off (`between_tools` is the only accepted off-switch on this model; it needs
-    effort high or below), effort low, the verdict schema as the output format."""
+    """The verdict schema as the output format. Haiku 4.5 (the pinned judge, Max 2026-10-07:
+    "use haiku (cheapest model)") does not think unless asked and rejects `effort`, so it
+    gets neither; a Sonnet 5.5 judge thinks by default and would spend the budget on it, so
+    THINKING_OFF gives it the one accepted off-switch and low effort."""
     lines = [f"{key}: {inputs.get(key)}" for key in INPUT_KEYS]
     for index, bout in enumerate(inputs.get("bouts") or [], start=1):
         lines.append(f"bout {index}: " + ", ".join(f"{k} {v}" for k, v in bout.items()))
-    return {
+    body = {
         "model": model,
         "max_tokens": MAX_TOKENS,
         "system": SYSTEM_PROMPT,
         "messages": [{"role": "user", "content": "\n".join(lines)}],
-        "thinking": {"type": "between_tools"},
-        "output_config": {
-            "effort": "low",
-            "format": {"type": "json_schema", "schema": VERDICT_SCHEMA},
-        },
+        "output_config": {"format": {"type": "json_schema", "schema": VERDICT_SCHEMA}},
     }
+    quiet = THINKING_OFF.get(model)
+    if quiet:
+        body["thinking"] = quiet["thinking"]
+        body["output_config"]["effort"] = quiet["effort"]
+    return body

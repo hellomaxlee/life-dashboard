@@ -274,7 +274,7 @@ def test_celebrations_are_marked_sample_unless_earned(settings, client, capsys):
     assert "sparkle (sample)" in client.get("/preview?date=2026-10-02").text
     render_main(["--date", "2026-10-02", "--out", str(settings.storage.raw_dir / "out")])
     out = capsys.readouterr().out
-    assert "sparkle (sample): 3 frames" in out and "party (sample): 6 frames" in out
+    assert "sparkle (sample): 5 frames" in out and "party (sample): 6 frames" in out
 
 
 # 10. the Pixoo host must be a home-LAN address

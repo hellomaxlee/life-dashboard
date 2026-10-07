@@ -74,7 +74,7 @@ similarity_threshold = 0.5
 # rate (app/summary/spend.py RATES; an id missing there is priced at the [summary] rates,
 # which overstate every cheaper model's, so the cap errs safe). Pinned here, never in code.
 [judge]
-model = "claude-sonnet-5-5"
+model = "claude-haiku-4-5"
 
 [scheduler]
 enabled = true

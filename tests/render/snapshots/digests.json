@@ -4,16 +4,16 @@
     "sha256": "0bc501321b237add2889c3f50439b93762f8c099bb7572053fdb154d99af7dea"
   },
   "celebrations/sparkle_book": {
-    "frames": 3,
-    "sha256": "f1da4c19fd07141627974e7e6e9fdbe4159adfa71bc6d94c423bb1ffc675dfa4"
+    "frames": 5,
+    "sha256": "0b2413df9b3e13fd4413e894421a9cec08f1c998de9b04c778548a15a1f34149"
   },
   "celebrations/sparkle_sleep": {
-    "frames": 3,
-    "sha256": "0d249406c7d4b84807fde1bb0f41c08464eb273845c236d2599b5a77b292ac13"
+    "frames": 5,
+    "sha256": "8527377b7267011b2a035baaff1d449f2ae06ada3c654136da6cf98da9214a57"
   },
   "celebrations/sparkle_workout": {
-    "frames": 3,
-    "sha256": "35086be44a07a41a2d961d40b8e7be8a70bf4934484e67c163a39a050540576c"
+    "frames": 5,
+    "sha256": "b4048eb5e303503fea0cd36f1a5a5d89ea2a7b607e0248b2437b9a1230470c82"
   },
   "empty/books": {
     "frames": 1,
