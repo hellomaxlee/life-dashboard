@@ -313,10 +313,13 @@ launchctl remove com.maxlee.probe
 What the job does: Today, City, Week, Month, Books, one sparkle for each small win the shown
 day earned, the party on a completed week, wrapping, each rendered for today's
 America/New_York day from a fresh db connection. A still stays `screen_seconds`; Books
-(pages are 2 s each) stays until it has played through; a sparkle is four stills of a second
+(pages are 2 s each) stays until it has played through; a sparkle is three stills held 0.3 s
 each and the party six, sent one at a time like Books pages, so neither ever shows the
 panel's loading cycle (which runs for as long as a multi-frame animation takes to upload:
-30 s for the 20-frame sparkle they replaced, 2026-10-07). After each screen the job moves
+30 s for the 20-frame sparkle they replaced, 2026-10-07). A celebration step is on screen
+for its hold plus the 1.45 s the next still takes to upload, so a sparkle runs about 5 s and
+the party about 10; four steps held a second each ran 10 s and read as lag (Max,
+2026-10-07). After each screen the job moves
 its own next run to the end of that hold; a failed send waits one dwell and then tries the
 next screen. A restart begins again at Today. `screen_seconds` under 3 or a bad host logs
 `device_rotation not registered: bad [device] config` and the rest of the service runs.
@@ -326,6 +329,24 @@ Measured on the panel (2026-10-04): it takes a request in at about 12 KB/s, so a
 the loading cycle showing throughout (hence the celebrations as stills, above). Each command times out after 5 s per phase and 10 s overall; a clip gets
 4 s per frame. A refused connection is retried twice. The adapter sends
 `Draw/ResetHttpGifId` before its first clip and every 32 clips after.
+
+Measured on the panel by direct probe (2026-10-07, five sends of one 64-pixel still per
+variant, while the live service kept sending; `Draw/SendHttpGif`, PicNum 1; the probe is a
+launchd job as above, built from `scratchpad/probe_upload.py` of that session): no transport
+uploads a frame faster than the adapter, so the adapter is unchanged.
+
+| variant | median | min | max |
+|---|---|---|---|
+| a. adapter as is (httpx, `Connection: close`), 3 runs | 1.41 / 1.42 / 1.56 s | 1.38 s | 2.78 s |
+| b. raw socket, headers and body in one `sendall`, close | 1.66 s | 1.59 s | 3.53 s |
+| c. b plus `TCP_NODELAY` | 2.60 s (contended run; min 1.61) | 1.61 s | 2.68 s |
+| d. kept-alive connection, sends 0.3 s apart | 1st 2.76 s ok; 2nd empty reply; 3rd broken pipe | | |
+| e. `Transfer-Encoding: chunked` body | 2.73 s | 2.59 s | 3.48 s |
+
+The panel answers every request with `Connection: close` and closes the socket itself
+(Libuhttpd 3.8.0), so keep-alive cannot carry a second send. The maxima are the live
+service's sends colliding with the probe's (the panel also refuses or resets a connect
+while it is busy with another; the adapter's connect retry covers that).
 
 Measured on the panel by direct probe (2026-10-06):
 - An upload costs about 0.17 s plus 78 ms per KB of body: a 64-pixel frame (16.4 KB) 1.45 s,

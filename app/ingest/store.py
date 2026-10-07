@@ -552,6 +552,12 @@ def store_payload(
         upsert_steps(conn, value)
     for value in parsed.wellness:
         upsert_wellness(conn, value)
+    for minute in parsed.hr_minutes:
+        conn.execute(
+            "INSERT OR REPLACE INTO hr_minutes (day_local, minute_utc, hr_min, hr_avg, hr_max) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (minute.day_local, minute.minute_utc, minute.hr_min, minute.hr_avg, minute.hr_max),
+        )
     stats.metrics_rows = len(parsed.sleep) + len(parsed.steps) + len(parsed.wellness)
     if raw_archive_id is not None and record_log:
         conn.execute(

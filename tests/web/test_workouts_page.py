@@ -6,7 +6,8 @@ from __future__ import annotations
 import json
 from datetime import date, timedelta
 
-from app.metrics import manual
+from app.metrics import judge, manual
+from app.metrics.engine import recompute
 from app.timeutil import local_day, now_utc
 
 EXTERNAL = ("http://", "https://", "<script", "<link ", "@import", "url(")
@@ -79,3 +80,32 @@ def test_a_bad_or_future_date_is_refused_with_the_reason_escaped(client, db, set
     assert response.status_code == 400
     assert "&lt;b&gt;soon&lt;/b&gt;" in response.text and "<b>soon</b>" not in response.text
     assert manual.list_overrides(db) == []
+
+
+def test_judged_days_are_listed_with_their_reason_and_removed_by_deny(client, db, settings):
+    day = today(settings)
+    for metric, value in (("heart_rate_max", 160), ("heart_rate_avg", 88)):
+        db.execute(
+            "INSERT OR REPLACE INTO wellness_daily (day_local, metric, value, units, source) "
+            "VALUES (?, ?, ?, 'count/min', 'test')",
+            (day, metric, value),
+        )
+    judge.store(db, judge.Judgement(day, "yes", 0.8, NASTY, "fake", "hash", "2026-10-06T15:00:00Z"))
+    recompute(db, settings)
+    db.commit()
+    assert day_row(db, day)["judged_workout"] is True
+
+    page = client.get("/workouts").text
+    assert "Judged from heart rate" in page and "<td>yes</td>" in page and "0.80" in page
+    assert ESCAPED in page and NASTY not in page
+    assert "<input type='hidden' name='action' value='deny'>" in page
+
+    response = client.post(
+        "/workouts", data={"action": "deny", "date": day}, follow_redirects=False
+    )
+    assert response.status_code == 303
+    assert judge.stored(db, day).verdict == "denied"
+    row = day_row(db, day)
+    assert row["quality_workout"] is False and row["judged_workout"] is False
+    page = client.get("/workouts").text
+    assert "<td>denied</td>" in page and "value='deny'" not in page

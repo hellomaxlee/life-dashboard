@@ -84,7 +84,7 @@ def test_rotation_json_lists_the_sequence_with_valid_frames(client, settings):
     assert holds["month"] == 11000, "one pass through both pages"
     assert holds["week"] == holds["today"] == 6000
     assert holds["books"] == clips["books"].total_ms > 6000, "the whole message pages through"
-    assert holds["win-workout"] == holds["win-sleep"] == 4000, "four steps of a second"
+    assert holds["win-workout"] == holds["win-sleep"] == 900, "three steps of 300 ms, one pass"
     expected = {c.name: c for c in celebrations_for(view)}
     assert [c["name"] for c in body["celebrations"]] == ["sparkle", "party"]
     for celebration in body["celebrations"]:
@@ -139,23 +139,23 @@ def test_shipped_luts_are_the_gamma_emulator_with_brightness_before_the_curve(cl
 
 
 def test_hold_is_the_dwell_or_the_clip_length_if_longer(settings):
-    short = Clip((new_frame(),) * 4, (1000,) * 4)
+    short = Clip((new_frame(),) * 4, (250,) * 4)
     long = Clip((new_frame(),) * 5, (5000,) * 5)
     still = Clip((new_frame(),), (8000,))
     assert hold_ms("week", still, settings.device.screen_seconds) == 6000, "a still: the dwell"
-    assert hold_ms("week", short, settings.device.screen_seconds) == 8000, "two whole plays"
+    assert hold_ms("week", short, settings.device.screen_seconds) == 6000, "six whole plays"
     assert hold_ms("books", long, settings.device.screen_seconds) == 25000, "one whole play"
     assert hold_ms("books", long, 30) == 25000, "never a second pass"
-    assert hold_ms("books", short, 30) == 4000, "a short summary is not repeated either"
+    assert hold_ms("books", short, 30) == 1000, "a short summary is not repeated either"
     sparkle = sparkle_clip("book")
-    assert sparkle.total_ms == 4000
-    assert hold_ms("win-book", sparkle, settings.device.screen_seconds) == 4000
-    assert hold_ms("win-book", sparkle, 45) == 4000, "a sparkle never waits out the dwell"
+    assert sparkle.total_ms == 900
+    assert hold_ms("win-book", sparkle, settings.device.screen_seconds) == 900, "paged: one pass"
+    assert hold_ms("win-book", sparkle, 45) == 900, "a sparkle never waits out the dwell"
     paged = Clip((new_frame(),) * 2, (6000, 5000))
     assert hold_ms("month", paged, 6) == hold_ms("month", paged, 45) == 11000, "one pass"
     assert hold_ms("month", still, 45) == 45000, "the plate alone, or the calendar: the dwell"
     party = render_screen("party", DayView(day_local="2026-10-02", week_dots=3), NOW)
-    assert hold_ms("party", party, 6) == hold_ms("party", party, 45) == party.total_ms == 6000
+    assert hold_ms("party", party, 6) == hold_ms("party", party, 45) == party.total_ms == 1800
 
 
 def test_rotation_json_dwell_follows_device_config(settings):
@@ -167,7 +167,7 @@ def test_rotation_json_dwell_follows_device_config(settings):
     assert holds["week"][0] == holds["today"][0] == 45000
     books_hold, books_total, pages = holds["books"]
     assert pages > 1 and books_hold == books_total < 45000
-    assert holds["win-workout"][0] == 4000
+    assert holds["win-workout"][0] == 900
 
 
 def test_date_and_fixture_selection(client, settings):

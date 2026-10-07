@@ -51,13 +51,43 @@ class CapCheck:
         )
 
 
-def price_usd(settings: Settings, usage: Usage) -> float:
+@dataclass(frozen=True)
+class Rates:
+    """USD per million tokens: input, output, cache read, cache write."""
+
+    input: float
+    output: float
+    cache_read: float
+    cache_write: float
+
+
+# First-party rates by model id (/claude-api, read 2026-10-07; cache rates at the usual
+# 0.1x read and 1.25x write of input, unused by the judge). The summary's model is priced
+# from [summary] in config.toml; any id not listed here falls back to those rates, which
+# overstate every cheaper model's, so the cap errs safe.
+RATES: dict[str, Rates] = {
+    "claude-sonnet-5-5": Rates(2.0, 10.0, 0.20, 2.50),
+}
+
+
+def rates_for(settings: Settings, model: str | None) -> Rates:
     s = settings.summary
+    fallback = Rates(
+        s.price_input_per_mtok,
+        s.price_output_per_mtok,
+        s.price_cache_read_per_mtok,
+        s.price_cache_write_per_mtok,
+    )
+    return fallback if model is None or model == s.model else RATES.get(model, fallback)
+
+
+def price_usd(settings: Settings, usage: Usage, model: str | None = None) -> float:
+    r = rates_for(settings, model)
     return (
-        usage.input_tokens * s.price_input_per_mtok
-        + usage.output_tokens * s.price_output_per_mtok
-        + usage.cache_read_tokens * s.price_cache_read_per_mtok
-        + usage.cache_creation_tokens * s.price_cache_write_per_mtok
+        usage.input_tokens * r.input
+        + usage.output_tokens * r.output
+        + usage.cache_read_tokens * r.cache_read
+        + usage.cache_creation_tokens * r.cache_write
     ) / MTOK
 
 
@@ -108,9 +138,12 @@ def record(
     usage: Usage,
     stop_reason: str | None,
     now: datetime | None = None,
+    model: str | None = None,
 ) -> float:
+    """One row per call, priced at `model`'s rate (the summary model when None)."""
     moment = now or now_utc()
-    usd = price_usd(settings, usage)
+    model = model or settings.summary.model
+    usd = price_usd(settings, usage, model)
     conn.execute(
         "INSERT INTO model_spend (day_local, month_local, request_id, model, input_tokens, "
         "output_tokens, cache_read_tokens, cache_creation_tokens, usd, stop_reason, "
@@ -119,7 +152,7 @@ def record(
             day_local,
             month_of(moment, settings.home_tz),
             request_id,
-            settings.summary.model,
+            model,
             usage.input_tokens,
             usage.output_tokens,
             usage.cache_read_tokens,

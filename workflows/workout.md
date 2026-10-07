@@ -42,9 +42,37 @@ pages.
   `day.manual_workout: true` (never the note); the fallback says "logged by hand" and never
   speaks of load; the model is told the same.
 
+## Judged workouts (the fitness coach)
+
+A third avenue beside a scored activity and an override (Max, 2026-10-07: "a sprint for
+the bus shouldn't count but a 20 minute HIIT on a bike should, as should a recorded
+workout"). Inside every metrics recompute, `judge_before` (`app/metrics/job.py`) finds days
+in the current and previous week that have heart-rate data, no scored activity at the bar
+and no override, and asks the model pinned in `[judge] model` to rule as a fitness coach.
+What it sees (`app/metrics/judge_prompt.py`): the day's whole-day aggregates and, when the
+Health Auto Export automation sends `heart_rate` aggregated by minutes, the day's *bouts*:
+contiguous minutes at or above zone one (gaps up to 3 min joined), each as duration,
+average, peak, zone minutes and Edwards load. Never a timestamp, never the minute series.
+With daily aggregates only (`hr_resolution: daily`) the coach credits only an obvious
+sustained effort; set the automation's heart-rate aggregation to **minutes** for the bouts.
+
+- Listing: `uv run python -m tools.workout --list` prints judged days with verdict,
+  confidence and the coach's reason; `/workouts` shows them under "Judged from heart rate".
+- Removing: the Remove button (or `judge.deny`) records a `denied` verdict for those inputs,
+  recomputes, and the dot goes; the day is judged again only if its inputs change.
+- Never revoked: a `yes` stands until Max removes it; a later run on new inputs may turn a
+  `no` into a `yes`, never the reverse.
+- Precedence: a scored activity at the bar or an override wins; a judged day never adds a
+  second dot. The summary payload carries `day.judged_workout` (never the reason); the
+  fallback says "judged from heart rate".
+- Cost: one call per day per distinct input set, at most the two-week window, cap in
+  `[summary] monthly_cap_usd` is a hard stop; the day stays unjudged on any error.
+- After a code change to the heart-rate parser, past days need `tools.replay
+  --rebuild-live` (run-service.md section 16) before they carry `heart_rate_max`.
+
 ## Replay and backup
 
-`manual_workouts` is authored data. `tools.replay --verify` copies it into the scratch db
+`manual_workouts` and `judged_workouts` are authored data (the second by the model). `tools.replay --verify` copies it into the scratch db
 before recomputing and never compares the table; `--rebuild-live` leaves it alone; a backup
 carries it like every table. Edge: an override removed from a day earlier than every stored
 sample leaves an empty, truthful row that `--verify` lists as live-only until

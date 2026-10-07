@@ -8,6 +8,8 @@ day's week and the two weeks before it, the title of a book whose effective date
 day's workout minutes from `activities` when the engine did not write `workout_minutes`.
 `day.manual_workout` is true when the day holds a manual override (app/metrics/manual.py):
 the dot is Max's own word, so no heart-rate load stands behind it; the note is not passed.
+`day.judged_workout` is true when the model credited the day from its whole-day heart-rate
+figures (app/metrics/judge.py): again no load stands behind it; the reason is not passed.
 `targets.load_bar` is the described week's `load_bar` as the engine stored it.
 Everything else is a label derived in code (cell, lens, dot word, weekday, week relation);
 labels carry no numbers. `numbers()` is the set the grounding gate checks against.
@@ -181,6 +183,7 @@ def _day_block(row: dict[str, Any] | None, book_title: str | None) -> dict[str, 
         "workout_count": _num(row.get("workout_count"), 0),
         "workout_load": _num(row.get("workout_load"), 0),
         "manual_workout": _flag(row.get("manual_workout")),
+        "judged_workout": _flag(row.get("judged_workout")),
         "workout_minutes": _num(row.get("workout_minutes"), 0),
         "sleep_hours": _truncated(row.get("sleep_hours")),
         "sleep_win": _flag(row.get("sleep_win")),

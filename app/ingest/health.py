@@ -303,6 +303,9 @@ async def ingest_health(request: Request) -> Response:
                 {"status": "error", "raw_archive_id": archived.raw_archive_id, "error": str(exc)},
                 status_code=500,
             )
+        from app.metrics.job import recompute_soon
+
+        recompute_soon(getattr(request.app.state, "scheduler", None))
         return JSONResponse(
             {
                 "status": "ok",

@@ -25,7 +25,7 @@ def test_replay_matches_live_and_is_stable(client, db, settings, tmp_path):
     assert all(
         len(live[t]) > 0
         for t in DATA_TABLES
-        if t not in ("daily_metrics", "weekly_metrics", "books")
+        if t not in ("daily_metrics", "weekly_metrics", "books", "hr_minutes")
     )
 
     first = replay.replay(
@@ -65,3 +65,20 @@ def test_snapshot_diff_cli(client, db, settings, tmp_path, monkeypatch, capsys):
     assert "sleep_sessions: +" in out
     saved = json.loads(snap.read_text())
     assert diff(saved, saved) == []
+
+
+def test_snapshot_of_a_db_missing_a_data_table_dumps_it_as_empty():
+    """A backup of a db that is behind reads every data table; one the schema does not have
+    yet (hr_minutes before migration 010) is empty, not `incomplete input`."""
+    import sqlite3
+
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    for table in DATA_TABLES:
+        if table != "hr_minutes":
+            conn.execute(f'CREATE TABLE "{table}" (id INTEGER PRIMARY KEY, metrics_json TEXT)')
+
+    snap = snapshot(conn)
+
+    assert snap["hr_minutes"] == []
+    assert set(snap) == set(DATA_TABLES)

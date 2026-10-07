@@ -419,9 +419,9 @@ def test_the_sequence_is_day_week_month_year_then_the_wins_then_the_party():
         "week": 6000,
         "month": 6000,
         "books": 6000,
-        "win-workout": 4000,
-        "win-sleep": 4000,
-        "party": 6000,
+        "win-workout": 900,
+        "win-sleep": 900,
+        "party": 1800,
     }
     party = slots[-1][1]
     assert len(party.frames) == 6 and len(device_parts(party)) == 6, "six stills, one pass"

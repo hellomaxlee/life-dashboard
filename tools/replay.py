@@ -68,6 +68,7 @@ DATA_TABLES = (
     "sleep_sessions",
     "steps_daily",
     "wellness_daily",
+    "hr_minutes",
     "daily_metrics",
     "weekly_metrics",
     "books",
@@ -75,8 +76,8 @@ DATA_TABLES = (
 DERIVED_TABLES = ("load_bar_history",)
 DERIVED_KEYS = {"daily_metrics": DAILY_KEYS, "weekly_metrics": WEEKLY_KEYS}
 AUTHORED_KEYS = {"daily_metrics": SUMMARY_KEYS}
-AUTHORED_TABLES = ("month_features", "manual_workouts")
-AUTHORED_INPUTS = ("manual_workouts",)
+AUTHORED_TABLES = ("month_features", "manual_workouts", "judged_workouts")
+AUTHORED_INPUTS = ("manual_workouts", "judged_workouts")
 PROVENANCE_COLUMNS = {"activity_sources": {"raw_archive_id"}}
 SCRATCH_DB = REPO_ROOT / "data" / "replay" / "scratch.db"
 INGESTERS = {
@@ -106,7 +107,12 @@ def _without_derived(row: dict[str, object], keys: frozenset[str]) -> dict[str, 
 def dump_table(
     conn: sqlite3.Connection, table: str, derived: bool = True, authored: bool = True
 ) -> list[dict[str, object]]:
-    order = ", ".join(f'"{c}"' for c in _primary_key(conn, table))
+    """The table's rows in primary-key order. A table the db's schema does not have yet
+    (a backup taken before the migration that adds it) dumps as empty, never as an error."""
+    key = _primary_key(conn, table)
+    if not key:
+        return []
+    order = ", ".join(f'"{c}"' for c in key)
     rows = conn.execute(f'SELECT * FROM "{table}" ORDER BY {order}').fetchall()
     skip = PROVENANCE_COLUMNS.get(table, set())
     dumped = [{k: v for k, v in dict(r).items() if k not in skip} for r in rows]

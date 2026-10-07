@@ -33,7 +33,7 @@ def test_migration_008_adds_the_table_as_an_authored_input(db):
     assert CODE_SCHEMA_VERSION >= 8
     assert "manual_workouts" in table_names(db)
     assert "manual_workouts" in replay.AUTHORED_TABLES
-    assert replay.AUTHORED_INPUTS == ("manual_workouts",)
+    assert replay.AUTHORED_INPUTS == ("manual_workouts", "judged_workouts")
     assert not set(replay.AUTHORED_TABLES) & set(replay.DATA_TABLES + replay.DERIVED_TABLES)
 
 

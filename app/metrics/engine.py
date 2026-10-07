@@ -43,6 +43,7 @@ from app.metrics.calibration import (
     is_calibration_run,
     plan_with_checks,
 )
+from app.metrics.judge import Judgement, read_credits
 from app.metrics.keys import STATE_CHECK, STATE_NOW, STATE_TODAY, WELLNESS_KEYS, round_half_up
 from app.metrics.load import load_rows
 from app.metrics.manual import Override, read_overrides
@@ -79,11 +80,12 @@ class Inputs:
     bar_history: list[BarEntry] = field(default_factory=list)
     manual: dict[date, Override] = field(default_factory=dict)
     formerly_manual: list[date] = field(default_factory=list)
+    judged: dict[date, Judgement] = field(default_factory=dict)
 
     def first_day(self) -> date | None:
         candidates = [a.day_local for a in self.activities]
         candidates += list(self.sleep_s) + list(self.steps) + list(self.manual)
-        candidates += self.formerly_manual
+        candidates += self.formerly_manual + list(self.judged)
         for values in self.wellness.values():
             candidates += list(values)
         return min(candidates) if candidates else None
@@ -165,11 +167,13 @@ def read_inputs(conn: sqlite3.Connection, settings: Settings) -> Inputs:
     for row in conn.execute("SELECT * FROM load_bar_history ORDER BY effective_from_week"):
         inputs.bar_history.append(entry_from_row(dict(row)))
     inputs.manual = read_overrides(conn)
+    inputs.judged = read_credits(conn)
     inputs.formerly_manual = [
         date.fromisoformat(row["day_local"])
         for row in conn.execute(
             "SELECT day_local FROM daily_metrics "
-            "WHERE json_extract(metrics_json, '$.manual_workout') = 1"
+            "WHERE json_extract(metrics_json, '$.manual_workout') = 1 "
+            "OR json_extract(metrics_json, '$.judged_workout') = 1"
         )
         if date.fromisoformat(row["day_local"]) not in inputs.manual
     ]
@@ -187,6 +191,23 @@ def activity_loads(activities: list[Activity], settings: Settings) -> dict[str, 
         else:
             loads[activity.id] = edwards_load(list(activity.samples), activity.end_utc, floors, gap)
     return loads
+
+
+def scored_days(conn: sqlite3.Connection, settings: Settings) -> set[str]:
+    """Days with an activity at or over the week's bar, scored from the raw series now
+    rather than read from `daily_metrics`, so a day pushed since the last recompute is
+    never sent to the judge."""
+    inputs = read_inputs(conn, settings)
+    loads = activity_loads(inputs.activities, settings)
+    out: set[str] = set()
+    for activity in inputs.activities:
+        load = loads[activity.id]
+        if load is None:
+            continue
+        week = week_start(activity.day_local).isoformat()
+        if load >= bar_for_week(inputs.bar_history, week, settings.workout.load_bar)[0]:
+            out.add(activity.day_local.isoformat())
+    return out
 
 
 def _merge_row(
@@ -282,6 +303,12 @@ def compute_rows(
         for day, row in manual.items()
         if not any(is_quality(a) for a in by_day.get(day, []))
     }
+    judged = {day: row for day, row in inputs.judged.items() if first <= day <= today}
+    credited_by_judge = {
+        day: row
+        for day, row in judged.items()
+        if day not in manual and not any(is_quality(a) for a in by_day.get(day, []))
+    }
 
     week_inputs = [
         WeekInput(
@@ -292,6 +319,11 @@ def compute_rows(
             + tuple(
                 row.created_at_utc
                 for day, row in credited_by_hand.items()
+                if week_start(day) == week
+            )
+            + tuple(
+                row.created_at_utc
+                for day, row in credited_by_judge.items()
                 if week_start(day) == week
             ),
             bar,
@@ -312,7 +344,7 @@ def compute_rows(
 
     def trimp(day: date) -> float:
         scored = [loads[a.id] for a in by_day.get(day, []) if loads[a.id] is not None]
-        if not scored and day in credited_by_hand:
+        if not scored and (day in credited_by_hand or day in credited_by_judge):
             return bars[week_start(day)][0]
         return sum(scored)
 
@@ -323,7 +355,9 @@ def compute_rows(
         todays = by_day.get(day, [])
         scored = [loads[a.id] for a in todays if loads[a.id] is not None]
         by_hand = manual.get(day)
+        by_judge = credited_by_judge.get(day)
         quality = any(is_quality(a) for a in todays) or day in credited_by_hand
+        quality = quality or by_judge is not None
         asleep = inputs.sleep_s.get(day)
         sleep_hours = round_half_up(asleep / 3600, 2) if asleep is not None else None
         slept = sleep_win(sleep_hours, settings.sleep_target_hours)
@@ -331,11 +365,13 @@ def compute_rows(
         load = load_by_day[day]
         row: dict[str, object] = {
             "quality_workout": quality,
-            "workout_count": max(len(todays), 1) if by_hand else len(todays),
+            "workout_count": max(len(todays), 1) if (by_hand or by_judge) else len(todays),
             "workout_load": max(scored) if scored else None,
             "workout_ids": [a.id for a in todays],
             "manual_workout": by_hand is not None,
             "manual_note": by_hand.note if by_hand else None,
+            "judged_workout": by_judge is not None,
+            "judged_reason": by_judge.reason if by_judge else None,
             "sleep_hours": sleep_hours,
             "sleep_win": slept,
             "steps": inputs.steps.get(day),

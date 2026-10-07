@@ -1,19 +1,19 @@
 {
   "celebrations/party": {
     "frames": 6,
-    "sha256": "11169740dcc1f4dedb7529a8b97112112f034f2325498564fe047177dee98736"
+    "sha256": "0bc501321b237add2889c3f50439b93762f8c099bb7572053fdb154d99af7dea"
   },
   "celebrations/sparkle_book": {
-    "frames": 4,
-    "sha256": "4376502e766004c1d567985af910d88ecdebdd662a0c3108bb995f2fbf72d35e"
+    "frames": 3,
+    "sha256": "f1da4c19fd07141627974e7e6e9fdbe4159adfa71bc6d94c423bb1ffc675dfa4"
   },
   "celebrations/sparkle_sleep": {
-    "frames": 4,
-    "sha256": "d0c745c11c089de324cef8f1869930069b0fec7b8163b8fe3ce7b70e4f62bec2"
+    "frames": 3,
+    "sha256": "0d249406c7d4b84807fde1bb0f41c08464eb273845c236d2599b5a77b292ac13"
   },
   "celebrations/sparkle_workout": {
-    "frames": 4,
-    "sha256": "922aa1e380347e377b7e940951f0065bf63ae10a692f4c83cdf61b4a3e4c9be1"
+    "frames": 3,
+    "sha256": "35086be44a07a41a2d961d40b8e7be8a70bf4934484e67c163a39a050540576c"
   },
   "empty/books": {
     "frames": 1,

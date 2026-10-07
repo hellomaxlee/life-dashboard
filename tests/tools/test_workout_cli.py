@@ -72,3 +72,54 @@ def test_refusals(db, settings, capsys):
     assert workout.main(["--remove"]) == 1
     assert "no override to remove" in capsys.readouterr().err
     assert manual.list_overrides(db) == []
+
+
+def test_list_shows_judged_days_with_verdict_and_reason(db, settings, capsys):
+    from app.metrics import judge
+
+    judge.store(
+        db,
+        judge.Judgement(
+            "2026-10-06", "yes", 0.8, "max 160 with 9000 steps", "fake", "h", "2026-10-06T15:00:00Z"
+        ),
+    )
+    judge.store(
+        db,
+        judge.Judgement(
+            "2026-10-05",
+            "failed",
+            0.0,
+            "",
+            "fake",
+            "h2",
+            "2026-10-06T15:00:00Z",
+            "stop_reason max_tokens",
+        ),
+    )
+    db.commit()
+    assert workout.main(["--list"]) == 0
+    out = capsys.readouterr().out
+    assert "no manual workout overrides" in out
+    assert "2026-10-06  judged yes (0.80)  max 160 with 9000 steps" in out
+    assert "2026-10-05  judged failed (0.00)  stop_reason max_tokens" in out
+
+
+def test_clean_reasons_rewrites_stored_tails_and_prints_the_count(db, settings, capsys):
+    from app.metrics import judge
+
+    judge.store(
+        db,
+        judge.Judgement("2026-10-06", "yes", 0.8, "a session.}", "m", "h", "2026-10-06T15:00:00Z"),
+    )
+    judge.store(
+        db,
+        judge.Judgement("2026-10-05", "no", 0.2, "no effort.", "m", "h2", "2026-10-06T15:00:00Z"),
+    )
+    db.commit()
+    assert workout.main(["--clean-reasons"]) == 0
+    assert capsys.readouterr().out.strip() == "cleaned 1 judged reason(s)"
+    rows = {j.day_local: j for j in judge.list_judgements(db)}
+    assert rows["2026-10-06"].reason == "a session." and rows["2026-10-06"].inputs_hash == "h"
+    assert rows["2026-10-05"].reason == "no effort."
+    assert workout.main(["--clean-reasons"]) == 0
+    assert capsys.readouterr().out.strip() == "cleaned 0 judged reason(s)"

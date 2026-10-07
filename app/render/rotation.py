@@ -11,9 +11,16 @@ week's target is met, repeated. `sequence_names` is the one definition; the devi
 /pixoo, /preview and the tools all read it.
 A still screen holds for the dwell (`device.screen_seconds`). A paged screen (City's weather,
 lines and alert pages, Books' summary, Month's plate and note, and both celebrations, which
-are steps of a second each) holds until it has paged through exactly once, however long or
-short that is. Anything animated faster than a page holds for whole plays: as many as cover
-WIN_HOLD_MS for a win or the dwell for a screen.
+are steps of celebrate.STEP_MS each) holds until it has paged through exactly once, however
+long or short that is. Anything animated faster than a page holds for whole plays: as many
+as cover WIN_HOLD_MS for a win or the dwell for a screen.
+
+PAGED_FRAME_MS is the line between a page and an animation frame. It sits at 300 ms so a
+celebration step can hold for as little as the panel's own upload makes worthwhile (the next
+still takes 1.45 s to arrive whatever the hold, so a long hold only drags the step; Max,
+2026-10-07: "very laggy"), and above the 250 ms frames of the Week screen's stale blink,
+which must still go whole as an animation. City, Month and Books pages are 2000 to 6000 ms
+and page exactly as before.
 """
 
 from __future__ import annotations
@@ -34,7 +41,7 @@ PARTY = "party"
 SCREEN_NAMES = (*ROTATION_ORDER, *WIN_NAMES, PARTY)
 ONE_PASS = ("city", "month", "books", PARTY)
 WIN_HOLD_MS = 4000
-PAGED_FRAME_MS = 1000
+PAGED_FRAME_MS = 300
 
 
 def sequence_names(view: DayView) -> tuple[str, ...]:
@@ -73,23 +80,29 @@ def render_screen(name: str, view: DayView, now: datetime) -> Clip:
 
 
 def hold_ms(name: str, clip: Clip, dwell_s: int) -> int:
-    """How long a slot keeps the display. A still: the dwell. City, Books, Month and the party:
-    one pass through. Anything else animated: whole plays, as many as it takes to cover
-    WIN_HOLD_MS for a sparkle or the dwell for a screen, so a clip is never replaced part way
-    through."""
+    """How long a slot keeps the display. A still: the dwell. City, Books, Month, the party
+    and any paged clip (every celebration): one pass through, which is what the device job
+    gives a paged clip step by step. Anything else animated: whole plays, as many as it takes
+    to cover WIN_HOLD_MS for a sparkle or the dwell for a screen, so a clip is never replaced
+    part way through."""
     if not clip.animated:
         return dwell_s * 1000
-    if name in ONE_PASS:
+    if name in ONE_PASS or is_paged(clip):
         return clip.total_ms
     cover_ms = WIN_HOLD_MS if name in WIN_NAMES else dwell_s * 1000
     return max(1, -(-cover_ms // clip.total_ms)) * clip.total_ms
 
 
+def is_paged(clip: Clip) -> bool:
+    """An animated clip whose every frame is up for PAGED_FRAME_MS or more."""
+    return clip.animated and min(clip.durations_ms) >= PAGED_FRAME_MS
+
+
 def device_parts(clip: Clip) -> list[Clip]:
-    """What to send for one slot. A paged clip (every frame up for PAGED_FRAME_MS or more)
-    goes as one still per page, each held for its own time, so the panel shows every page
-    exactly once and never loops them; anything faster goes whole, as an animation."""
-    if clip.animated and min(clip.durations_ms) >= PAGED_FRAME_MS:
+    """What to send for one slot. A paged clip goes as one still per page, each held for its
+    own time, so the panel shows every page exactly once and never loops them; anything
+    faster goes whole, as an animation."""
+    if is_paged(clip):
         return [still(frame, ms) for frame, ms in zip(clip.frames, clip.durations_ms, strict=True)]
     return [clip]
 

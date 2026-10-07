@@ -7,14 +7,20 @@ Sparkle: the win's own icon pops in the centre while four-point stars twinkle ar
 Party: the frame opens as the Week screen's dot row with the last dot missing; that dot drops
 in and bounces, all dots flash, then they throw confetti while "WEEK DONE" rides a rainbow wave.
 
-Each is drawn as a run of ticks (SPARKLE_TICKS, PARTY_TICKS) and shown as a few of them, one
-still a second (SPARKLE_STEPS, PARTY_STEPS; every frame at or over rotation.PAGED_FRAME_MS, so
-the device job sends them one by one like Books pages). The panel shows a loading cycle for
-as long as a multi-frame animation takes to upload, 1.45 s a frame, so the 20-frame sparkle
+Each is drawn as a run of ticks (SPARKLE_TICKS, PARTY_TICKS) and shown as a few of them as
+stills (SPARKLE_STEPS, PARTY_STEPS; every frame at or over rotation.PAGED_FRAME_MS, so the
+device job sends them one by one like Books pages). The panel shows a loading cycle for as
+long as a multi-frame animation takes to upload, 1.45 s a frame, so the 20-frame sparkle
 loaded for 30 s and the 56-frame party would have for 80; a still arrives with no loading
 cycle at all, and fetching a GIF instead is not something this panel's firmware does (Max,
-2026-10-06 and 2026-10-07, run-service.md section 15). A step is up for its second plus the
-1.45 s its successor takes to arrive.
+2026-10-06 and 2026-10-07, run-service.md section 15).
+
+The cadence: a step is on screen for its hold (STEP_MS) plus the 1.45 s its successor takes
+to upload, and no transport makes that upload faster (httpx, a raw one-write socket, nodelay,
+chunked and keep-alive all measured within noise of each other, 2026-10-07, run-service.md
+section 15). So the hold is as short as paging allows and the upload itself is most of the
+step: three steps are on screen about 5 s, which four steps held a second each made 10
+(Max, 2026-10-07: "very laggy").
 """
 
 from __future__ import annotations
@@ -49,10 +55,10 @@ WIN_LABELS: dict[str, tuple[str, ...]] = {
 }
 WIN_ORDER: tuple[Win, ...] = ("workout", "sleep", "book")
 SPARKLE_TICKS = 20
-SPARKLE_STEPS = (1, 5, 8, 14)
+SPARKLE_STEPS = (2, 6, 14)
 PARTY_TICKS = 56
 PARTY_STEPS = (3, 11, 13, 17, 28, 44)
-STEP_MS = 1000
+STEP_MS = 300
 _DROP_FRAMES = 12
 _FLASH_FRAMES = 4
 _GRAVITY = 0.16
@@ -107,8 +113,8 @@ def _steps(ticks: list[Frame], steps: tuple[int, ...], poster: int) -> Clip:
 
 
 def sparkle_clip(win: Win = "workout", seed: int = 11, dot: int | None = None) -> Clip:
-    """The small-win clip: the icon arriving, grown, ringed, settled among the stars, four
-    stills of a second each. `win` picks the icon and the label; for a workout,
+    """The small-win clip: the icon arriving, ringed at full size, settled among the stars,
+    three stills of STEP_MS each. `win` picks the icon and the label; for a workout,
     `dot` (the week's count including this one) colours the disc and its ring like the Week
     screen's Nth dot (Max, 2026-10-06: a different colour for the 1st, 2nd and 3rd)."""
     rng = random.Random(seed)
@@ -165,7 +171,7 @@ def _rainbow_wave(frame: Frame, text: str, y: int, tick: int) -> None:
 
 
 def party_clip(count: int = 3, target: int = 3, seed: int = 7) -> Clip:
-    """The week-complete clip, six stills of a second each: the last dot falling, landed,
+    """The week-complete clip, six stills of STEP_MS each: the last dot falling, landed,
     the flash, the burst with WEEK DONE, then confetti twice.
 
     `count` and `target` are the week's stored numbers; the clip prints them as given.

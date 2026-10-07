@@ -1,9 +1,13 @@
 """Run the metrics engine by hand and look at what it wrote.
 
-python -m tools.metrics --recompute                 recompute every row through today (clock)
+python -m tools.metrics --recompute                 judge, then recompute every row through today
 python -m tools.metrics --recompute --today DATE    ... as of the end of that home-timezone day
 python -m tools.metrics --show DATE                 print the day's and its week's rows as JSON
 python -m tools.metrics --history                   print the load-bar history
+
+--recompute goes through app.metrics.job.run_recompute, the scheduler's own tick: the
+judged workout runs first, only when `[judge] model` is set and a key is present, and the
+line printed says how many days were judged, failed and skipped (unchanged hash).
 
 Uses the live db without migrating it (exit 2 if the schema is behind: run tools.migrate).
 """
@@ -18,7 +22,7 @@ from datetime import date
 from app.config import load_settings
 from app.db import SchemaMismatch, connect_live
 from app.metrics.calendar import week_start
-from app.metrics.engine import recompute
+from app.metrics.job import run_recompute
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -39,7 +43,11 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     try:
         if args.recompute:
-            result = recompute(conn, settings, args.today)
+            conn.close()
+            result = run_recompute(
+                settings, lambda: connect_live(settings.storage.db_path), today_local=args.today
+            )
+            print(f"judge: {result.judge.describe()}")
             print(
                 f"recomputed {result.first_day}..{result.today_local} as of {result.now_utc}: "
                 f"{result.days_written} day row(s), {result.weeks_written} week row(s), "

@@ -571,3 +571,25 @@ def test_a_city_job_bug_is_logged_with_its_traceback_and_never_raised(
     scheduler.get_job(jobs.CITY_TRANSIT_JOB).func()
     assert scheduler.job_stats[jobs.CITY_TRANSIT_JOB].failures == 1
     assert "job city_transit failed" in caplog.text and "Traceback" in caplog.text
+
+
+def test_a_health_push_pulls_the_recompute_job_to_now(jobs_settings, monkeypatch):
+    from app.metrics.job import RECOMPUTE_JOB
+
+    scheduler = jobs.build_scheduler(jobs_settings, lambda: open_db(jobs_settings.storage.db_path))
+    scheduler.start(paused=True)
+    try:
+        app = create_app(jobs_settings)
+        with TestClient(app) as client:
+            app.state.scheduler = scheduler
+            before = scheduler.get_job(RECOMPUTE_JOB).next_run_time
+            assert before.astimezone(UTC) > datetime.now(UTC) + timedelta(seconds=30)
+            assert post_fixture(client, "batch_part1.json").status_code == 200
+            after = scheduler.get_job(RECOMPUTE_JOB).next_run_time
+            assert after.astimezone(UTC) <= datetime.now(UTC)
+            scheduler.get_job(RECOMPUTE_JOB).modify(next_run_time=before)
+            assert post_fixture(client, "batch_part1.json").json()["status"] == "duplicate"
+            assert scheduler.get_job(RECOMPUTE_JOB).next_run_time == before
+    finally:
+        if scheduler.running:
+            scheduler.shutdown(wait=False)

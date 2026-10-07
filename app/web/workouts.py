@@ -13,7 +13,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from app.config import Settings
-from app.metrics import manual
+from app.metrics import judge, manual
 from app.metrics.engine import recompute
 from app.timeutil import local_day, now_utc, utc_iso_to_local_display
 from app.web.nav import NAV_STYLE, nav_html
@@ -53,6 +53,33 @@ def render_workouts(conn: sqlite3.Connection, settings: Settings, error: str | N
         )
     else:
         table = "<p>No overrides.</p>"
+    judged = judge.list_judgements(conn)
+    if judged:
+        judged_body = "".join(
+            "<tr>"
+            f"<td>{escape(row.day_local)}</td>"
+            f"<td>{escape(row.verdict)}</td>"
+            f"<td>{escape(row.reason or row.error) or '—'}</td>"
+            f"<td>{row.confidence:.2f}</td>"
+            f"<td>{escape(utc_iso_to_local_display(row.created_at_utc, settings.home_tz))}</td>"
+            "<td>"
+            + (
+                "<form method='post' action='/workouts'>"
+                f"<input type='hidden' name='date' value='{escape(row.day_local, quote=True)}'>"
+                "<input type='hidden' name='action' value='deny'>"
+                "<button type='submit'>remove</button></form>"
+                if row.credited
+                else ""
+            )
+            + "</td></tr>"
+            for row in judged
+        )
+        judged_table = (
+            "<table><thead><tr><th>day</th><th>verdict</th><th>reason</th><th>confidence</th>"
+            f"<th>judged</th><th></th></tr></thead><tbody>{judged_body}</tbody></table>"
+        )
+    else:
+        judged_table = "<p>No judged days.</p>"
     error_html = f"<p class='error'>{escape(error)}</p>" if error else ""
     return (
         "<!doctype html><html lang='en'><head><meta charset='utf-8'>"
@@ -71,7 +98,11 @@ def render_workouts(conn: sqlite3.Connection, settings: Settings, error: str | N
         f"<label>Note <input type='text' name='note' maxlength='{manual.NOTE_MAX}' "
         "placeholder='4 mile run'></label>"
         "<button type='submit'>Credit this day</button></form>"
-        "<h2>Overrides</h2>" + table + "</body></html>"
+        "<h2>Overrides</h2>" + table + "<h2>Judged from heart rate</h2>"
+        "<p class='note'>Days the model credited from whole-day heart-rate figures alone. "
+        "Remove drops the credit; the day is not re-judged until its figures change.</p>"
+        + judged_table
+        + "</body></html>"
     )
 
 
@@ -101,6 +132,8 @@ async def workouts_post(request: Request) -> Response:
             return HTMLResponse(render_workouts(conn, settings, str(exc)), status_code=400)
         if form.get("action") == "remove":
             manual.remove_override(conn, day)
+        elif form.get("action") == "deny":
+            judge.deny(conn, day)
         else:
             manual.add_override(conn, day, form.get("note", ""))
         recompute(conn, settings)

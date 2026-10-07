@@ -25,6 +25,8 @@ EXPECTED_TABLES = {
     "month_feature_attempts",
     "city_snapshots",
     "manual_workouts",
+    "judged_workouts",
+    "hr_minutes",
 }
 
 

@@ -65,7 +65,9 @@ WELLNESS_METRICS = {
 SUMMED_METRICS = {STEP_COUNT, "time_in_daylight"}
 MEAN_METRICS = {"heart_rate_variability"}
 LATEST_METRICS = {"resting_heart_rate", "vo2_max"}
-IGNORED_METRICS = {"heart_rate"}
+HEART_RATE = "heart_rate"
+HEART_RATE_FIELDS = {"Max": "heart_rate_max", "Avg": "heart_rate_avg", "Min": "heart_rate_min"}
+IGNORED_METRICS: set[str] = set()
 UNKNOWN_SOURCE = "unknown"
 DEFAULT_SLEEP_GAP_MIN = 60
 
@@ -140,12 +142,22 @@ class Sample:
     order: tuple[str, int]
 
 
+@dataclass(frozen=True)
+class HrMinute:
+    day_local: str
+    minute_utc: str
+    hr_min: float | None
+    hr_avg: float | None
+    hr_max: float | None
+
+
 @dataclass
 class ParsedPayload:
     workouts: list[Workout] = field(default_factory=list)
     sleep: list[SleepSession] = field(default_factory=list)
     steps: list[DailyValue] = field(default_factory=list)
     wellness: list[DailyValue] = field(default_factory=list)
+    hr_minutes: list[HrMinute] = field(default_factory=list)
     unknown_metrics: list[str] = field(default_factory=list)
     skipped_rows: int = 0
     sample_rows: int = 0
@@ -492,6 +504,9 @@ def parse_metric(
         return
     if name in IGNORED_METRICS:
         return
+    if name == HEART_RATE:
+        parse_heart_rate_metric(rows, tz, out, str(units) if units is not None else None)
+        return
     if name != STEP_COUNT and name not in WELLNESS_METRICS.values():
         if raw_name not in out.unknown_metrics:
             out.unknown_metrics.append(raw_name)
@@ -517,6 +532,50 @@ def parse_metric(
     unit_text = str(units) if units is not None else None
     reduced = reduce_samples(name, samples, unit_text, summed_by_phone)
     (out.steps if name == STEP_COUNT else out.wellness).extend(reduced)
+
+
+def parse_heart_rate_metric(
+    rows: list[Any], tz: str, out: ParsedPayload, units: str | None
+) -> None:
+    """The day's Max/Avg/Min heart rate as three wellness values; the day's max and min
+    win across rows, the average is a mean. No samples: these are whole-day figures."""
+    by_day: dict[str, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
+    sources: dict[str, set[str]] = defaultdict(set)
+    for row in rows:
+        if not isinstance(row, dict) or "date" not in row:
+            out.skipped_rows += 1
+            continue
+        stamp = str(row["date"])
+        if is_midnight_stamp(stamp):
+            day = aggregate_day(stamp, tz)
+        else:
+            moment = parse_hae_datetime(stamp, tz)
+            day = local_day(moment, tz)
+            out.hr_minutes.append(
+                HrMinute(
+                    day,
+                    to_utc_iso(moment.replace(second=0, microsecond=0)),
+                    _qty(row.get("Min")),
+                    _qty(row.get("Avg")),
+                    _qty(row.get("Max")),
+                )
+            )
+        for field_name, metric in HEART_RATE_FIELDS.items():
+            value = _qty(row.get(field_name))
+            if value is not None:
+                by_day[day][metric].append(value)
+                sources[day].add(_row_source(row, "aggregate"))
+        out.saw_day(day)
+    for day in sorted(by_day):
+        source = "|".join(sorted(sources[day]))
+        for metric, values in by_day[day].items():
+            if metric == "heart_rate_max":
+                value = max(values)
+            elif metric == "heart_rate_min":
+                value = min(values)
+            else:
+                value = sum(values) / len(values)
+            out.wellness.append(DailyValue(day, metric, value, units, source))
 
 
 def parse_payload(

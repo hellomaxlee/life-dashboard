@@ -59,6 +59,7 @@ def test_cli_recompute_show_and_history(db, settings, capsys):
     assert metrics_tool.main(["--recompute", "--today", "2026-10-13"]) == 0
     out = capsys.readouterr().out
     assert re.search(r"recomputed 2026-10-12\.\.2026-10-13 as of 2026-10-14T03:59:59Z", out)
+    assert "judge: judged 0, yes 0, failed 0, kept 0, skipped (hash) 0" in out
 
     assert metrics_tool.main(["--show", "2026-10-13"]) == 0
     out = capsys.readouterr().out
@@ -121,3 +122,29 @@ def test_a_config_without_a_metrics_section_boots_with_the_defaults(tmp_path, mo
     loaded = load_settings(config)
     assert loaded.metrics.recompute_minutes == 15
     assert loaded.metrics.wellness_priority == ("hrv_ms", "resting_hr", "daylight_min")
+
+
+def test_cli_recompute_judges_like_the_scheduler_and_reports_the_counts(
+    db, settings, capsys, monkeypatch
+):
+    from app.metrics import job, judge
+    from tests.metrics.test_judge import NOW, YES, FakeClient, seed
+
+    monkeypatch.setattr(judge, "now_utc", lambda: NOW)
+    judging = replace(settings, judge_model="fake")
+    monkeypatch.setattr(metrics_tool, "load_settings", lambda: judging)
+    client = FakeClient(YES)
+    monkeypatch.setattr(job, "make_client", lambda _settings: client)
+    seed(db)
+    assert metrics_tool.main(["--recompute", "--today", "2026-10-06"]) == 0
+    out = capsys.readouterr().out
+    assert "judge: judged 1, yes 1, failed 0, kept 0, skipped (hash) 0" in out
+    assert client.messages.calls == 1
+    assert metrics_tool.main(["--recompute", "--today", "2026-10-06"]) == 0
+    assert "judge: judged 0, yes 0, failed 0, kept 0, skipped (hash) 1" in capsys.readouterr().out
+    assert client.messages.calls == 1
+    unset = replace(settings, judge_model="")
+    monkeypatch.setattr(metrics_tool, "load_settings", lambda: unset)
+    assert metrics_tool.main(["--recompute", "--today", "2026-10-06"]) == 0
+    assert "judge: judged 0, yes 0, failed 0, kept 0, skipped (hash) 0" in capsys.readouterr().out
+    assert client.messages.calls == 1

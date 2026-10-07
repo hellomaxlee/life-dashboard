@@ -164,6 +164,7 @@ class Settings:
     anthropic_api_key: str = ""
     metrics: MetricsConfig = MetricsConfig()
     city: CityConfig = CityConfig()
+    judge_model: str = ""
 
 
 def _resolve(path_str: str) -> Path:
@@ -452,4 +453,5 @@ def load_settings(config_path: Path | None = None) -> Settings:
         anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY", "").strip(),
         metrics=_metrics(raw),
         city=_city(raw),
+        judge_model=str(raw.get("judge", {}).get("model", "")),
     )

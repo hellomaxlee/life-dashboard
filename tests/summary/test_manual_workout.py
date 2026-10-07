@@ -1,5 +1,6 @@
-"""A manual override reaches the summary as `day.manual_workout`; the fallback copy for such
-a day never claims heart-rate load, and the model's prompt is told what the flag means."""
+"""A manual override reaches the summary as `day.manual_workout` and a judged credit as
+`day.judged_workout`; the fallback copy for such a day never claims heart-rate load, and
+the model's prompt is told what each flag means."""
 
 from __future__ import annotations
 
@@ -67,3 +68,37 @@ def test_a_scored_quality_day_with_an_override_keeps_the_load_wording(db, settin
 def test_the_prompt_names_the_flag():
     assert "day.manual_workout" in STABLE_SYSTEM_PROMPT
     assert "logged by hand" in STABLE_SYSTEM_PROMPT
+
+
+def judged_case(workout_load: float | None) -> dict:
+    case = manual_case(workout_load, workout_count=1)
+    case["daily_metrics"].pop("manual_note")
+    case["daily_metrics"]["manual_workout"] = False
+    case["daily_metrics"]["judged_workout"] = True
+    case["daily_metrics"]["judged_reason"] = "max 160 with 9000 steps"
+    return case
+
+
+def test_the_payload_carries_the_judged_flag_but_never_the_reason(db, settings):
+    payload = payload_for(db, settings, judged_case(None))
+    assert payload.data["day"]["judged_workout"] is True
+    assert payload.data["day"]["manual_workout"] is False
+    assert "9000 steps" not in payload.text() and "judged_reason" not in payload.text()
+
+
+def test_fallback_for_a_judged_day_says_so_and_never_speaks_of_load(db, settings):
+    for load in (None, 60.0):
+        payload = payload_for(db, settings, judged_case(load))
+        clause = fact_clause(payload)
+        assert "judged from heart rate" in clause, clause
+        assert "load" not in clause.lower() and "by hand" not in clause
+        for line in candidates(payload):
+            assert "load" not in line.lower(), line
+        result = fallback_line(payload, Recent(), 0.5)
+        assert result.gate.ok and not result.last_resort
+        assert check_device_line(result.line, payload, Recent(), 0.5).ok
+
+
+def test_the_prompt_names_the_judged_flag():
+    assert "day.judged_workout" in STABLE_SYSTEM_PROMPT
+    assert "judged from heart rate" in STABLE_SYSTEM_PROMPT

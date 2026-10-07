@@ -493,12 +493,12 @@ def test_the_workout_sparkle_takes_the_colour_of_the_weeks_nth_dot(settings):
     centre = (32, 26)
     for dot, colour in ((1, CORAL), (2, GOLD), (3, TEAL)):
         clip = sparkle_clip("workout", dot=dot)
-        assert clip.frames[3].getpixel(centre) == colour, dot
+        assert clip.frames[-1].getpixel(centre) == colour, dot
     assert (
-        sparkle_clip("sleep", dot=1).frames[3].tobytes()
-        == sparkle_clip("sleep").frames[3].tobytes()
+        sparkle_clip("sleep", dot=1).frames[-1].tobytes()
+        == sparkle_clip("sleep").frames[-1].tobytes()
     )
     view, now = load(WEEK_41, settings)
     first = render_screen("win-workout", replace(view, week_dots=1), now)
     third = render_screen("win-workout", replace(view, week_dots=3), now)
-    assert first.frames[3].getpixel(centre) == CORAL and third.frames[3].getpixel(centre) == TEAL
+    assert first.frames[-1].getpixel(centre) == CORAL and third.frames[-1].getpixel(centre) == TEAL

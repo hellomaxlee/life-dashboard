@@ -25,6 +25,8 @@ DAILY_KEYS = frozenset(
         "workout_ids",
         "manual_workout",
         "manual_note",
+        "judged_workout",
+        "judged_reason",
         "sleep_hours",
         "sleep_win",
         "steps",

@@ -282,11 +282,12 @@ def fact_options(payload: Payload) -> list[str]:
             core = [
                 f"{_count(dots, 'dot').lower()} by {d['weekday']}, load balance {load['balance']}."
             ]
-        elif day.get("quality_workout") and _credited_by_hand(day, d["targets"]):
+        elif day.get("quality_workout") and _credited_without_load(day, d["targets"]):
             word = week.get("dots_word")
-            core = [f"yesterday's dot was logged by hand, {sleep_text}."]
+            how = "logged by hand" if day.get("manual_workout") else "judged from heart rate"
+            core = [f"yesterday's dot was {how}, {sleep_text}."]
             if word and word != "no":
-                core.insert(0, f"yesterday made the {word} dot {week['relation']}, logged by hand.")
+                core.insert(0, f"yesterday made the {word} dot {week['relation']}, {how}.")
         elif day.get("quality_workout"):
             workout_load = day.get("workout_load")
             tail = f"load {workout_load}" if workout_load is not None else sleep_text
@@ -325,10 +326,10 @@ def fact_options(payload: Payload) -> list[str]:
     return options
 
 
-def _credited_by_hand(day: dict, targets: dict) -> bool:
-    """The dot came from a manual override, not a scored workout: no load, or a load under
-    the bar, so no line may speak of heart-rate load."""
-    if day.get("manual_workout") is not True:
+def _credited_without_load(day: dict, targets: dict) -> bool:
+    """The dot came from a manual override or the judge, not a scored workout: no load, or
+    a load under the bar, so no line may speak of heart-rate load."""
+    if day.get("manual_workout") is not True and day.get("judged_workout") is not True:
         return False
     load, bar = day.get("workout_load"), targets.get("load_bar")
     return load is None or (bar is not None and load < bar)

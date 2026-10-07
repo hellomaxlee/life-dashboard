@@ -94,7 +94,7 @@ def test_wellness_samples_reduce_by_their_rule(client, db):
 def test_standalone_heart_rate_is_ignored_quietly(client, db):
     resp = post_fixture(client, "metrics_v2_samples.json")
     assert resp.json()["unknown_metrics"] == []
-    assert resp.json()["metrics_rows"] == 3 + 3 + 9
+    assert resp.json()["metrics_rows"] == 3 + 3 + 9 + 6
     log = db.execute("SELECT unknown_metrics FROM ingest_log").fetchone()
     assert log["unknown_metrics"] == "[]"
 

@@ -69,6 +69,13 @@ price_cache_read_per_mtok = 0.20
 price_cache_write_per_mtok = 5.0
 similarity_threshold = 0.5
 
+# The judged workout (app/metrics/judge.py): the model that reads a day's heart-rate
+# aggregates. Spend is counted against the [summary] cap above, priced at this model's own
+# rate (app/summary/spend.py RATES; an id missing there is priced at the [summary] rates,
+# which overstate every cheaper model's, so the cap errs safe). Pinned here, never in code.
+[judge]
+model = "claude-sonnet-5-5"
+
 [scheduler]
 enabled = true
 usage_poll_seconds = 30
