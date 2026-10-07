@@ -14,7 +14,7 @@ from app.render.font import BODY, SMALL, draw_text, text_width
 from app.render.frame import SIZE, Clip, new_frame, still, upscale
 from app.render.gamma import led_gamma, led_lut
 from app.render.palette import SPINES
-from app.render.rotation import rotation_clips
+from app.render.rotation import PAGED_FRAME_MS, rotation_clips
 from app.render.screens import as_of_label, render_books, render_today, sleep_text
 from app.render.view import DayView
 from app.timeutil import from_utc_iso
@@ -159,10 +159,11 @@ def test_celebrations_are_deterministic_colourful_and_short():
         assert [f.tobytes() for f in first.frames] == [f.tobytes() for f in second.frames]
         colours = {p for frame in first.frames for p in frame.get_flattened_data()}
         assert len(colours) > 20
-        assert first.total_ms <= 4000
+        assert first.total_ms <= 6000
         assert all(lit(frame) > 20 for frame in first.frames)
-    assert len(sparkle_clip().frames) == 20
-    assert len(party_clip().frames) == 56
+        assert min(first.durations_ms) >= PAGED_FRAME_MS, "steps, sent as stills: no loading"
+    assert len(sparkle_clip().frames) == 4
+    assert len(party_clip().frames) == 6
     assert party_clip(5, 5).poster.size == (64, 64)
 
 

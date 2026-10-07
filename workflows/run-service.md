@@ -310,17 +310,20 @@ launchctl submit -l com.maxlee.probe -o /tmp/probe.log -e /tmp/probe.log -- \
 launchctl remove com.maxlee.probe
 ```
 
-What the job does: Week, Today, one sparkle for each small win the shown day earned, Books,
-wrapping, each rendered for today's America/New_York day from a fresh db connection. A still
-stays `screen_seconds`; Books (pages are 2 s each) stays until it has played through; a
-sparkle plays three times (4.2 s). After each screen the job moves its own next run to the
-end of that hold; a failed send waits one dwell and then tries the next screen. A restart
-begins again at Week. `screen_seconds` under 3 or a bad host logs
+What the job does: Today, City, Week, Month, Books, one sparkle for each small win the shown
+day earned, the party on a completed week, wrapping, each rendered for today's
+America/New_York day from a fresh db connection. A still stays `screen_seconds`; Books
+(pages are 2 s each) stays until it has played through; a sparkle is four stills of a second
+each and the party six, sent one at a time like Books pages, so neither ever shows the
+panel's loading cycle (which runs for as long as a multi-frame animation takes to upload:
+30 s for the 20-frame sparkle they replaced, 2026-10-07). After each screen the job moves
+its own next run to the end of that hold; a failed send waits one dwell and then tries the
+next screen. A restart begins again at Today. `screen_seconds` under 3 or a bad host logs
 `device_rotation not registered: bad [device] config` and the rest of the service runs.
 
 Measured on the panel (2026-10-04): it takes a request in at about 12 KB/s, so a still is
-1.4 s to send, a 4-page Books 5.9 s, and a 20-frame sparkle 32 s, during which the previous
-screen stays up. Each command times out after 5 s per phase and 10 s overall; a clip gets
+1.4 s to send and a 4-page Books 5.9 s; an animation of n frames takes 1.45 n seconds, with
+the loading cycle showing throughout (hence the celebrations as stills, above). Each command times out after 5 s per phase and 10 s overall; a clip gets
 4 s per frame. A refused connection is retried twice. The adapter sends
 `Draw/ResetHttpGifId` before its first clip and every 32 clips after.
 
@@ -340,9 +343,12 @@ Measured on the panel by direct probe (2026-10-06):
   in it; `Channel/GetAllConf`, `Device/GetDeviceTime` and `Draw/GetHttpGifId` return 0 with
   no fields. `Channel/GetIndex` answers 1 while uploaded frames are showing;
   `Channel/SetIndex` 3 is accepted and read back as 3 (the panel was put back to 1).
-- Not yet seen by anyone: a single fetched GIF left alone for 20 s (is the heart a splash
-  that gives way?), Divoom's own sample URL, a fetch after `Channel/SetIndex` 3, and the
-  32-pixel upload. The four were run once, labelled TEST A to D, with nobody watching.
+- Watched by Max on the evening of 2026-10-06: a fetched GIF left alone for 22 s in the
+  cloud channel, or in the custom channel (`Channel/SetIndex` 3), is never shown; the panel
+  shows the heart for 10 to 15 s and then plays its own cloud gallery (a hatching egg).
+  Divoom's own sample URL: the heart only. A fetched GIF is therefore not a delivery route
+  on this firmware. The 32-pixel 8-frame upload (3.6 s) displayed as an animation after a
+  loading cycle; an uploaded still displays with no loading cycle at all.
 
 When something fails (device off, timeout, one screen's renderer raising): one
 `job device_rotation failed: ...` line per distinct error in the err log (repeats are not

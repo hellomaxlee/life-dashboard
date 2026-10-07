@@ -26,7 +26,7 @@ from app.jobs.rotation import (
 from app.main import create_app
 from app.render.adapters.pixoo import PixooAdapter, PixooError
 from app.render.celebrate import party_clip, sparkle_clip
-from app.render.frame import Clip
+from app.render.frame import Clip, still
 from app.render.rotation import (
     ROTATION_ORDER,
     device_parts,
@@ -331,16 +331,23 @@ def test_a_finished_week_ends_the_cycle_with_one_whole_party(db, jobs_settings):
     clock, adapter = Clock(), FakeAdapter()
     rotation = DeviceRotation(settings, opener(settings), adapter, clock)
     shown = []
-    for _ in range(8):
+    for _ in range(16):
         shown.append(rotation.tick())
         last_due = rotation.due() - clock.now
         clock.now = rotation.due()
-    assert shown == ["today", "city", "week", "month", "books", "win-workout", "party", "today"]
+    assert shown == [
+        *["today", "city", "week", "month", "books"],
+        *["win-workout"] * 4,
+        *["party"] * 6,
+        "today",
+    ]
     party = party_clip(3, 3)
-    assert same(adapter.sent[6], party) and len(party.frames) == 56
+    assert len(party.frames) == 6
+    for step, sent in zip(party.frames, adapter.sent[9:15], strict=True):
+        assert same(sent, still(step, 1000)), "the party goes as six stills of a second"
     view = view_from_db(db, settings, "2026-10-02")
     holds = {name: hold for name, _, hold in rotation_sequence(view, NOON, 6)}
-    assert holds["party"] == party.total_ms == 3360, "one whole play, not the dwell"
+    assert holds["party"] == party.total_ms == 6000, "one pass, not the dwell"
     assert last_due == timedelta(seconds=6), "and Today follows it"
 
 
@@ -379,9 +386,10 @@ def test_a_page_that_fails_drops_the_rest_and_the_rotation_moves_on(db, jobs_set
     assert rotation.tick() == "today"
 
 
-def test_a_fast_animation_still_goes_whole(db, jobs_settings):
+def test_a_fast_animation_still_goes_whole_and_a_celebration_goes_as_steps(db, jobs_settings):
     sparkle = sparkle_clip("workout")
-    assert device_parts(sparkle) == [sparkle]
+    assert [len(part.frames) for part in device_parts(sparkle)] == [1, 1, 1, 1]
+    assert [len(part.frames) for part in device_parts(party_clip(3, 3))] == [1] * 6
     week = render_screen("week", view_from_db(db, jobs_settings, "2026-10-02"), NOON)
     assert device_parts(week) == [week]
 
@@ -417,9 +425,9 @@ def test_each_earned_small_win_gets_its_own_slot_after_books(db, jobs_settings):
     clock, adapter = Clock(), FakeAdapter()
     rotation = DeviceRotation(settings, opener(settings), adapter, clock)
     shown = []
-    for _ in range(51):
+    for _ in range(48):
         result = rotation.tick()
-        if result != HOLDING:
+        if result != HOLDING and (not shown or shown[-1][0] != result):
             shown.append((result, (clock.now - NOON).total_seconds()))
         clock.now += timedelta(seconds=1)
     assert shown[:9] == [
@@ -429,12 +437,12 @@ def test_each_earned_small_win_gets_its_own_slot_after_books(db, jobs_settings):
         ("month", 18),
         ("books", 24),
         ("win-workout", 30),
-        ("win-sleep", 35),
-        ("win-book", 40),
-        ("today", 45),
-    ]
-    assert same(adapter.sent[5], sparkle_clip("workout"))
-    assert same(adapter.sent[7], sparkle_clip("book"))
+        ("win-sleep", 34),
+        ("win-book", 38),
+        ("today", 42),
+    ], "each sparkle is four steps of a second, sent one still at a time"
+    assert same(adapter.sent[5], still(sparkle_clip("workout").frames[0], 1000))
+    assert same(adapter.sent[13], still(sparkle_clip("book").frames[0], 1000))
 
     db.execute(
         "UPDATE daily_metrics SET metrics_json = ? WHERE day_local = '2026-10-02'",
@@ -609,7 +617,7 @@ def test_holds_are_whole_plays_and_due_is_exact(db, jobs_settings):
     assert list(slots) == ["today", "city", "week", "month", "books", "win-workout"]
     books, books_hold = slots["books"]
     assert (len(books.frames), books.total_ms, books_hold) == (2, 4000, 4000), "one pass, never two"
-    assert slots["win-workout"][1] == 4200
+    assert slots["win-workout"][1] == 4000
 
     clock = Clock()
     rotation = DeviceRotation(settings, opener(settings), FakeAdapter(), clock)
@@ -620,7 +628,8 @@ def test_holds_are_whole_plays_and_due_is_exact(db, jobs_settings):
         ("month", 24000),
         ("books", 26000),
         ("books", 28000),
-        ("win-workout", 32200),
+        ("win-workout", 29000),
+        ("win-workout", 30000),
     )
     for name, offset_ms in steps:
         assert rotation.tick() == name
@@ -643,10 +652,11 @@ def test_a_sequence_that_shrinks_restarts_at_today_instead_of_skipping_it(db, jo
         (json.dumps({"quality_workout": False, "sleep_hours": 6.0, "steps": 4000}),),
     )
     db.commit()
-    for _ in range(5):
+    for _ in range(8):
         shown.append(rotation.tick())
         clock.now = rotation.due()
-    assert shown[6:] == PLAIN
+    assert shown[6:9] == ["win-workout"] * 3, "the celebration under way finishes its steps"
+    assert shown[9:] == PLAIN
 
 
 def test_every_win_belongs_to_the_day_the_today_screen_shows(db, jobs_settings):
@@ -799,7 +809,7 @@ def test_with_a_publisher_every_clip_is_fetched_and_nothing_is_uploaded(db, jobs
     assert adapter.urls == [
         f"http://192.168.1.171:8080/pixoo/clip/{n}.gif" for n in range(1, len(published) + 1)
     ]
-    assert published.count(20) == 2 and published.count(1) == len(published) - 2
+    assert published == [1] * 12, "stills and celebration steps alike, one frame each"
     assert adapter.sent == [], "a still uploaded between two fetched clips flashes the heart"
     assert {s.how for s in rotation.sends} == {"fetched"} and len(rotation.sends) == 12
 
@@ -822,10 +832,11 @@ def test_without_a_publisher_animations_are_uploaded(db, jobs_settings):
     set_day(db, "2026-10-02", quality_workout=True)
     clock, adapter = Clock(), FetchingAdapter()
     rotation = DeviceRotation(jobs_settings, opener(jobs_settings), adapter, clock)
-    for _ in range(8):
+    for _ in range(9):
         rotation.tick()
         clock.now = rotation.due()
-    assert adapter.urls == [] and any(len(c.frames) == 20 for c in adapter.sent)
+    steps = [c for c in adapter.sent if c.durations_ms == (1000,)]
+    assert adapter.urls == [] and len(steps) == 4, "the sparkle's four steps, uploaded"
 
 
 def test_the_scheduler_wires_a_publisher_only_when_fetch_clips_is_on(db, jobs_settings):

@@ -6,6 +6,15 @@ deterministic (a seeded generator, no clock), so they snapshot-test like any sti
 Sparkle: the win's own icon pops in the centre while four-point stars twinkle around it.
 Party: the frame opens as the Week screen's dot row with the last dot missing; that dot drops
 in and bounces, all dots flash, then they throw confetti while "WEEK DONE" rides a rainbow wave.
+
+Each is drawn as a run of ticks (SPARKLE_TICKS, PARTY_TICKS) and shown as a few of them, one
+still a second (SPARKLE_STEPS, PARTY_STEPS; every frame at or over rotation.PAGED_FRAME_MS, so
+the device job sends them one by one like Books pages). The panel shows a loading cycle for
+as long as a multi-frame animation takes to upload, 1.45 s a frame, so the 20-frame sparkle
+loaded for 30 s and the 56-frame party would have for 80; a still arrives with no loading
+cycle at all, and fetching a GIF instead is not something this panel's firmware does (Max,
+2026-10-06 and 2026-10-07, run-service.md section 15). A step is up for its second plus the
+1.45 s its successor takes to arrive.
 """
 
 from __future__ import annotations
@@ -39,10 +48,11 @@ WIN_LABELS: dict[str, tuple[str, ...]] = {
     "book": ("BOOK DONE",),
 }
 WIN_ORDER: tuple[Win, ...] = ("workout", "sleep", "book")
-SPARKLE_FRAMES = 20
-SPARKLE_FRAME_MS = 70
-PARTY_FRAMES = 56
-PARTY_FRAME_MS = 60
+SPARKLE_TICKS = 20
+SPARKLE_STEPS = (1, 5, 8, 14)
+PARTY_TICKS = 56
+PARTY_STEPS = (3, 11, 13, 17, 28, 44)
+STEP_MS = 1000
 _DROP_FRAMES = 12
 _FLASH_FRAMES = 4
 _GRAVITY = 0.16
@@ -92,8 +102,13 @@ def _win_icon(frame: Frame, win: str, grow: float, color: Color = GOLD) -> None:
         draw_disc(frame, cx, cy, max(1, int(7 * grow)), color)
 
 
+def _steps(ticks: list[Frame], steps: tuple[int, ...], poster: int) -> Clip:
+    return Clip(tuple(ticks[tick] for tick in steps), (STEP_MS,) * len(steps), poster_index=poster)
+
+
 def sparkle_clip(win: Win = "workout", seed: int = 11, dot: int | None = None) -> Clip:
-    """The small-win clip, about 1.4 s. `win` picks the icon and the label; for a workout,
+    """The small-win clip: the icon arriving, grown, ringed, settled among the stars, four
+    stills of a second each. `win` picks the icon and the label; for a workout,
     `dot` (the week's count including this one) colours the disc and its ring like the Week
     screen's Nth dot (Max, 2026-10-06: a different colour for the 1st, 2nd and 3rd)."""
     rng = random.Random(seed)
@@ -108,7 +123,7 @@ def sparkle_clip(win: Win = "workout", seed: int = 11, dot: int | None = None) -
         stars.append((x, y, rng.randrange(6), rng.random()))
 
     frames: list[Frame] = []
-    for tick in range(SPARKLE_FRAMES):
+    for tick in range(SPARKLE_TICKS):
         frame = new_frame()
         grow = min(1.0, (tick + 1) / 6)
         overshoot = 1.15 if tick in (5, 6) else 1.0
@@ -125,7 +140,7 @@ def sparkle_clip(win: Win = "workout", seed: int = 11, dot: int | None = None) -
             draw_text_centered(frame, 57 - 7 * (len(lines) - row), line, TEXT, SMALL)
         draw_text_centered(frame, 57, "SMALL WIN", LABEL, SMALL)
         frames.append(frame)
-    return Clip(tuple(frames), (SPARKLE_FRAME_MS,) * SPARKLE_FRAMES, poster_index=8)
+    return _steps(frames, SPARKLE_STEPS, poster=2)
 
 
 def _bounce_y(tick: int) -> int:
@@ -150,7 +165,8 @@ def _rainbow_wave(frame: Frame, text: str, y: int, tick: int) -> None:
 
 
 def party_clip(count: int = 3, target: int = 3, seed: int = 7) -> Clip:
-    """The week-complete clip, about 3.4 s: the last dot lands, then confetti.
+    """The week-complete clip, six stills of a second each: the last dot falling, landed,
+    the flash, the burst with WEEK DONE, then confetti twice.
 
     `count` and `target` are the week's stored numbers; the clip prints them as given.
     """
@@ -187,7 +203,7 @@ def party_clip(count: int = 3, target: int = 3, seed: int = 7) -> Clip:
         )
 
     frames: list[Frame] = []
-    for tick in range(PARTY_FRAMES):
+    for tick in range(PARTY_TICKS):
         frame = new_frame()
         last = len(centres) - 1
         for index, cx in enumerate(centres):
@@ -227,7 +243,7 @@ def party_clip(count: int = 3, target: int = 3, seed: int = 7) -> Clip:
             draw_text_centered(frame, 31, f"{count} OF {target}", WHITE, SMALL)
             _rainbow_wave(frame, "WEEK DONE", 42, tick)
         frames.append(frame)
-    return Clip(tuple(frames), (PARTY_FRAME_MS,) * PARTY_FRAMES, poster_index=burst_at + 14)
+    return _steps(frames, PARTY_STEPS, poster=4)
 
 
 CELEBRATION_ORDER = ("sparkle", "party")

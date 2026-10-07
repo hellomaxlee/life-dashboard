@@ -84,7 +84,7 @@ def test_rotation_json_lists_the_sequence_with_valid_frames(client, settings):
     assert holds["month"] == 11000, "one pass through both pages"
     assert holds["week"] == holds["today"] == 6000
     assert holds["books"] == clips["books"].total_ms > 6000, "the whole message pages through"
-    assert holds["win-workout"] == holds["win-sleep"] == 4200
+    assert holds["win-workout"] == holds["win-sleep"] == 4000, "four steps of a second"
     expected = {c.name: c for c in celebrations_for(view)}
     assert [c["name"] for c in body["celebrations"]] == ["sparkle", "party"]
     for celebration in body["celebrations"]:
@@ -107,11 +107,11 @@ def test_rotation_json_lists_the_sequence_with_valid_frames(client, settings):
     ]
     party = complete["screens"][-1]
     clip = render_screen("party", done, done_now)
-    assert (len(party["frames"]), party["hold_ms"]) == (56, clip.total_ms), "one whole play"
+    assert (len(party["frames"]), party["hold_ms"]) == (6, clip.total_ms), "one pass of six"
     assert party["frames"][0]["url"].startswith("/pixoo/frame/party/0.png?")
     assert party["frames"] == complete["celebrations"][1]["frames"], "one party clip, not two"
-    shown = _png(client.get(party["frames"][30]["url"]))
-    assert ImageChops.difference(shown, clip.frames[30]).getbbox() is None
+    shown = _png(client.get(party["frames"][3]["url"]))
+    assert ImageChops.difference(shown, clip.frames[3]).getbbox() is None
     assert len(frames["month"]) == 2 and len(complete["screens"][2]["frames"]) == 1
 
 
@@ -148,14 +148,14 @@ def test_hold_is_the_dwell_or_the_clip_length_if_longer(settings):
     assert hold_ms("books", long, 30) == 25000, "never a second pass"
     assert hold_ms("books", short, 30) == 4000, "a short summary is not repeated either"
     sparkle = sparkle_clip("book")
-    assert sparkle.total_ms == 1400
-    assert hold_ms("win-book", sparkle, settings.device.screen_seconds) == 4200
-    assert hold_ms("win-book", sparkle, 45) == 4200, "a sparkle never waits out the dwell"
+    assert sparkle.total_ms == 4000
+    assert hold_ms("win-book", sparkle, settings.device.screen_seconds) == 4000
+    assert hold_ms("win-book", sparkle, 45) == 4000, "a sparkle never waits out the dwell"
     paged = Clip((new_frame(),) * 2, (6000, 5000))
     assert hold_ms("month", paged, 6) == hold_ms("month", paged, 45) == 11000, "one pass"
     assert hold_ms("month", still, 45) == 45000, "the plate alone, or the calendar: the dwell"
     party = render_screen("party", DayView(day_local="2026-10-02", week_dots=3), NOW)
-    assert hold_ms("party", party, 6) == hold_ms("party", party, 45) == party.total_ms == 3360
+    assert hold_ms("party", party, 6) == hold_ms("party", party, 45) == party.total_ms == 6000
 
 
 def test_rotation_json_dwell_follows_device_config(settings):
@@ -167,7 +167,7 @@ def test_rotation_json_dwell_follows_device_config(settings):
     assert holds["week"][0] == holds["today"][0] == 45000
     books_hold, books_total, pages = holds["books"]
     assert pages > 1 and books_hold == books_total < 45000
-    assert holds["win-workout"][0] == 4200
+    assert holds["win-workout"][0] == 4000
 
 
 def test_date_and_fixture_selection(client, settings):

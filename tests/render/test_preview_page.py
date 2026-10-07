@@ -88,9 +88,10 @@ def test_render_tool_writes_the_documented_files(tmp_path, settings, capsys):
     assert {p.name for p in out.iterdir()} == set(NAMES)
     assert {p.name for p in (out / "today").iterdir()} == stills
     assert {p.name for p in (out / "month").iterdir()} == stills, "no feature: the calendar"
-    for name in ("week", "sparkle", "party"):
-        assert {p.name for p in (out / name).iterdir()} == stills | clips
+    assert {p.name for p in (out / "week").iterdir()} == stills | clips
     view, now = load(STALE, settings)
+    for name, count in (("sparkle", 4), ("party", 6)):
+        assert {p.name for p in (out / name).iterdir()} == stills | clips | pages(count), name
     for name in ("city", "books"):
         count = len(rotation(view, now)[name].frames)
         assert count > 1

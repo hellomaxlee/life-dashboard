@@ -10,9 +10,10 @@ Month, Books, one sparkle per small win the day earned, and the week-complete pa
 week's target is met, repeated. `sequence_names` is the one definition; the device job,
 /pixoo, /preview and the tools all read it.
 A still screen holds for the dwell (`device.screen_seconds`). A paged screen (City's weather,
-lines and alert pages, Books' summary, Month's plate and note) holds until it has paged
-through exactly once, however long or short that is. The party holds for one whole play.
-Anything else animated holds for whole plays: a sparkle until it has been up for WIN_HOLD_MS.
+lines and alert pages, Books' summary, Month's plate and note, and both celebrations, which
+are steps of a second each) holds until it has paged through exactly once, however long or
+short that is. Anything animated faster than a page holds for whole plays: as many as cover
+WIN_HOLD_MS for a win or the dwell for a screen.
 """
 
 from __future__ import annotations

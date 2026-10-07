@@ -39,16 +39,17 @@ def test_the_fixture_day_goes_out_in_rotation_order_with_timings(device, capsys)
     names = [line.split(":")[0] for line in lines]
     city = [f"city page {n} of 4" for n in range(1, 5)]
     assert names[:8] == ["today", *city, "week", "month page 1 of 2", "month page 2 of 2"]
-    assert names[-2:] == ["win-workout", "win-sleep"]
-    pages = len(names) - 10
+    wins = [f"win-{win} page {n} of 4" for win in ("workout", "sleep") for n in range(1, 5)]
+    assert names[-8:] == wins
+    pages = len(names) - 16
     assert pages > 1
-    assert names[8:-2] == [f"books page {n} of {pages}" for n in range(1, pages + 1)]
+    assert names[8:-8] == [f"books page {n} of {pages}" for n in range(1, pages + 1)]
     assert all("sent in" in line and "hold" in line for line in lines)
     assert ["hold 6 s" in line for line in lines[1:5]] == [True, True, False, False]
     assert "hold 5 s" in lines[3] and "hold 5 s" in lines[4], "weather, lines, two alerts"
     assert "hold 6 s" in lines[6] and "hold 5 s" in lines[7], "the plate, then its note"
     sends = [body for body in seen if body["Command"] == "Draw/SendHttpGif"]
-    assert sorted({body["PicID"] for body in sends}) == list(range(1, 11 + pages))
+    assert sorted({body["PicID"] for body in sends}) == list(range(1, 17 + pages))
     assert {body["PicWidth"] for body in sends} == {64}
 
 
@@ -71,8 +72,8 @@ def test_month_and_party_can_be_sent_by_name(device, capsys):
     args = ["--host", HOST, "--no-hold", "--fixture", done, "--screen", "party"]
     assert pixoo_check.main(args) == 0
     out = capsys.readouterr().out
-    assert "party: 56 frame(s) sent" in out and "hold 3.36 s" in out
-    assert len([body for body in seen if body["Command"] == "Draw/SendHttpGif"]) == 56
+    assert "party page 6 of 6: 1 frame(s) sent" in out and "hold 1 s" in out
+    assert len([body for body in seen if body["Command"] == "Draw/SendHttpGif"]) == 6
     with pytest.raises(SystemExit):
         pixoo_check.main(["--host", HOST, "--screen", "year"])
 

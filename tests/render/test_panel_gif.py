@@ -5,6 +5,7 @@ per frame, interlaced stills) and showed its cloud channel instead of any of the
 from __future__ import annotations
 
 import io
+import random
 from dataclasses import dataclass
 
 import pytest
@@ -135,13 +136,22 @@ def test_every_part_the_rotation_sends_is_in_the_panels_form_and_decodes_exactly
     assert exact >= 5, "every still has few enough colours to come back pixel for pixel"
 
 
-@pytest.mark.parametrize("win", ["workout", "sleep", "book"])
-def test_a_sparkle_over_256_colours_keeps_all_but_a_few_twinkle_pixels(win):
-    clip = sparkle_clip(win, dot=2)
+def test_a_clip_over_256_colours_keeps_all_but_a_few_pixels_near_their_colour():
+    """255 core colours (a red ramp) drawn twice, so they rank among the 256 commonest with
+    black, and 645 rarer colours each a step or three away from a core one: the rule's job is
+    to send each rare colour to its own core colour, not to any other."""
+    core = new_frame()
+    for red in range(255):
+        core.putpixel((red % SIZE, red // SIZE), (red, 40, 40))
+        core.putpixel((red % SIZE, 8 + red // SIZE), (red, 40, 40))
+    rare = [new_frame(), new_frame()]
+    for n in range(645):
+        rare[n % 2].putpixel(((n // 2) % SIZE, (n // 2) // SIZE), (n % 215, 41 + n // 215, 40))
+    frames = [core, *rare]
+    clip = Clip(tuple(frames), (70, 70, 70))
     assert colours(clip) > panelgif.TABLE, "the case the nearest-colour rule exists for"
     data = panel_gif_bytes(clip)
     assert_panel_form(clip, data)
-    assert len(data) < 8_000
     off, worst = 0, 0
     for got, want in zip(decoded(data), clip.frames, strict=True):
         pairs = zip(got.get_flattened_data(), want.get_flattened_data(), strict=True)
@@ -149,8 +159,8 @@ def test_a_sparkle_over_256_colours_keeps_all_but_a_few_twinkle_pixels(win):
             if a != b:
                 off += 1
                 worst = max(worst, *(abs(x - y) for x, y in zip(a, b, strict=True)))
-    assert 0 < off <= 12, "only the rarest colours move"
-    assert worst <= 48, "and each only to a near neighbour (39 of 255 at worst when written)"
+    assert 0 < off <= 901 - panelgif.TABLE, "only colours past the 256 commonest (black too) move"
+    assert worst <= 4, "and each only to its near neighbour"
 
 
 def test_the_party_decodes_exactly_and_its_cropped_frames_are_smaller_than_the_canvas():
@@ -171,8 +181,6 @@ def test_a_repeated_frame_is_still_its_own_image():
 
 
 def test_a_frame_of_noise_survives_the_code_table_filling_up():
-    import random
-
     rng = random.Random(3)
     table = [(rng.randrange(256), rng.randrange(256), rng.randrange(256)) for _ in range(256)]
     raw = b"".join(bytes(table[rng.randrange(256)]) for _ in range(SIZE * SIZE))
