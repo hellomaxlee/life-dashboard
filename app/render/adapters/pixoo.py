@@ -34,9 +34,9 @@ Still to check by eye:
   hold as PicSpeed, and the page, held 2 s, never showed. The reading is that the panel
   loops a one-frame animation at its PicSpeed and swaps to a newer upload only when that
   frame delay is up, so a 2 s page behind a 6 s one is replaced by the next page before
-  its turn; a short delay makes every swap prompt. The celebration steps, stills at 300 ms,
-  always swapped on time. The hold itself was never the panel's to keep: it stops a still
-  only when the next arrives;
+  its turn; a short delay makes every swap prompt (confirmed by Max the same day). The
+  celebration steps, stills at 300 ms, always swapped on time. The hold itself was never the
+  panel's to keep: it stops a still only when the next arrives;
 - the device applies no gamma of its own (see app/render/gamma.py).
 
 The host must be a literal address in 10/8, 172.16/12 or 192.168/16, nothing else.
