@@ -12,3 +12,6 @@ data/
 .claude/worktrees/
 /*.png
 .vscode/
+agents/
+.claude/settings.local.json
+.playwright-cli/
