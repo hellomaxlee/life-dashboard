@@ -5,6 +5,8 @@
 I got a Divoom Pixoo 64 (LED display) and coded up a dashboard of various rotating wellbeing metrics.
 I'll get a Raspberry Pi one day but currently it depends on my MacBook being on.
 
+<img src="docs/images/panel-photo.jpg" alt="The Pixoo 64 on the wall showing the Today screen at night brightness" width="420">
+
 ![The five rotation screens: Today, Weather, Week, Month, Books](docs/images/rotation.png)
 
 - Sleep and workout data that I linked with the iOS Health Auto Export app via REST API
