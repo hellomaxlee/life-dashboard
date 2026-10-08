@@ -65,7 +65,7 @@ def test_rotation_json_lists_the_sequence_with_valid_frames(client, settings):
     assert names == ["today", "city", "week", "month", "books", "win-workout", "win-sleep"]
     assert body["dwell_ms"] == settings.device.screen_seconds * 1000 == 6000
     assert body["source"] == {"fixture": WEEK_41}
-    assert body["day_local"] == view.day_local and body["as_of_local"] == "2026-09-30 18:10 EDT"
+    assert body["day_local"] == view.day_local and body["as_of_local"] == "2026-09-30 6:10PM EDT"
     for screen in body["screens"]:
         clip = clips[screen["name"]]
         assert len(screen["frames"]) == len(clip.frames)

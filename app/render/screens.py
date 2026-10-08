@@ -52,7 +52,7 @@ from app.render.palette import (
 )
 from app.render.usage import draw_usage, usage_state
 from app.render.view import DayView, has_health_data, valid_count, valid_sleep_hours
-from app.timeutil import from_utc_iso
+from app.timeutil import clock_12h, from_utc_iso
 
 LEFT = 2
 RIGHT = 61
@@ -224,8 +224,10 @@ def _has_day_data(view: DayView) -> bool:
 def as_of_label(view: DayView, now: datetime | None = None) -> str | None:
     """When the day's data is from, or None to leave the line out.
 
-    Same day: the clock. One to six days back: weekday and clock, which is unambiguous within
-    a week. Older: whole days ("AS OF 8D AGO"), so an old push never reads as recent. A push
+    Same day: the clock ("AS OF 1:30PM"; 12-hour, Max 2026-10-08). One to six days back:
+    weekday and clock, which is unambiguous within a week, with the one-letter suffix ("AS OF
+    WED 1:30P") because "AS OF WED 12:30PM" is 66 px, wider than the frame. Older: whole days
+    ("AS OF 8D AGO"), so an old push never reads as recent. A push
     dated after the view's day, or after `now`, cannot have fed this day and counts as none.
     With no usable push the line says "NO PUSH YET" only when the day has no data either; a day
     whose numbers a later push back-filled gets no as-of line rather than a false one.
@@ -240,11 +242,10 @@ def as_of_label(view: DayView, now: datetime | None = None) -> str | None:
     days_back = (date.fromisoformat(view.day_local) - local.date()).days
     if days_back < 0:
         return missing
-    clock = local.strftime("%H:%M")
     if days_back == 0:
-        return f"AS OF {clock}"
+        return f"AS OF {clock_12h(local)}"
     if days_back <= 6:
-        return f"AS OF {_WEEKDAYS[local.weekday()]} {clock}"
+        return f"AS OF {_WEEKDAYS[local.weekday()]} {clock_12h(local, compact=True)}"
     return f"AS OF {days_back}D AGO"
 
 

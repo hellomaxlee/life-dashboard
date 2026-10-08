@@ -625,9 +625,9 @@ def test_a_part_older_than_the_limit_is_headed_as_of_in_amber(monkeypatch):
         return to_utc_iso(NOW - timedelta(minutes=minutes))
 
     assert as_of_label(at(45), NOW, "America/New_York", 45) is None
-    assert as_of_label(at(46), NOW, "America/New_York", 45) == "AS OF 17:29"
+    assert as_of_label(at(46), NOW, "America/New_York", 45) == "AS OF 5:29PM"
     assert as_of_label(at(-30), NOW, "America/New_York", 45) is None, "a fetch after now"
-    assert as_of_label(at(60 * 24), NOW, "America/New_York", 45) == "AS OF TUE 18:15"
+    assert as_of_label(at(60 * 24), NOW, "America/New_York", 45) == "AS OF TUE 6:15P"
     assert as_of_label(at(60 * 24 * 8), NOW, "America/New_York", 45) == "AS OF 8D AGO"
     assert as_of_label(None, NOW, "America/New_York", 45) == "AGE UNKNOWN"
     assert as_of_label("yesterday", NOW, "America/New_York", 45) == "AGE UNKNOWN"
@@ -637,7 +637,7 @@ def test_a_part_older_than_the_limit_is_headed_as_of_in_amber(monkeypatch):
     old = status(weather=weather(fetched_at_utc=at(130)), lines=lines(("M", "delays", True)))
     recorded = record_text(monkeypatch)
     clip = render_city(view_of(old), NOW)
-    assert texts(recorded, HEADER_Y)[:3] == ["AS OF 16:05", "TRANSIT", "WED 30"]
+    assert texts(recorded, HEADER_Y)[:3] == ["AS OF 4:05PM", "TRANSIT", "WED 30"]
     assert "WEATHER" not in texts(recorded)
     header = {clip.frames[0].getpixel((x, y)) for x in range(SIZE) for y in range(HEADER_Y, 7)}
     assert header == {BLACK, AMBER}
@@ -647,9 +647,9 @@ def test_a_part_older_than_the_limit_is_headed_as_of_in_amber(monkeypatch):
     both = replace(old, transit_fetched_at_utc=at(200))
     recorded.clear()
     clip = render_city(view_of(both), NOW)
-    assert texts(recorded, HEADER_Y)[:2] == ["AS OF 16:05", "AS OF 14:55"]
+    assert texts(recorded, HEADER_Y)[:2] == ["AS OF 4:05PM", "AS OF 2:55PM"]
     assert "TRANSIT" not in texts(recorded)
-    stale_lines = [r for r in recorded if r[0] == "AS OF 14:55"]
+    stale_lines = [r for r in recorded if r[0] == "AS OF 2:55PM"]
     assert len(stale_lines) == 2 and stale_lines[1][2] == DETAIL_BOTTOM - 4, "the detail's foot"
     foot = clip.frames[2].crop((0, DETAIL_BOTTOM - 4, SIZE, DETAIL_BOTTOM + 1))
     assert colours(foot) == {BLACK, AMBER}

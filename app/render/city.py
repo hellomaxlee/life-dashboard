@@ -29,7 +29,7 @@ DAY_FROM by the hour alone.
 
 What is missing is said. A part never fetched: "WEATHER NO DATA" / "TRANSIT NO DATA" on its
 page. A part older than the view's `city_stale_minutes`: the page's header becomes an amber
-"AS OF 14:05" (weekday and clock, then whole days, for older ones, as on the Today screen);
+"AS OF 2:05PM" (weekday and clock, then whole days, for older ones, as on the Today screen);
 detail pages carry the same line at the bottom. A fetch time that cannot be read is "AGE
 UNKNOWN", as on the Claude bar. No city status at all, or one for another day: a single still,
 "CITY NO DATA" with the weekday and date. Never a blank frame.
@@ -78,7 +78,7 @@ from app.render.palette import (
 )
 from app.render.screens import LEFT, RIGHT, clean_summary, draw_disc, fill_rect, wrap_lines
 from app.render.view import DayView
-from app.timeutil import from_utc_iso
+from app.timeutil import clock_12h, from_utc_iso
 
 WEATHER_MS = 6000
 LINES_MS = 6000
@@ -396,11 +396,10 @@ def as_of_label(
     zone = ZoneInfo(home_tz)
     local = moment.astimezone(zone)
     days_back = (now.astimezone(zone).date() - local.date()).days
-    clock = local.strftime("%H:%M")
     if days_back <= 0:
-        return f"AS OF {clock}"
+        return f"AS OF {clock_12h(local)}"
     if days_back <= 6:
-        return f"AS OF {WEEKDAYS[local.weekday()]} {clock}"
+        return f"AS OF {WEEKDAYS[local.weekday()]} {clock_12h(local, compact=True)}"
     return f"AS OF {days_back}D AGO"
 
 

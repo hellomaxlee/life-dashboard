@@ -81,9 +81,9 @@ def test_false_dot_says_no_dot_yet_not_rest(monkeypatch, settings):
 @pytest.mark.parametrize(
     ("as_of", "label"),
     [
-        ("2026-10-10T22:10:00Z", "AS OF 18:10"),
-        ("2026-10-09T22:10:00Z", "AS OF FRI 18:10"),
-        ("2026-10-04T22:10:00Z", "AS OF SUN 18:10"),
+        ("2026-10-10T22:10:00Z", "AS OF 6:10PM"),
+        ("2026-10-09T22:10:00Z", "AS OF FRI 6:10P"),
+        ("2026-10-04T22:10:00Z", "AS OF SUN 6:10P"),
         ("2026-10-03T22:10:00Z", "AS OF 7D AGO"),
         ("2026-10-02T22:10:00Z", "AS OF 8D AGO"),
         ("2025-10-10T22:10:00Z", "AS OF 365D AGO"),

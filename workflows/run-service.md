@@ -331,7 +331,13 @@ Measured on the panel (2026-10-04): it takes a request in at about 12 KB/s, so a
 the loading cycle showing throughout (no screen is sent as an animation any more; a still
 has no loading cycle). Each command times out after 5 s per phase and 10 s overall; a clip gets
 4 s per frame. A refused connection is retried twice. The adapter sends
-`Draw/ResetHttpGifId` before its first clip and every 32 clips after.
+`Draw/ResetHttpGifId` before its first clip and every 32 clips after. A still goes with
+`PicSpeed` 300 whatever its hold (`STILL_PIC_SPEED_MS`): the hold is the job's, kept by the
+timing of the next send, and the panel is read as swapping to a newer upload only when its
+one frame's delay is up, so a page held 2 s behind a still sent with a 6000 ms delay was
+skipped (Max, 2026-10-08: the Books quote began on its second page, which followed the Month
+calendar; the send log showed every page sent and held as designed). Still to be confirmed
+by eye: that the first Books page now shows.
 
 Measured on the panel by direct probe (2026-10-07, five sends of one 64-pixel still per
 variant, while the live service kept sending; `Draw/SendHttpGif`, PicNum 1; the probe is a

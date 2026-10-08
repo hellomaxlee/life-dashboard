@@ -60,7 +60,7 @@ def render_status(conn: sqlite3.Connection, settings: Settings) -> str:
         [
             r["id"],
             r["source"],
-            r["received_at_utc"],
+            utc_iso_to_local_display(r["received_at_utc"], settings.home_tz),
             r["byte_len"],
             "yes" if r["parsed_ok"] else "no",
             r["error"],
@@ -73,12 +73,19 @@ def render_status(conn: sqlite3.Connection, settings: Settings) -> str:
         "WHERE hr_incomplete = 1 ORDER BY start_utc DESC LIMIT 50"
     ).fetchall()
     flagged_rows = [
-        [a["id"], a["type"], a["start_utc"], a["duration_s"], a["hr_sample_count"], a["hr_span_s"]]
+        [
+            a["id"],
+            a["type"],
+            utc_iso_to_local_display(a["start_utc"], settings.home_tz),
+            a["duration_s"],
+            a["hr_sample_count"],
+            a["hr_span_s"],
+        ]
         for a in flagged
     ]
     flagged_html = (
         _table(
-            ["activity", "type", "start (UTC)", "duration s", "HR samples", "HR span s"],
+            ["activity", "type", "start", "duration s", "HR samples", "HR span s"],
             flagged_rows,
         )
         if flagged_rows
@@ -94,9 +101,7 @@ def render_status(conn: sqlite3.Connection, settings: Settings) -> str:
         "<h2>Rows per table</h2>"
         + _table(["table", "rows"], counts)
         + "<h2>Last 5 raw payloads</h2>"
-        + _table(
-            ["id", "source", "received (UTC)", "bytes", "parsed", "error", "file"], recent_rows
-        )
+        + _table(["id", "source", "received", "bytes", "parsed", "error", "file"], recent_rows)
         + "<h2 class='flag'>Activities with incomplete HR</h2>"
         + flagged_html
         + "</body></html>"

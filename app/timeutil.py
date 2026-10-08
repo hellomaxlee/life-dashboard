@@ -45,5 +45,14 @@ def now_utc() -> datetime:
     return datetime.now(UTC).replace(microsecond=0)
 
 
+def clock_12h(moment: datetime, compact: bool = False) -> str:
+    """The wall clock as Max reads it: "1:30PM", never 24-hour. `compact` gives the one-letter
+    suffix the city's hour labels use ("1:30P"), for a line that must fit beside a weekday."""
+    suffix = "AM" if moment.hour < 12 else "PM"
+    hour = moment.hour % 12 or 12
+    return f"{hour}:{moment.minute:02d}{suffix[0] if compact else suffix}"
+
+
 def utc_iso_to_local_display(text: str, tz: str) -> str:
-    return from_utc_iso(text).astimezone(ZoneInfo(tz)).strftime("%Y-%m-%d %H:%M %Z")
+    local = from_utc_iso(text).astimezone(ZoneInfo(tz))
+    return f"{local:%Y-%m-%d} {clock_12h(local)} {local:%Z}"

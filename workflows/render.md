@@ -66,8 +66,9 @@ books, summary and Claude never fall back.
 "Placeholder data" banner when the database has no Health data for today or yesterday, and the
 database as soon as it does; `?placeholder=0` always shows the database. The frames a device
 is sent (`/pixoo/rotation.json`, the rotation job) never use the placeholder. The as-of line shows the clock for a
-same-day push, weekday and clock up to six days back, and whole days beyond that ("AS OF 8D
-AGO"); a push dated after the day or after "now" is ignored. A day that has numbers but no
+same-day push ("AS OF 1:30PM"; 12-hour, never 24-hour, Max 2026-10-08), weekday and clock
+up to six days back ("AS OF TUE 1:30P", the one-letter suffix because the full one is wider
+than the frame at 10 to 12 o'clock), and whole days beyond that ("AS OF 8D AGO"); a push dated after the day or after "now" is ignored. A day that has numbers but no
 push before it ended (a later push back-filled it) gets no as-of line; "NO PUSH YET" appears
 only when the day has no data at all. The summary is folded to ASCII before paging: accents
 folded, curly quotes and dashes straightened, paired `*`/`_` markers removed, emoji dropped,
@@ -140,7 +141,7 @@ lines apply, so a past date renders today's city on that weekday. Pages:
 
 All ok with no alert is two pages. A part never fetched says `WEATHER NO DATA` or `TRANSIT NO
 DATA` on its page. A part older than `[city] stale_minutes` (45) replaces its page's header
-with an amber `AS OF 14:05` (weekday and clock for earlier days, whole days past six; `AGE
+with an amber `AS OF 2:05PM` (weekday and clock, `AS OF TUE 2:05P`, for earlier days, whole days past six; `AGE
 UNKNOWN` when the time cannot be read), and detail pages carry it on their last line. No city
 status at all is one still: `CITY`, the weekday and date, `NO DATA`. Every city page keeps its
 header on row 2 in the small face.

@@ -12,12 +12,14 @@ import pytest
 
 from app.render.adapters.pixoo import (
     RESET_EVERY,
+    STILL_PIC_SPEED_MS,
     PixooAdapter,
     PixooError,
     pixoo_from_settings,
     require_lan_host,
 )
-from app.render.frame import Clip
+from app.render.frame import Clip, still
+from app.render.rotation import device_parts
 from tests.render import STALE, WEEK_41, load, rotation
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -57,11 +59,28 @@ def test_still_frame_goes_as_one_send_http_gif(settings):
         "PicWidth": 64,
         "PicOffset": 0,
         "PicID": 1,
-        "PicSpeed": 8000,
+        "PicSpeed": STILL_PIC_SPEED_MS,
     }
     assert len(data) == 64 * 64 * 3
     assert data == clip.poster.tobytes()
     assert tuple(data[:3]) == clip.poster.getpixel((0, 0))
+
+
+def test_a_still_goes_with_the_short_pic_speed_whatever_its_hold(settings):
+    """The hold is the job's to keep; the panel swaps a still only once its one frame's
+    delay is up, and a 6 s delay swallowed the 2 s Books page behind it (Max, 2026-10-08)."""
+    view, now = load(WEEK_41, settings)
+    books = rotation(view, now)["books"]
+    seen: list[httpx.Request] = []
+    adapter = PixooAdapter(HOST, fake_device(seen))
+    for page in device_parts(books)[:2]:
+        assert page.total_ms == 2000
+        adapter.send(page)
+    adapter.send(still(books.frames[0], 6000))
+    bodies = [json.loads(r.content) for r in seen if b"SendHttpGif" in r.content]
+    assert [b["PicSpeed"] for b in bodies] == [STILL_PIC_SPEED_MS] * 3
+    assert STILL_PIC_SPEED_MS < 2000
+    assert [b["PicNum"] for b in bodies] == [1, 1, 1]
 
 
 def sixteen_frame_clip(settings) -> Clip:

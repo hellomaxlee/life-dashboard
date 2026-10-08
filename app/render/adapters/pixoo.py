@@ -28,6 +28,15 @@ Still to check by eye:
   with PixooError before anything is sent; it is never thinned, because dropped frames are
   not what the renderer drew. Every screen and celebration is built to fit;
 - PicSpeed is honoured per frame; some firmware may apply the first frame's speed to all;
+- a still (PicNum 1) goes with PicSpeed STILL_PIC_SPEED_MS whatever its hold, which the job
+  keeps by timing the next send. Seen by Max (2026-10-08): the Books quote began on its
+  second page; the first page followed the Month calendar, a still sent with its 6000 ms
+  hold as PicSpeed, and the page, held 2 s, never showed. The reading is that the panel
+  loops a one-frame animation at its PicSpeed and swaps to a newer upload only when that
+  frame delay is up, so a 2 s page behind a 6 s one is replaced by the next page before
+  its turn; a short delay makes every swap prompt. The celebration steps, stills at 300 ms,
+  always swapped on time. The hold itself was never the panel's to keep: it stops a still
+  only when the next arrives;
 - the device applies no gamma of its own (see app/render/gamma.py).
 
 The host must be a literal address in 10/8, 172.16/12 or 192.168/16, nothing else.
@@ -53,6 +62,7 @@ PATH = "/divoom_api"
 TIMEOUT_S = 5.0
 FRAME_BUDGET_S = 4.0
 RESET_EVERY = 32
+STILL_PIC_SPEED_MS = 300
 UNKNOWN_COMMAND = "Only accept JSON parameters"
 NO_REUSE = {"Connection": "close"}
 CONNECT_TRIES = 3
@@ -157,9 +167,8 @@ class PixooAdapter:
             self._since_reset = 0
         self._since_reset += 1
         pic_id = self._since_reset
-        for offset, (frame, duration_ms) in enumerate(
-            zip(clip.frames, clip.durations_ms, strict=True)
-        ):
+        speeds = (STILL_PIC_SPEED_MS,) if count == 1 else clip.durations_ms
+        for offset, (frame, duration_ms) in enumerate(zip(clip.frames, speeds, strict=True)):
             if deadline is not None and time.monotonic() >= deadline:
                 raise PixooError(f"over the {budget} s send budget at frame {offset} of {count}")
             self._command(

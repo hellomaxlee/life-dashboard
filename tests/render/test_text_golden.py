@@ -112,7 +112,7 @@ def test_today_screen_text_race_week(monkeypatch, settings):
         ("LOAD 62/100", 13, 42, S, 1),
         ("STEPS", 2, 51, S, 1),
         ("20634", 43, 51, S, 1),
-        ("AS OF 01:30", 2, 58, S, 1),
+        ("AS OF 1:30AM", 2, 58, S, 1),
     ]
 
 
@@ -129,7 +129,7 @@ def test_today_screen_text_when_health_is_delayed(monkeypatch, settings):
         ("DOT NO DATA", 13, 42, S, 1),
         ("STEPS", 2, 51, S, 1),
         ("NO DATA", 35, 51, S, 1),
-        ("AS OF MON 18:00", 2, 58, S, 1),
+        ("AS OF MON 6:00P", 2, 58, S, 1),
     ]
 
 
@@ -174,7 +174,7 @@ def test_today_dot_label_for_each_branch(monkeypatch, settings, dot, label, cent
         "7.4",
         "STEPS",
         "8412",
-        "AS OF 18:10",
+        "AS OF 6:10PM",
     ]
 
 
