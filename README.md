@@ -1,4 +1,4 @@
-# life-dashboard
+# Life Dashboard
 
 ### My first adventure into the realm of Hardware!
 
