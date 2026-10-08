@@ -1,15 +1,22 @@
 # life-dashboard
 
-A single-user life dashboard: Apple Health and Goodreads in, a glanceable picture of weekly progress out, on a LAN web page and a 64x64 Divoom Pixoo LED panel.
+### My first adventure into the realm of Hardware!
+
+I got a Divoom Pixoo 64 (LED display) and coded up a dashboard of various rotating wellbeing metrics.
+I'll get a Raspberry Pi one day but currently it depends on my MacBook being on.
 
 ![The five rotation screens: Today, Weather, Week, Month, Books](docs/images/rotation.png)
 
+- Sleep and workout data that I linked with the iOS Health Auto Export app via REST API
+- Delays for the various bus and train lines I take from the MTA alerts page
+- Book progress within a year via my public Goodreads RSS feed
+- Daily weather
+- A monthly feature synthesizing some aspect(s) of data collection
+
 ## What it does
 
-- Ingests Apple Health (pushed by the Health Auto Export iOS app) and a Goodreads `read` shelf (RSS).
 - Scores every workout by effort: minutes in each heart-rate zone, weighted 1 to 5. Enough load earns a dot; three dots a week is the target, and the streak counts weeks that hit it.
 - Tracks daily small wins (sleep goal met, workout done, book finished), training load (acute, chronic, balance), and books read this year.
-- Shows a city panel between the personal screens: subway and bus alerts from the MTA and the day's weather from Open-Meteo and the National Weather Service.
 - Writes one short daily line in a balanced, wisdom-leaning voice. Rest counts as progress; nagging and streak anxiety are banned by a gate.
 - Once a month, the model authors a theme, a palette, and a 16x16 pixel plate for every day, with no personal data in the request.
 - Renders device-agnostic 64x64 frames and short celebration clips with Pillow; adapters only transport them to the panel or the browser.
