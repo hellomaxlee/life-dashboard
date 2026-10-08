@@ -105,11 +105,13 @@ note in the body face, word-wrapped and centred. Text that would not fit is cut 
 glyph, and a note too long for the body face drops to the small one; nothing is drawn off the
 frame. Title and caption colours too dark for small text are lifted toward white.
 
-With no feature for that month (none generated yet, the model unavailable or over budget, a
-stored row that no longer parses, the table missing) the screen is the month as a calendar,
-from the date alone: month name in a colour of its own and the year, `M T W T F S S`, one 6x6
-cell per day in Monday-first weeks, past days in the month's colour dimmed, today white, days
-to come grey. No metric is read.
+The last page, every month, is the calendar (Max, 2026-10-07: "I really like this panel -
+can we have this every month?"), drawn from the date alone: month name in a colour of its own
+and the year, `M T W T F S S`, one 6x6 cell per day in Monday-first weeks, past days in the
+month's colour dimmed, today white, days to come grey, up for `CALENDAR_MS` (6 s). No metric
+is read. With no feature for that month (none generated yet, the model unavailable or over
+budget, a stored row that no longer parses, the table missing) the calendar is the whole
+screen, a still held for the dwell.
 
 The month is always the requested day's. When Today falls back to yesterday on the first of a
 month, the Month screen still shows the new month.

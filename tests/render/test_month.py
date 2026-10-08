@@ -18,6 +18,7 @@ from app.render.font import BODY, SMALL, text_width
 from app.render.frame import SIZE
 from app.render.gamma import led_gamma, led_lut
 from app.render.month import (
+    CALENDAR_MS,
     CELL,
     NOTE_BOTTOM,
     NOTE_MS,
@@ -178,17 +179,17 @@ def test_page_two_exists_only_when_the_day_has_a_note(monkeypatch):
     feature = sample()
     noted, plain = "2026-10-10", "2026-10-11"
     assert feature.plate(noted).note and not feature.plate(plain).note
-    still = render_month(view_on(plain), NOW)
-    assert len(still.frames) == 1 and not still.animated
-    assert device_parts(still) == [still]
+    two = render_month(view_on(plain), NOW)
+    assert len(two.frames) == 2 and two.durations_ms == (PLATE_MS, CALENDAR_MS)
+    assert [len(part.frames) for part in device_parts(two)] == [1, 1], "plate, calendar"
 
     recorded = record_text(monkeypatch)
     clip = render_month(view_on(noted), NOW)
-    assert clip.durations_ms == (PLATE_MS, NOTE_MS) == (6000, 5000)
+    assert clip.durations_ms == (PLATE_MS, NOTE_MS, CALENDAR_MS) == (6000, 5000, 6000)
     parts = device_parts(clip)
-    assert [len(part.frames) for part in parts] == [1, 1], "two stills, never a loop"
-    assert [part.durations_ms for part in parts] == [(6000,), (5000,)]
-    assert hold_ms("month", clip, 6) == 11000
+    assert [len(part.frames) for part in parts] == [1, 1, 1], "three stills, never a loop"
+    assert [part.durations_ms for part in parts] == [(6000,), (5000,), (6000,)]
+    assert hold_ms("month", clip, 6) == 17000
     note = clip.frames[1]
     lines = [r for r in recorded if r[3] == BODY.name]
     assert " ".join(r[0] for r in lines) == feature.plate(noted).note
@@ -206,7 +207,19 @@ def test_page_two_exists_only_when_the_day_has_a_note(monkeypatch):
 
     blank = replace(feature.plate(noted), note="   ")
     days = tuple(blank if p.day == 10 else p for p in feature.days)
-    assert len(render_month(view_on(noted, replace(feature, days=days)), NOW).frames) == 1
+    assert len(render_month(view_on(noted, replace(feature, days=days)), NOW).frames) == 2
+
+
+def test_the_calendar_is_the_last_page_of_every_month_with_or_without_a_feature():
+    feature = sample()
+    for day in ("2026-10-10", "2026-10-11"):
+        bare = render_month(DayView(day_local=day), NOW)
+        assert len(bare.frames) == 1 and not bare.animated, "no feature: the calendar alone"
+        rich = render_month(view_on(day, feature), NOW)
+        assert rich.frames[-1].tobytes() == bare.poster.tobytes(), "the same calendar, last"
+        assert rich.durations_ms[-1] == CALENDAR_MS
+        assert rich.frames[0].tobytes() != bare.poster.tobytes(), "the plate still leads"
+        assert [len(part.frames) for part in device_parts(rich)] == [1] * len(rich.frames)
 
 
 def test_the_longest_text_the_spec_allows_never_leaves_the_frame(monkeypatch):
@@ -221,7 +234,7 @@ def test_the_longest_text_the_spec_allows_never_leaves_the_frame(monkeypatch):
     for day in ("2026-10-01", "2026-10-02"):
         recorded = record_text(monkeypatch)
         clip = render_month(view_on(day, feature), NOW)
-        assert len(clip.frames) == 2
+        assert len(clip.frames) == 3
         for text, x, y, font_name, _ in recorded:
             font = SMALL if font_name == SMALL.name else BODY
             assert 0 <= x and x + text_width(text, font) <= SIZE, text
@@ -351,7 +364,8 @@ def test_the_month_is_the_requested_days_even_when_today_falls_back(db, settings
     texts = [r[0] for r in recorded]
     assert "FIRST FROST" in texts and "MOON OVER WATER" not in texts
     first_of_month = view.month_feature.plate("2026-11-01")
-    assert first_of_month.caption.upper() in texts and len(clip.frames) == 2
+    assert first_of_month.caption.upper() in texts and len(clip.frames) == 3
+    assert texts[-9:] == ["NOVEMBER", "2026", *"MTWTFSS"], "the calendar closes the month"
     last_of_october = parse_feature(october, "2026-10").plate("2026-10-31")
     assert last_of_october.art != first_of_month.art
     for row in range(ART_SIZE):
@@ -417,7 +431,7 @@ def test_the_sequence_is_day_week_month_year_then_the_wins_then_the_party():
         "today": 6000,
         "city": 6000,
         "week": 6000,
-        "month": 6000,
+        "month": 12000,
         "books": 6000,
         "win-workout": 1500,
         "win-sleep": 1500,

@@ -3,6 +3,13 @@
 Running log, newest first. The Lead reads this to find root causes and prioritize.
 Entry format: `## YYYY-MM-DD · <Title> (<Author>)` followed by terse bullets. Name the fixture combo on render/summary cycles.
 
+## 2026-10-07 · The calendar closes the Month screen every month (Ingrid Halvorsen)
+- Max, on the README's calendar image: "oh I really like this panel - can we have this every month?". Until now the calendar was only the Month screen's stand-in while no feature was stored, so October's panel had never shown it.
+- `render_month`: the plate, the note when the day has one, then the calendar as the last page, held `CALENDAR_MS` (6 s); without a feature the calendar is still the whole screen. Month now holds 12 s (plate and calendar) or 17 s (with a note) for one pass; the pages go to the panel as stills as before. Docs: render.md, month.md, notes.txt row.
+- Fixture combo for the eye test: every one of the ten cells' Month pages read at 1x under gamma (18 pages); the five snapshots with a feature regenerated after review (`rest / health delayed / broken last week / off`, `rest / sleep missing / broken last week / base`, `train / all sources / alive / base` and `peak`, `travel / workout without HR / broken last week / off`).
+- Gate: ruff clean; full suite below. Mutant red: calendar page dropped (8 failed across month, /pixoo and device-rotation tests). New test `test_the_calendar_is_the_last_page_of_every_month_with_or_without_a_feature`.
+- Also today: default branch on GitHub set to `dev` so the public page shows the README.
+
 ## 2026-10-07 · README with sample frames; agents untracked ahead of going public (Ingrid Halvorsen)
 - Max: "gitignore agents, and my API keys/sensitive info. I think I want to make the repo public. Update the readme ... add a few sample images to highlight the work".
 - Audit before the switch: `.env` was never committed (`git log --all --diff-filter=A -- .env` empty); a secret-pattern scan of the whole history (`sk-ant-`, Goodreads `list_rss/<id>?key=`, filled `ANTHROPIC_API_KEY=`, `GOODREADS_RSS_URL=http`, `HEALTH_EXPORT_TOKEN=`) finds only `key=FIXTURE` and `change-me`. What a public reader will see and was left as is: private-range LAN IPs, the launchd plist's home-directory paths, the neighbourhood-level coordinates and bus lines in `config.toml` (already rounded by design), and the day-level numbers quoted in this log and notes.txt. `agents/` stays in history.

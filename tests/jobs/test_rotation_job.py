@@ -237,7 +237,9 @@ def test_a_month_renderer_that_raises_costs_only_the_month_slot(db, jobs_setting
     assert len(adapter.sent) == 5
 
 
-def test_month_goes_as_two_stills_in_order_the_plate_then_its_note(db, jobs_settings, monkeypatch):
+def test_month_goes_as_stills_in_order_the_plate_its_note_then_the_calendar(
+    db, jobs_settings, monkeypatch
+):
     feature = sample_feature("2026-10")
     monkeypatch.setattr("app.month.store.load_feature", lambda conn, month: feature)
     assert feature.plate("2026-10-01").note and not feature.plate("2026-10-02").note
@@ -250,15 +252,12 @@ def test_month_goes_as_two_stills_in_order_the_plate_then_its_note(db, jobs_sett
             assert rotation.tick() == name
             clock.advance(20)
         if day == "2026-10-02":
-            assert len(month.frames) == 1, "no note: one still"
-            assert rotation.tick() == "month"
-            assert same(adapter.sent[-1], month)
-            assert rotation.due() == clock.now + timedelta(seconds=6), "a still holds the dwell"
-            clock.now = rotation.due()
-            assert rotation.tick() == "books"
-            continue
-        assert month.durations_ms == (6000, 5000)
-        for page, seconds in ((0, 6), (1, 5)):
+            assert month.durations_ms == (6000, 6000), "no note: the plate, then the calendar"
+            pages = ((0, 6), (1, 6))
+        else:
+            assert month.durations_ms == (6000, 5000, 6000)
+            pages = ((0, 6), (1, 5), (2, 6))
+        for page, seconds in pages:
             assert rotation.tick() == "month"
             sent = adapter.sent[-1]
             assert len(sent.frames) == 1, "a page is a still, so the panel has nothing to loop"
@@ -269,7 +268,7 @@ def test_month_goes_as_two_stills_in_order_the_plate_then_its_note(db, jobs_sett
             clock.advance(0.001)
         assert month.frames[0].tobytes() != month.frames[1].tobytes()
         assert rotation.tick() == "books"
-        assert len(adapter.sent) == 6
+        assert len(adapter.sent) == 3 + len(month.frames) + 1
 
 
 def test_city_goes_page_by_page_as_stills_in_order_and_a_failed_page_costs_the_rest(

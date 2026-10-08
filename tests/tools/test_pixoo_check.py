@@ -38,18 +38,21 @@ def test_the_fixture_day_goes_out_in_rotation_order_with_timings(device, capsys)
     lines = capsys.readouterr().out.splitlines()
     names = [line.split(":")[0] for line in lines]
     city = [f"city page {n} of 4" for n in range(1, 5)]
-    assert names[:8] == ["today", *city, "week", "month page 1 of 2", "month page 2 of 2"]
+    month = [f"month page {n} of 3" for n in range(1, 4)]
+    assert names[:9] == ["today", *city, "week", *month]
     wins = [f"win-{win} page {n} of 5" for win in ("workout", "sleep") for n in range(1, 6)]
     assert names[-10:] == wins
-    pages = len(names) - 18
+    pages = len(names) - 19
     assert pages > 1
-    assert names[8:-10] == [f"books page {n} of {pages}" for n in range(1, pages + 1)]
+    assert names[9:-10] == [f"books page {n} of {pages}" for n in range(1, pages + 1)]
     assert all("sent in" in line and "hold" in line for line in lines)
     assert ["hold 6 s" in line for line in lines[1:5]] == [True, True, False, False]
     assert "hold 5 s" in lines[3] and "hold 5 s" in lines[4], "weather, lines, two alerts"
-    assert "hold 6 s" in lines[6] and "hold 5 s" in lines[7], "the plate, then its note"
+    assert ["hold 6 s" in lines[6], "hold 5 s" in lines[7], "hold 6 s" in lines[8]] == [True] * 3, (
+        "the plate, its note, then the calendar"
+    )
     sends = [body for body in seen if body["Command"] == "Draw/SendHttpGif"]
-    assert sorted({body["PicID"] for body in sends}) == list(range(1, 19 + pages))
+    assert sorted({body["PicID"] for body in sends}) == list(range(1, 20 + pages))
     assert {body["PicWidth"] for body in sends} == {64}
 
 
@@ -64,7 +67,7 @@ def test_month_and_party_can_be_sent_by_name(device, capsys):
     seen, _ = device
     assert pixoo_check.main(["--host", HOST, "--no-hold", "--screen", "month"]) == 0
     sends = [body for body in seen if body["Command"] == "Draw/SendHttpGif"]
-    assert [(body["PicNum"], body["PicOffset"]) for body in sends] == [(1, 0), (1, 0)], "two stills"
+    assert [(body["PicNum"], body["PicOffset"]) for body in sends] == [(1, 0)] * 3, "three stills"
     assert pixoo_check.main(["--host", HOST, "--no-hold", "--screen", "party"]) == 0
     assert "party: not earned on this day, skipped" in capsys.readouterr().out
     seen.clear()

@@ -8,7 +8,8 @@ Code: `app/month/` (`spec.py` the contract, `prompt.py` the brief, `generate.py`
 Once a month the model authors one JSON object: a title, a theme, a palette of 2 to 8 bright
 colours, and for every day of the month a 16x16 plate in palette indices, a caption and a
 note. `spec.parse_feature` is the only judge of what is stored; the renderer draws day N's
-plate and falls back to its own calendar screen while no feature is stored.
+plate, then the month's calendar as the last page; while no feature is stored the
+calendar is the whole screen.
 
 The request carries the month, the year and the titles and themes of earlier features.
 Nothing of Max's is in it: no metrics, no dates of his, no health data. That is why the spec

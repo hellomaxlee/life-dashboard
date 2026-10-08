@@ -1,13 +1,15 @@
-"""The Month screen: the month's feature for the day, or the month as a calendar.
+"""The Month screen: the month's feature for the day, then the month as a calendar.
 
-With a feature (app/month/spec.py) for the day's month the screen is two pages that read as
-one: the title over the day's 16x16 plate drawn at three LEDs a cell on true black, the
-caption under it, and a rail of one pip per day down each side (the days gone, today, the days
-to come); then, when the day has a note, the title over the note in the body face.
+With a feature (app/month/spec.py) for the day's month the screen is pages that read as one:
+the title over the day's 16x16 plate drawn at three LEDs a cell on true black, the caption
+under it, and a rail of one pip per day down each side (the days gone, today, the days to
+come); then, when the day has a note, the title over the note in the body face; then the
+calendar, every day of every month (Max, 2026-10-07: "I really like this panel").
 
-Without one (none generated yet, the model unavailable or over budget) the month is drawn as
-a calendar from the date alone: its name and year, a Monday-first grid with one cell per day,
-past days soft, today bright, the days to come dim but there. No metric and no personal data.
+The calendar is drawn from the date alone: the month's name and year, a Monday-first grid
+with one cell per day, past days soft, today bright, the days to come dim but there. No metric
+and no personal data. Without a feature (none generated yet, the model unavailable or over
+budget) it is the whole screen.
 
 The day is always the view's requested day, never `day_shown`: the Today screen may fall back
 to yesterday's facts, but the month does not turn back with it.
@@ -27,6 +29,7 @@ from app.render.view import DayView
 
 PLATE_MS = 6000
 NOTE_MS = 5000
+CALENDAR_MS = 6000
 
 PLATE_SCALE = 3
 PLATE_PX = ART_SIZE * PLATE_SCALE
@@ -237,14 +240,18 @@ def _calendar_frame(day_local: str) -> Frame:
 
 
 def render_month(view: DayView, now: datetime | None = None) -> Clip:
-    """The month's feature for the requested day: the plate, then its note when it has one,
-    as a paged clip. With no feature for that month, the calendar. `now` is unused; the
-    screen is drawn from the day alone."""
+    """The month's feature for the requested day (the plate, then its note when it has one)
+    and the calendar as the last page, as a paged clip. With no feature for that month, the
+    calendar alone. `now` is unused; the screen is drawn from the day alone."""
     found = plate_for(view)
     if found is None:
         return still(_calendar_frame(view.day_local))
     feature, plate = found
-    first = _plate_frame(feature, plate)
-    if not plate.note.strip():
-        return still(first)
-    return Clip((first, _note_frame(feature, plate)), (PLATE_MS, NOTE_MS))
+    frames = [_plate_frame(feature, plate)]
+    durations = [PLATE_MS]
+    if plate.note.strip():
+        frames.append(_note_frame(feature, plate))
+        durations.append(NOTE_MS)
+    frames.append(_calendar_frame(view.day_local))
+    durations.append(CALENDAR_MS)
+    return Clip(tuple(frames), tuple(durations))

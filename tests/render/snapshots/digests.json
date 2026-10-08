@@ -104,8 +104,8 @@
     "sha256": "0904dd1d0bbcfcc835fcaf89373a34b3a293eb34c053a616cadf2706812e2f6d"
   },
   "rest__health-delayed__broken-last-week__off/month": {
-    "frames": 2,
-    "sha256": "a0391de6fcfcf23f14737d30a522b6ba41cf44e8207579f64124eba31144ad2c"
+    "frames": 3,
+    "sha256": "050a4b1a0a51fdaa2702ceffabd2e17e36663de22bf54dc246eaf3f692d69faa"
   },
   "rest__health-delayed__broken-last-week__off/today": {
     "frames": 1,
@@ -124,8 +124,8 @@
     "sha256": "9341ce4788ae6d771b6806c45cd071bf7b60f797cf0790023584d6718a123ce0"
   },
   "rest__sleep-missing__broken-last-week__base/month": {
-    "frames": 1,
-    "sha256": "530118a82a6ac0ff9b47f821ea5f1bce56a4a24e1abdf3d7663d34c3aed33cd3"
+    "frames": 2,
+    "sha256": "181cfd0148b84e65ce8789470230619b3423f8a47b42c7863897de2218c555f0"
   },
   "rest__sleep-missing__broken-last-week__base/today": {
     "frames": 1,
@@ -144,8 +144,8 @@
     "sha256": "521dbf566ee319eae47cc2a3828d6c0fcd6bcd506159bc6b70cc49d3ce65956f"
   },
   "train__all-sources__alive__base/month": {
-    "frames": 2,
-    "sha256": "e7187d3d228bb10472549fdda363340139f913bb08ab8dea03ce2f11a27ee82f"
+    "frames": 3,
+    "sha256": "672ba3ead939b87274a2a10fd7d9196f4ad74d6879102dd932180508e737712f"
   },
   "train__all-sources__alive__base/today": {
     "frames": 1,
@@ -164,8 +164,8 @@
     "sha256": "3c3cc9ae3ab3f385ebb2b145b92ebbbbb540cf70489234cec25320a2f4907769"
   },
   "train__all-sources__alive__peak/month": {
-    "frames": 1,
-    "sha256": "5a4b3c08413ad81fa67b8c2e819d1e1fa56ff08c66395178fddd2c008262568a"
+    "frames": 2,
+    "sha256": "8052ae19c87e26bec85d6bab2504ac546a433fd5488b22e68ee7bcdb70e5f54a"
   },
   "train__all-sources__alive__peak/today": {
     "frames": 1,
@@ -224,8 +224,8 @@
     "sha256": "0444e7bd811e07b1cac7d6f514602ea1e3384bd8d639f8b03318ea08a6642109"
   },
   "travel__workout-without-hr__broken-last-week__off/month": {
-    "frames": 2,
-    "sha256": "f90995277a052de25f8fb7f536152b448994db3f4eb5ad54d602ca39e3f8dd68"
+    "frames": 3,
+    "sha256": "0d5b97b3be4c1df776e2eac6787b4712950f78bf6e9c008a6aa11bea1d8724e3"
   },
   "travel__workout-without-hr__broken-last-week__off/today": {
     "frames": 1,

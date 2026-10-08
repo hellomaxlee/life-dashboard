@@ -80,8 +80,8 @@ def test_rotation_json_lists_the_sequence_with_valid_frames(client, settings):
             assert ImageChops.difference(image, clip.frames[index]).getbbox() is None
     frames = {s["name"]: s["frames"] for s in body["screens"]}
     assert len(frames["books"]) > 1, "Books pages are separate frames"
-    assert [f["ms"] for f in frames["month"]] == [6000, 5000], "the plate, then its note"
-    assert holds["month"] == 11000, "one pass through both pages"
+    assert [f["ms"] for f in frames["month"]] == [6000, 5000, 6000], "plate, note, calendar"
+    assert holds["month"] == 17000, "one pass through all three pages"
     assert holds["week"] == holds["today"] == 6000
     assert holds["books"] == clips["books"].total_ms > 6000, "the whole message pages through"
     assert holds["win-workout"] == holds["win-sleep"] == 1500, "five steps of 300 ms, one pass"
@@ -112,7 +112,7 @@ def test_rotation_json_lists_the_sequence_with_valid_frames(client, settings):
     assert party["frames"] == complete["celebrations"][1]["frames"], "one party clip, not two"
     shown = _png(client.get(party["frames"][3]["url"]))
     assert ImageChops.difference(shown, clip.frames[3]).getbbox() is None
-    assert len(frames["month"]) == 2 and len(complete["screens"][2]["frames"]) == 1
+    assert len(frames["month"]) == 3 and len(complete["screens"][2]["frames"]) == 1
 
 
 def test_shipped_luts_are_the_gamma_emulator_with_brightness_before_the_curve(client, settings):
@@ -205,10 +205,10 @@ def test_bad_input(client):
 def test_month_and_party_have_frames_and_deep_links(client, settings):
     view, now = load(WEEK_41, settings)
     month = render_screen("month", view, now)
-    for index in (0, 1):
+    for index in (0, 1, 2):
         image = _png(client.get(f"/pixoo/frame/month/{index}.png?fixture={WEEK_41}"))
         assert ImageChops.difference(image, month.frames[index]).getbbox() is None
-    assert client.get(f"/pixoo/frame/month/2.png?fixture={WEEK_41}").status_code == 404
+    assert client.get(f"/pixoo/frame/month/3.png?fixture={WEEK_41}").status_code == 404
     calendar = _png(client.get("/pixoo/frame/month/0.png?date=2026-10-02"))
     assert calendar.getbbox() is not None, "no feature stored: the calendar, never blank"
     assert client.get("/pixoo/frame/month/1.png?date=2026-10-02").status_code == 404
