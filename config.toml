@@ -19,6 +19,9 @@ target = 3
 
 [sleep]
 target_hours = 7.0
+# A night shown as more than this is over the band: yellow on the frame and not a sleep win
+# (Max, 2026-10-09).
+max_hours = 9.0
 
 [books]
 target_per_year = 12
@@ -107,9 +110,12 @@ pixoo_host = "192.168.1.185"
 # panel) and the week-complete party six (about 10 s).
 screen_seconds = 6
 # Panel brightness, 0 to 100: `night_brightness` from `night_from` until `night_until`
-# (home timezone), `brightness` the rest of the day. Equal times = never dimmed.
-brightness = 100
-night_brightness = 3
+# (home timezone), `brightness` the rest of the day. Equal times = never dimmed. The day
+# level is what the night level was until 2026-10-09 (Max: "make the current level of
+# dimness the default, and an even dimmer level during night time hours"); 1 is the lowest
+# level that is not 0.
+brightness = 3
+night_brightness = 1
 night_from = "22:00"
 night_until = "05:30"
 # false: every screen is uploaded as stills, 1.45 s each, with no loading cycle (nothing is

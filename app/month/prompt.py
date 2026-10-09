@@ -12,7 +12,6 @@ from app.month.spec import (
     ART_SIZE,
     CAPTION_MAX,
     MIN_BRIGHT_CHANNEL,
-    NOTE_MAX,
     PALETTE_MAX,
     PALETTE_MIN,
     THEME_MAX,
@@ -111,11 +110,6 @@ SYSTEM_PROMPT = (
     f"- caption: at most {CAPTION_MAX} characters, spaces included, never empty. Shown in "
     "capitals under the plate, so word it to read well in capitals. It is the day's name or "
     "its punchline. Count the characters: one over and the month is rejected.\n"
-    f"- note: at most {NOTE_MAX} characters, shown as a second page in ordinary case. Say "
-    "plainly what the plate shows or the one true thing worth knowing about it, with the "
-    "wit in how it is put: a clear sentence first, a riddle never. Someone who knows "
-    'nothing of the subject should understand it at a glance. It may be "" but most days '
-    "deserve one.\n"
     "- No digits in any text, anywhere. Do not number the days in words either; the panel "
     "already shows the date.\n"
     "- Plain ASCII only: no accents, curly quotes, long dashes or emoji. In the title and "
@@ -138,7 +132,7 @@ SYSTEM_PROMPT = (
     "number of days taken from the request:\n"
     '{"month": "YYYY-MM", "title": "...", "theme": "...", '
     '"palette": ["#rrggbb", "#rrggbb", "..."], '
-    '"days": [{"day": 1, "caption": "...", "note": "...", '
+    '"days": [{"day": 1, "caption": "...", '
     f'"art": ["{_ROW}", "... {ART_SIZE} rows of {ART_SIZE} ..."]}}, '
     '{"day": 2, "...": "..."}]}\n'
     '"days" holds exactly one entry for every day of the month, in order, "day" counting up '

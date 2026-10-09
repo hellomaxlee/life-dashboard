@@ -6,8 +6,9 @@ Code: `app/month/` (`spec.py` the contract, `prompt.py` the brief, `generate.py`
 ## What it does
 
 Once a month the model authors one JSON object: a title, a theme, a palette of 2 to 8 bright
-colours, and for every day of the month a 16x16 plate in palette indices, a caption and a
-note. `spec.parse_feature` is the only judge of what is stored; the renderer draws day N's
+colours, and for every day of the month a 16x16 plate in palette indices and a caption
+(no note since 2026-10-09: the feature is one page; a stored feature's notes are never
+drawn). `spec.parse_feature` is the only judge of what is stored; the renderer draws day N's
 plate, then the month's calendar as the last page; while no feature is stored the
 calendar is the whole screen.
 

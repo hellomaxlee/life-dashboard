@@ -108,7 +108,7 @@ def test_today_screen_text_race_week(monkeypatch, settings):
         ("9.8", 16, 9, B, 2),
         ("h", 47, 16, B, 1),
         ("SLEEP", 2, 32, S, 1),
-        ("GOAL 7H", 36, 32, S, 1),
+        ("GOAL 7-9H", 28, 32, S, 1),
         ("LOAD 62/100", 13, 42, S, 1),
         ("STEPS", 2, 51, S, 1),
         ("20634", 43, 51, S, 1),

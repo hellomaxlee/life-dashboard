@@ -25,6 +25,8 @@ GOLD: Color = (255, 200, 40)
 TEAL: Color = (40, 220, 200)
 GREEN: Color = (60, 220, 90)
 AMBER: Color = (255, 170, 0)
+# A night over the sleep band: plainly yellow, greener than GOLD so it is not the workout's.
+YELLOW: Color = (255, 235, 0)
 RED: Color = (255, 60, 50)
 VIOLET: Color = (170, 110, 255)
 PINK: Color = (255, 90, 190)

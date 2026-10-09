@@ -116,8 +116,8 @@ def test_render_tool_writes_the_documented_files(tmp_path, settings, capsys):
     with_note = tmp_path / "with-note"
     fixture = f"fixtures/days/{WEEK_41}.json"
     assert render_main(["--fixture", fixture, "--out", str(with_note)]) == 0
-    assert {p.name for p in (with_note / "month").iterdir()} == stills | clips | pages(3)
-    assert "month: 3 frames, 17000 ms" in capsys.readouterr().out
+    assert {p.name for p in (with_note / "month").iterdir()} == stills | clips | pages(2)
+    assert "month: 2 frames, 12000 ms" in capsys.readouterr().out
 
 
 def test_render_tool_by_date_reads_the_database(tmp_path, settings):

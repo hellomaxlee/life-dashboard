@@ -1,4 +1,4 @@
-"""The Month screen: the feature's plate and note, the calendar fallback, and where it sits
+"""The Month screen: the feature's one page, the calendar fallback, and where it sits
 in the rotation. The feature used is the hand-made sample under fixtures/month."""
 
 from __future__ import annotations
@@ -20,9 +20,6 @@ from app.render.gamma import led_gamma, led_lut
 from app.render.month import (
     CALENDAR_MS,
     CELL,
-    NOTE_BOTTOM,
-    NOTE_MS,
-    NOTE_TOP,
     PLATE_MS,
     PLATE_SCALE,
     PLATE_X,
@@ -30,7 +27,6 @@ from app.render.month import (
     calendar_cells,
     calendar_layout,
     legible,
-    note_layout,
     rail_pips,
     render_month,
 )
@@ -73,10 +69,6 @@ def test_the_sample_is_a_whole_valid_feature_for_its_own_month():
     assert 8 <= sum(1 for plate in feature.days if plate.note) <= 16, "some days carry a note"
     for text in (feature.title, *(plate.caption for plate in feature.days)):
         assert text_width(text.upper(), SMALL) <= month_screen.TEXT_WIDTH, text
-    for plate in feature.days:
-        if plate.note:
-            font, _, lines = note_layout(plate.note)
-            assert font is BODY and " ".join(lines) == plate.note, "whole, in the body face"
 
 
 def test_a_fixture_sample_is_re_dated_to_the_fixture_month_and_bad_names_are_refused(settings):
@@ -172,42 +164,21 @@ def test_the_rails_count_the_days_gone_today_and_the_days_to_come():
     assert len(seen) == 3 and BLACK not in seen
 
 
-# the note page
+# one page for the feature
 
 
-def test_page_two_exists_only_when_the_day_has_a_note(monkeypatch):
+def test_the_feature_is_one_page_whether_or_not_the_stored_plate_carries_a_note(monkeypatch):
     feature = sample()
     noted, plain = "2026-10-10", "2026-10-11"
     assert feature.plate(noted).note and not feature.plate(plain).note
-    two = render_month(view_on(plain), NOW)
-    assert len(two.frames) == 2 and two.durations_ms == (PLATE_MS, CALENDAR_MS)
-    assert [len(part.frames) for part in device_parts(two)] == [1, 1], "plate, calendar"
-
-    recorded = record_text(monkeypatch)
-    clip = render_month(view_on(noted), NOW)
-    assert clip.durations_ms == (PLATE_MS, NOTE_MS, CALENDAR_MS) == (6000, 5000, 6000)
-    parts = device_parts(clip)
-    assert [len(part.frames) for part in parts] == [1, 1, 1], "three stills, never a loop"
-    assert [part.durations_ms for part in parts] == [(6000,), (5000,), (6000,)]
-    assert hold_ms("month", clip, 6) == 17000
-    note = clip.frames[1]
-    lines = [r for r in recorded if r[3] == BODY.name]
-    assert " ".join(r[0] for r in lines) == feature.plate(noted).note
-    assert [r[0] for r in recorded if r[0] == "MOON OVER WATER"] == ["MOON OVER WATER"] * 2
-    top, bottom = lines[0][2], lines[-1][2] + BODY.height - 1
-    assert NOTE_TOP <= top and bottom <= NOTE_BOTTOM
-    assert abs((top - NOTE_TOP) - (NOTE_BOTTOM - bottom)) <= 1, "centred under the title"
-    for _, x, _, _, _ in lines:
-        assert x >= 2
-    box = note.crop((0, NOTE_TOP, SIZE, SIZE)).getbbox()
-    assert box is not None and box[0] >= 2 and box[2] <= 62
-    colours = {note.getpixel((x, y)) for x in range(SIZE) for y in range(NOTE_TOP, SIZE)}
-    assert colours == {BLACK, feature.palette[0]}, "the note in the palette's brightest colour"
-    assert note.crop((0, 0, SIZE, 7)).tobytes() == clip.frames[0].crop((0, 0, SIZE, 7)).tobytes()
-
-    blank = replace(feature.plate(noted), note="   ")
-    days = tuple(blank if p.day == 10 else p for p in feature.days)
-    assert len(render_month(view_on(noted, replace(feature, days=days)), NOW).frames) == 2
+    for day in (noted, plain):
+        recorded = record_text(monkeypatch)
+        clip = render_month(view_on(day), NOW)
+        assert clip.durations_ms == (PLATE_MS, CALENDAR_MS) == (6000, 6000)
+        assert [len(part.frames) for part in device_parts(clip)] == [1, 1], "plate, calendar"
+        assert hold_ms("month", clip, 6) == 12000
+        assert not [r for r in recorded if r[3] == BODY.name], "no note is drawn anywhere"
+        assert [r[0] for r in recorded if r[0] == "MOON OVER WATER"] == ["MOON OVER WATER"]
 
 
 def test_the_calendar_is_the_last_page_of_every_month_with_or_without_a_feature():
@@ -234,7 +205,7 @@ def test_the_longest_text_the_spec_allows_never_leaves_the_frame(monkeypatch):
     for day in ("2026-10-01", "2026-10-02"):
         recorded = record_text(monkeypatch)
         clip = render_month(view_on(day, feature), NOW)
-        assert len(clip.frames) == 3
+        assert len(clip.frames) == 2
         for text, x, y, font_name, _ in recorded:
             font = SMALL if font_name == SMALL.name else BODY
             assert 0 <= x and x + text_width(text, font) <= SIZE, text
@@ -243,8 +214,6 @@ def test_the_longest_text_the_spec_allows_never_leaves_the_frame(monkeypatch):
             assert frame.size == (SIZE, SIZE) and frame.getbbox() is not None
     drawn = [r[0] for r in recorded]
     assert "M" * 10 in drawn and "M" * 11 not in drawn, "whole glyphs only, never half a letter"
-    font, pitch, lines = note_layout(feature.days[0].note)
-    assert font is SMALL and (len(lines) - 1) * pitch + font.height <= NOTE_BOTTOM - NOTE_TOP + 1
     lut = led_lut()
     for colour in ((0, 0, 255), (140, 0, 0)):
         lifted = legible(colour)
@@ -364,7 +333,7 @@ def test_the_month_is_the_requested_days_even_when_today_falls_back(db, settings
     texts = [r[0] for r in recorded]
     assert "FIRST FROST" in texts and "MOON OVER WATER" not in texts
     first_of_month = view.month_feature.plate("2026-11-01")
-    assert first_of_month.caption.upper() in texts and len(clip.frames) == 3
+    assert first_of_month.caption.upper() in texts and len(clip.frames) == 2
     assert texts[-9:] == ["NOVEMBER", "2026", *"MTWTFSS"], "the calendar closes the month"
     last_of_october = parse_feature(october, "2026-10").plate("2026-10-31")
     assert last_of_october.art != first_of_month.art

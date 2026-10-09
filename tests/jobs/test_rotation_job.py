@@ -237,7 +237,7 @@ def test_a_month_renderer_that_raises_costs_only_the_month_slot(db, jobs_setting
     assert len(adapter.sent) == 5
 
 
-def test_month_goes_as_stills_in_order_the_plate_its_note_then_the_calendar(
+def test_month_goes_as_two_stills_the_plate_then_the_calendar_note_or_not(
     db, jobs_settings, monkeypatch
 ):
     feature = sample_feature("2026-10")
@@ -251,12 +251,8 @@ def test_month_goes_as_stills_in_order_the_plate_its_note_then_the_calendar(
         for name in ("today", "city", "week"):
             assert rotation.tick() == name
             clock.advance(20)
-        if day == "2026-10-02":
-            assert month.durations_ms == (6000, 6000), "no note: the plate, then the calendar"
-            pages = ((0, 6), (1, 6))
-        else:
-            assert month.durations_ms == (6000, 5000, 6000)
-            pages = ((0, 6), (1, 5), (2, 6))
+        assert month.durations_ms == (6000, 6000), "the plate, then the calendar"
+        pages = ((0, 6), (1, 6))
         for page, seconds in pages:
             assert rotation.tick() == "month"
             sent = adapter.sent[-1]
@@ -712,16 +708,16 @@ def test_interval_jobs_run_once_after_a_sleep_instead_of_logging_a_miss(db, jobs
 
 
 def test_the_panel_is_dimmed_from_ten_at_night_until_half_past_five(db, jobs_settings):
-    dim = jobs_settings.device.night_brightness
-    assert 0 < dim < jobs_settings.device.brightness == 100
+    dim, day = jobs_settings.device.night_brightness, jobs_settings.device.brightness
+    assert (day, dim) == (3, 1), "the day level is the old night level; the night is dimmer"
     night = from_utc_iso("2026-10-05T02:00:00Z")  # 22:00 New York
     cases = {
-        "2026-10-05T01:59:00Z": 100,  # 21:59
+        "2026-10-05T01:59:00Z": day,  # 21:59
         "2026-10-05T02:00:00Z": dim,  # 22:00
         "2026-10-05T07:00:00Z": dim,  # 03:00
         "2026-10-05T09:29:00Z": dim,  # 05:29
-        "2026-10-05T09:30:00Z": 100,  # 05:30
-        "2026-10-05T16:00:00Z": 100,  # noon
+        "2026-10-05T09:30:00Z": day,  # 05:30
+        "2026-10-05T16:00:00Z": day,  # noon
     }
     for stamp, level in cases.items():
         assert rotation_job.brightness_at(from_utc_iso(stamp), jobs_settings) == level, stamp
@@ -732,10 +728,10 @@ def test_the_panel_is_dimmed_from_ten_at_night_until_half_past_five(db, jobs_set
     for _ in range(4):
         rotation.tick()
         clock.now += timedelta(seconds=30)
-    assert adapter.levels == [100, dim], "set once at start, once when the night begins"
+    assert adapter.levels == [day, dim], "set once at start, once when the night begins"
     clock.now = from_utc_iso("2026-10-05T09:30:00Z")
     rotation.tick()
-    assert adapter.levels == [100, dim, 100]
+    assert adapter.levels == [day, dim, day]
 
 
 def test_a_brightness_command_that_fails_is_sent_again_next_tick(db, jobs_settings):
@@ -751,7 +747,7 @@ def test_a_brightness_command_that_fails_is_sent_again_next_tick(db, jobs_settin
         rotation.tick()
     clock.now = rotation.due()
     rotation.tick()
-    assert adapter.levels == [100, 100] and len(adapter.sent) == 1
+    assert adapter.levels == [3, 3] and len(adapter.sent) == 1
 
 
 def test_every_send_is_recorded_with_its_page_time_and_hold(db, jobs_settings):

@@ -1,10 +1,11 @@
 """The Month screen: the month's feature for the day, then the month as a calendar.
 
-With a feature (app/month/spec.py) for the day's month the screen is pages that read as one:
-the title over the day's 16x16 plate drawn at three LEDs a cell on true black, the caption
-under it, and a rail of one pip per day down each side (the days gone, today, the days to
-come); then, when the day has a note, the title over the note in the body face; then the
-calendar, every day of every month (Max, 2026-10-07: "I really like this panel").
+With a feature (app/month/spec.py) for the day's month the screen is two pages: the feature,
+always one page (Max, 2026-10-09: "the monthly feature should be contained to one slide as a
+general rule"; the note page that followed it is gone), the title over the day's 16x16 plate
+drawn at three LEDs a cell on true black, the caption under it, and a rail of one pip per
+day down each side (the days gone, today, the days to come); then the calendar, every day of
+every month (Max, 2026-10-07: "I really like this panel").
 
 The calendar is drawn from the date alone: the month's name and year, a Monday-first grid
 with one cell per day, past days soft, today bright, the days to come dim but there. No metric
@@ -21,14 +22,13 @@ import calendar
 from datetime import date, datetime
 
 from app.month.spec import ART_SIZE, UNLIT, DayPlate, MonthFeature
-from app.render.font import BODY, SMALL, Font, draw_text, text_width
+from app.render.font import SMALL, Font, draw_text, text_width
 from app.render.frame import SIZE, Clip, Color, Frame, new_frame, still
 from app.render.palette import LABEL, TEXT, TRACK, WHITE, dim, hue
-from app.render.screens import fill_rect, wrap_lines
+from app.render.screens import fill_rect
 from app.render.view import DayView
 
 PLATE_MS = 6000
-NOTE_MS = 5000
 CALENDAR_MS = 6000
 
 PLATE_SCALE = 3
@@ -44,11 +44,6 @@ RAIL_PITCH = 3
 RAIL_ROWS = PLATE_PX // RAIL_PITCH
 RAIL_PAST = 0.45
 MIN_TEXT_LUMINANCE = 0.2
-
-NOTE_TOP = 8
-NOTE_BOTTOM = 62
-NOTE_WIDTH = 60
-NOTE_PITCHES = ((BODY, 9), (BODY, 8), (SMALL, 7))
 
 MONTH_NAMES = (
     "JANUARY",
@@ -147,46 +142,6 @@ def _plate_frame(feature: MonthFeature, plate: DayPlate) -> Frame:
     return frame
 
 
-def _wrap_small(text: str) -> list[str]:
-    lines: list[str] = []
-    current = ""
-    for word in text.split():
-        candidate = f"{current} {word}" if current else word
-        if text_width(candidate, SMALL) <= NOTE_WIDTH:
-            current = candidate
-            continue
-        if current:
-            lines.append(current)
-        current = fit_text(word, NOTE_WIDTH)
-    if current:
-        lines.append(current)
-    return lines
-
-
-def note_layout(note: str) -> tuple[Font, int, list[str]]:
-    """(face, line pitch, lines): the body face while the wrapped note fits under the title,
-    then tighter, then the small face; lines past the frame are dropped, never drawn off it."""
-    room = NOTE_BOTTOM - NOTE_TOP + 1
-    for font, pitch in NOTE_PITCHES:
-        lines = wrap_lines(note) if font is BODY else _wrap_small(note)
-        if (len(lines) - 1) * pitch + font.height <= room:
-            return font, pitch, lines
-    return font, pitch, lines[: (room - font.height) // pitch + 1]
-
-
-def _note_frame(feature: MonthFeature, plate: DayPlate) -> Frame:
-    frame = new_frame()
-    palette = feature.palette
-    _centered(frame, TITLE_Y, feature.title, legible(palette[0]))
-    font, pitch, lines = note_layout(plate.note)
-    height = (len(lines) - 1) * pitch + font.height
-    top = NOTE_TOP + (NOTE_BOTTOM - NOTE_TOP + 1 - height) // 2
-    color = legible(max(palette, key=sum))
-    for index, line in enumerate(lines):
-        _centered(frame, top + index * pitch, line, color, font)
-    return frame
-
-
 def calendar_cells(day_local: str) -> list[tuple[int, int, int]]:
     """(day, column, row) for every day of the month, Monday in column 0."""
     day = date.fromisoformat(day_local)
@@ -240,18 +195,13 @@ def _calendar_frame(day_local: str) -> Frame:
 
 
 def render_month(view: DayView, now: datetime | None = None) -> Clip:
-    """The month's feature for the requested day (the plate, then its note when it has one)
-    and the calendar as the last page, as a paged clip. With no feature for that month, the
-    calendar alone. `now` is unused; the screen is drawn from the day alone."""
+    """The month's feature for the requested day, one page whatever the stored plate carries
+    (Max, 2026-10-09), and the calendar as the last page, as a paged clip. With no feature
+    for that month, the calendar alone. `now` is unused; the screen is drawn from the day
+    alone."""
     found = plate_for(view)
     if found is None:
         return still(_calendar_frame(view.day_local))
     feature, plate = found
-    frames = [_plate_frame(feature, plate)]
-    durations = [PLATE_MS]
-    if plate.note.strip():
-        frames.append(_note_frame(feature, plate))
-        durations.append(NOTE_MS)
-    frames.append(_calendar_frame(view.day_local))
-    durations.append(CALENDAR_MS)
-    return Clip(tuple(frames), tuple(durations))
+    frames = (_plate_frame(feature, plate), _calendar_frame(view.day_local))
+    return Clip(frames, (PLATE_MS, CALENDAR_MS))

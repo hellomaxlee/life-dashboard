@@ -384,8 +384,9 @@ When something fails (device off, timeout, one screen's renderer raising): one
 `job device_rotation failed: ...` line per distinct error in the err log (repeats are not
 logged), nothing is sent on that tick, and the next tick tries the next screen.
 
-Night dimming: the job sets the panel to `night_brightness` (3) from `night_from` (22:00)
-until `night_until` (05:30) home time and to `brightness` (100) the rest of the day
+Night dimming: the job sets the panel to `night_brightness` (1) from `night_from` (22:00)
+until `night_until` (05:30) home time and to `brightness` (3, the night level until
+2026-10-09) the rest of the day
 (`brightness_at` in `app/jobs/rotation.py`, applied before a send when the level changes).
 Equal times mean never dimmed.
 

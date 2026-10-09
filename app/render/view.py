@@ -104,6 +104,7 @@ class DayView:
     book_finished: bool = False
     sleep_hours: float | None = None
     sleep_target_hours: float = 7.0
+    sleep_max_hours: float = 9.0
     steps: int | None = None
     as_of_utc: str | None = None
     books_ytd: int | None = None
@@ -222,6 +223,7 @@ def view_from_metrics(
         book_finished=daily.get(BOOK_FINISHED) is True,
         sleep_hours=sleep if SLEEP_HOURS in daily else _sleep(stored_sleep_hours),
         sleep_target_hours=settings.sleep_target_hours,
+        sleep_max_hours=settings.sleep_max_hours,
         steps=steps if steps is not None else _whole(stored_steps),
         as_of_utc=_utc_iso(as_of_utc),
         books_ytd=_whole(daily.get(BOOKS_YTD)),

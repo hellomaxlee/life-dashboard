@@ -360,7 +360,7 @@ def compute_rows(
         quality = quality or by_judge is not None
         asleep = inputs.sleep_s.get(day)
         sleep_hours = round_half_up(asleep / 3600, 2) if asleep is not None else None
-        slept = sleep_win(sleep_hours, settings.sleep_target_hours)
+        slept = sleep_win(sleep_hours, settings.sleep_target_hours, settings.sleep_max_hours)
         finished = books_rules.finished_on(inputs.book_dates, day)
         load = load_by_day[day]
         row: dict[str, object] = {

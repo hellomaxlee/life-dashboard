@@ -418,5 +418,6 @@ def test_the_real_client_is_pinned_to_the_api_host_and_built_only_with_a_key(key
 def test_the_brief_asks_for_months_that_differ_and_days_that_inform():
     from app.month import prompt
 
-    for phrase in ("differ in concept", "sharp and informative", "do not invent", "a riddle never"):
+    for phrase in ("differ in concept", "sharp and informative", "do not invent"):
         assert phrase in prompt.SYSTEM_PROMPT, phrase
+    assert "note" not in prompt.SYSTEM_PROMPT, "the feature is one page: no note is asked for"

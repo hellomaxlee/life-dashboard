@@ -7,7 +7,7 @@ SpecError naming the first thing wrong, and nothing unparsed is ever stored or d
 
 Shape, as JSON:
   {"month": "2026-10", "title": "...", "theme": "...", "palette": ["#rrggbb", ...],
-   "days": [{"day": 1, "caption": "...", "note": "...", "art": ["16 chars", ... 16 rows]}, ...]}
+   "days": [{"day": 1, "caption": "...", "art": ["16 chars", ... 16 rows]}, ...]}
 
 - title: 1 to TITLE_MAX characters, drawn in capitals above the plate.
 - theme: the month's idea in a sentence or two, up to THEME_MAX characters; web page only.
@@ -15,7 +15,8 @@ Shape, as JSON:
   of a palette colour, "1" being the first. Every colour must be bright enough for LEDs.
 - days: exactly one entry per day of that month, in order.
   - caption: 1 to CAPTION_MAX characters, drawn in capitals under the plate.
-  - note: up to NOTE_MAX characters, a second page in the body face; may be empty.
+  - note: optional, up to NOTE_MAX characters. Features stored before 2026-10-09 carry one;
+    it is checked like any text but never drawn or asked for (the feature is one page).
   - art: ART_SIZE rows of ART_SIZE cells, at least ART_MIN_LIT of them lit.
 Text may use only characters the panel's faces can draw, and no digits: the feature is given
 none of Max's data, so a number in it could only be invented.

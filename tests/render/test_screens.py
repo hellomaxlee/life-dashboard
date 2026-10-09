@@ -229,3 +229,47 @@ def test_fixture_files_name_their_cell_and_cover_the_required_states(settings):
         assert "!" not in line
         used.append(record["daily_metrics"].get("claude_week_used_pct"))
     assert 41.2 in used and None in used
+
+
+def test_a_night_over_nine_hours_is_yellow_and_not_a_sleep_win():
+    from app.render.celebrate import earned_wins
+    from app.render.palette import GREEN, SKY, YELLOW
+    from app.render.screens import sleep_goal_label
+
+    def number_colours(hours: float) -> set:
+        frame = render_today(DayView(day_local="2026-10-02", sleep_hours=hours)).poster
+        return {frame.getpixel((x, y)) for x in range(16, 62) for y in range(9, 24)}
+
+    for hours, colour, win in (
+        (6.96, SKY, False),
+        (7.0, GREEN, True),
+        (9.09, GREEN, True),
+        (9.1, YELLOW, False),
+        (9.83, YELLOW, False),
+    ):
+        view = DayView(day_local="2026-10-02", sleep_hours=hours)
+        assert number_colours(hours) == {(0, 0, 0), colour}, hours
+        assert ("sleep" in earned_wins(view)) is win, hours
+    view = DayView(day_local="2026-10-02", sleep_hours=8.0)
+    assert sleep_goal_label(view) == "GOAL 7-9H"
+    frame = render_today(view).poster
+    assert [frame.getpixel((x, 25)) for x in (2 + 42, 2 + 54)] == [(255, 255, 255)] * 2, (
+        "a tick at each end of the band"
+    )
+
+
+@pytest.mark.parametrize("win", ["workout", "sleep", "book"])
+def test_every_sparkle_step_is_a_different_picture(win, monkeypatch):
+    from tests.render import record_text
+
+    drawn = record_text(monkeypatch)
+    frames = sparkle_clip(win).frames
+    for step, (before, after) in enumerate(zip(frames, frames[1:], strict=False)):
+        moved = ImageChops.difference(before, after).convert("L").point(lambda v: 255 if v else 0)
+        assert moved.histogram()[255] >= 100, f"step {step} to {step + 1} barely moves"
+    assert [text for text, *_ in drawn].count("SMALL WIN") == 3, "the label arrives with step 3"
+    low = frames[0].crop((0, 34, SIZE, SIZE)).getbbox()
+    assert low is not None and frames[0].crop((20, 14, 44, 34)).getbbox() is None, (
+        "the icon starts low and rises"
+    )
+    assert frames[1].crop((0, 0, SIZE, 4)).getbbox() is not None, "the rays reach the edge"

@@ -221,3 +221,15 @@ def test_a_real_health_auto_export_run_name_counts_for_calibration():
         assert is_calibration_run(name, four_miles, 120.0), name
     for name in ("Rowing", "Pruning", "Traditional Strength Training", "Cycling"):
         assert not is_calibration_run(name, four_miles, 120.0), name
+
+
+def test_a_night_over_the_upper_bound_is_not_a_sleep_win(settings):
+    from app.metrics.wins import overslept, sleep_win
+
+    assert (settings.sleep_target_hours, settings.sleep_max_hours) == (7.0, 9.0)
+    cases = {6.99: False, 7.0: True, 9.0: True, 9.09: True, 9.1: False, 9.83: False}
+    for hours, win in cases.items():
+        assert sleep_win(hours, 7.0, 9.0) is win, hours
+    assert overslept(9.09, 9.0) is False, "a night that reads 9.0 is not over 9"
+    assert overslept(9.1, 9.0) is True and overslept(None, 9.0) is False
+    assert sleep_win(None, 7.0, 9.0) is False

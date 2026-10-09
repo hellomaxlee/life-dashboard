@@ -39,14 +39,14 @@ Each folder holds:
 | `frame_gamma_1x.png` | through the LED gamma emulator at native size: **the one to judge** |
 | `frame_gamma_8x.png` | emulator output enlarged |
 | `clip_1x.gif`, `clip_8x.gif`, `clip_gamma_1x.gif`, `clip_gamma_8x.gif` | only when the clip has more than one frame, with each frame's own duration |
-| `page_<n>_1x.png`, `page_<n>_gamma_1x.png` | only for a paged screen (City, Month with a note, Books): every page as its own still, so each can be judged at 1x |
+| `page_<n>_1x.png`, `page_<n>_gamma_1x.png` | only for a paged screen (City, Month with a feature, Books): every page as its own still, so each can be judged at 1x |
 
 Which screens animate: Books when the summary needs more than one page (two word-wrapped
 lines per page, 2 s each; a 110-character line is about seven pages); Week never (a stale
 Claude reading is a still: amber dot, amber age line in place of the reset line); Today never; City is always paged (weather 6 s, lines 6 s, then 5 s for each of up to three
 affected lines) unless there is no city status, which is one still; Month is
-two pages (the plate 6 s, the note 5 s) only when the day's plate has a note; both
-celebrations always. No clip may exceed 59 frames, the most one device animation is assumed
+two pages (the plate 6 s, the calendar 6 s) when a feature is stored, else the calendar
+alone; both celebrations always. No clip may exceed 59 frames, the most one device animation is assumed
 to hold; a test holds every fixture to it and the Pixoo adapter refuses a longer clip.
 
 What the screens say when data is thin. Today's dot label states the dot, not the day:
@@ -101,10 +101,9 @@ count and target.
 authored theme a month, one 16x16 plate a day): the title in the small face in the palette's
 first colour, the day's plate at three LEDs a cell on black, the caption in the second colour,
 and a rail of one pip per day down each side (days gone in a dimmed second colour, today white,
-days to come in the track grey). A day with a note gets a second page: the same title over the
-note in the body face, word-wrapped and centred. Text that would not fit is cut at a whole
-glyph, and a note too long for the body face drops to the small one; nothing is drawn off the
-frame. Title and caption colours too dark for small text are lifted toward white.
+days to come in the track grey). The feature is that one page, as a rule (Max, 2026-10-09); a note a stored
+plate carries is never drawn. Text that would not fit is cut at a whole glyph; nothing is
+drawn off the frame. Title and caption colours too dark for small text are lifted toward white.
 
 The last page, every month, is the calendar (Max, 2026-10-07: "I really like this panel -
 can we have this every month?"), drawn from the date alone: month name in a colour of its own
@@ -187,8 +186,8 @@ job runs it: Today → City → Week → Month → Books → one sparkle per sma
 (day, the day's city, week, month, year, then the wins). `app.render.rotation.sequence_names` is the one
 definition; a restart begins at Today. A still holds for `device.screen_seconds` (6 s). Anything animated holds
 for whole plays and is never replaced part way: Books until its summary has paged through
-exactly once (2 s a page), City's pages once each (6 s, 6 s, then 5 s a detail page), Month's plate 6 s then its note 5 s, each sparkle one pass
-of five stills at 300 ms (about 9 s on the device, each still's 1.45 s upload included), the party one pass of six stills at 300 ms (about 10 s). On the device a paged screen goes as one still per page. The workout sparkle reads "WORKOUT DONE / SMALL WIN", and once the week's target is met
+exactly once (2 s a page), City's pages once each (6 s, 6 s, then 5 s a detail page), Month's plate 6 s then the calendar 6 s, each sparkle one pass
+of five stills at 300 ms (about 9 s on the device, each still's 1.45 s upload included; every still is its own picture: the icon rising on a streak, the burst of rays, the sparks and the label, the sparks falling wide with the icon's gesture, the icon settled among stars), the party one pass of six stills at 300 ms (about 10 s). On the device a paged screen goes as one still per page. The workout sparkle reads "WORKOUT DONE / SMALL WIN", and once the week's target is met
 it stays in the sequence every day through Sunday, and so does the party. `/preview` stays the engineering view; the
 three pages link each other on their first line.
 

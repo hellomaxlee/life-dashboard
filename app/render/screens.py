@@ -20,6 +20,7 @@ import unicodedata
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
+from app.metrics.wins import overslept
 from app.render.font import (
     BODY,
     SMALL,
@@ -47,6 +48,7 @@ from app.render.palette import (
     VOICE,
     WHITE,
     WOOD,
+    YELLOW,
     dim,
     shelf_tint,
 )
@@ -197,11 +199,24 @@ def sleep_text(hours: float) -> str:
     return f"{int(hours * 10 + 1e-6) / 10:.1f}"
 
 
+def sleep_over(view: DayView) -> bool:
+    """A night shown as more than the upper bound (Max, 2026-10-09: yellow over 9 hours)."""
+    return valid_sleep_hours(view.sleep_hours) and overslept(view.sleep_hours, view.sleep_max_hours)
+
+
 def sleep_met(view: DayView) -> bool:
-    """The sleep win as the frame shows it: the displayed number against the target."""
-    if not valid_sleep_hours(view.sleep_hours):
+    """The sleep win as the frame shows it: the displayed number inside the band, at the
+    target or more and not over the upper bound."""
+    if not valid_sleep_hours(view.sleep_hours) or sleep_over(view):
         return False
     return float(sleep_text(view.sleep_hours)) >= view.sleep_target_hours
+
+
+def sleep_color(view: DayView) -> Color:
+    """Green inside the band, yellow over it, sky short of it."""
+    if sleep_over(view):
+        return YELLOW
+    return GREEN if sleep_met(view) else SKY
 
 
 def sleep_fill(hours: float) -> int:
@@ -211,6 +226,16 @@ def sleep_fill(hours: float) -> int:
 
 def _hours_label(hours: float) -> str:
     return f"{int(hours)}H" if hours == int(hours) else f"{hours:.1f}H"
+
+
+def sleep_goal_label(view: DayView) -> str:
+    """The band, "GOAL 7-9H"; the target alone when the band does not fit beside "SLEEP"."""
+    low, high = _hours_label(view.sleep_target_hours), _hours_label(view.sleep_max_hours)
+    band = f"GOAL {low[:-1]}-{high}"
+    room = RIGHT - LEFT + 1 - text_width("SLEEP", SMALL) - TITLE_GAP
+    if view.sleep_max_hours > view.sleep_target_hours and text_width(band, SMALL) <= room:
+        return band
+    return f"GOAL {low}"
 
 
 def _has_day_data(view: DayView) -> bool:
@@ -286,7 +311,7 @@ def render_today(view: DayView, now: datetime | None = None) -> Clip:
         draw_text(frame, LEFT, 32, "SLEEP", LABEL, SMALL)
         draw_text_right(frame, RIGHT, 32, "NO DATA", TEXT, SMALL)
     else:
-        color = GREEN if sleep_met(view) else SKY
+        color = sleep_color(view)
         number = sleep_text(view.sleep_hours)
         unit_room = 3 + text_width("h", BODY)
         x = min(16, RIGHT + 1 - text_width(number, BODY, 2) - unit_room)
@@ -296,10 +321,11 @@ def render_today(view: DayView, now: datetime | None = None) -> Clip:
         if filled:
             fill_rect(frame, LEFT, 26, LEFT + filled - 1, 28, color)
         draw_text(frame, LEFT, 32, "SLEEP", LABEL, SMALL)
-        draw_text_right(
-            frame, RIGHT, 32, f"GOAL {_hours_label(view.sleep_target_hours)}", TEXT, SMALL
-        )
+        draw_text_right(frame, RIGHT, 32, sleep_goal_label(view), TEXT, SMALL)
     fill_rect(frame, target_x, 25, target_x, 29, WHITE)
+    max_x = LEFT + int(view.sleep_max_hours / SLEEP_BAR_HOURS * 60)
+    if target_x < max_x <= RIGHT:
+        fill_rect(frame, max_x, 25, max_x, 29, WHITE)
 
     if view.today_dot is None:
         draw_ring(frame, 6, 44, 4, RING, dashed=True)

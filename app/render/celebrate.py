@@ -3,17 +3,20 @@
 Wins are celebrated on the device; nothing here is ever shown for a miss. Both clips are
 deterministic (a seeded generator, no clock), so they snapshot-test like any still frame.
 
-Sparkle: the win's own icon pops in the centre while four-point stars twinkle around it.
+Sparkle: the win's own icon rises on a streak, bursts into rays, throws sparks that fall wide
+while the label arrives, and settles among four-point stars.
 Party: the frame opens as the Week screen's dot row with the last dot missing; that dot drops
 in and bounces, all dots flash, then they throw confetti while "WEEK DONE" rides a rainbow wave.
 
-Each is drawn as a run of ticks (SPARKLE_TICKS, PARTY_TICKS) and shown as a few of them as
-stills (SPARKLE_STEPS, PARTY_STEPS; every frame at or over rotation.PAGED_FRAME_MS, so the
-device job sends them one by one like Books pages). The panel shows a loading cycle for as
-long as a multi-frame animation takes to upload, 1.45 s a frame, so the 20-frame sparkle
-loaded for 30 s and the 56-frame party would have for 80; a still arrives with no loading
-cycle at all, and fetching a GIF instead is not something this panel's firmware does (Max,
-2026-10-06 and 2026-10-07, run-service.md section 15).
+Each is shown as a few stills (the sparkle's SPARKLE_BEATS, drawn one by one; the party's
+PARTY_STEPS, picked from a run of PARTY_TICKS; every frame at or over
+rotation.PAGED_FRAME_MS, so the device job sends them one by one like Books pages). The
+panel shows a loading cycle for as long as a multi-frame animation takes to upload, 1.45 s a
+frame, so a 20-frame sparkle loaded for 30 s and the 56-frame party would have for 80; a
+still arrives with no loading cycle at all, and fetching a GIF instead is not something this
+panel's firmware does (Max, 2026-10-06 and 2026-10-07, run-service.md section 15). A step is
+therefore about 1.75 s on the panel, and motion has to come from how far one still is from
+the next, not from frame rate: each sparkle step is its own composition.
 
 The cadence: a step is on screen for its hold (STEP_MS) plus the 1.45 s its successor takes
 to upload, and no transport makes that upload faster (httpx, a raw one-write socket, nodelay,
@@ -54,8 +57,9 @@ WIN_LABELS: dict[str, tuple[str, ...]] = {
     "book": ("BOOK DONE",),
 }
 WIN_ORDER: tuple[Win, ...] = ("workout", "sleep", "book")
-SPARKLE_TICKS = 20
-SPARKLE_STEPS = (1, 4, 7, 10, 14)
+SPARKLE_BEATS = 5
+ICON_Y = 26
+_LAUNCH_Y = 44
 PARTY_TICKS = 56
 PARTY_STEPS = (3, 11, 13, 17, 28, 44)
 STEP_MS = 300
@@ -91,8 +95,8 @@ def nth_dot_color(dot: int | None) -> Color:
     return dot_color(dot - 1)
 
 
-def _win_icon(frame: Frame, win: str, grow: float, color: Color = GOLD) -> None:
-    cx, cy = SIZE // 2, 26
+def _win_icon(frame: Frame, win: str, grow: float, color: Color = GOLD, cy: int = ICON_Y) -> None:
+    cx = SIZE // 2
     if win == "sleep":
         if grow >= 0.5:
             draw_bitmap(frame, cx - 4, cy - 5, MOON, VIOLET)
@@ -115,11 +119,68 @@ def _steps(ticks: list[Frame], steps: tuple[int, ...], poster: int) -> Clip:
     return Clip(tuple(ticks[tick] for tick in steps), (STEP_MS,) * len(steps), poster_index=poster)
 
 
+def _launch_trail(frame: Frame, accent: Color) -> None:
+    """The streak the icon leaves on its way up from the bottom edge."""
+    cx = SIZE // 2
+    for step, y in enumerate(range(_LAUNCH_Y + 5, SIZE)):
+        shade = dim(accent, max(0.15, 1.0 - step * 0.07))
+        _put(frame, cx, y, WHITE if step < 3 else shade)
+        if step % 3 == 1:
+            _put(frame, cx - 2 - step // 4, y, shade)
+            _put(frame, cx + 2 + step // 4, y, shade)
+
+
+def _burst_rays(frame: Frame, accent: Color) -> None:
+    """Twelve rays from the icon to the frame's edge, long and short by turns."""
+    cx = SIZE // 2
+    for ray in range(12):
+        angle = ray * math.pi / 6 + math.pi / 12
+        reach = 31 if ray % 2 == 0 else 23
+        for r in range(12, reach):
+            shade = WHITE if r < 16 else dim(accent, 1.0 - (r - 16) / (reach - 14))
+            _put(
+                frame,
+                cx + int(round(math.cos(angle) * r)),
+                ICON_Y + int(round(math.sin(angle) * r)),
+                shade,
+            )
+
+
+def _sparks(
+    frame: Frame, sparks: list[tuple[float, float, Color]], reach: float, fall: int, floor: int
+) -> None:
+    """The burst's sparks at `reach` pixels from the icon, each with a dim tail pointing back
+    at it, `fall` pixels down; none below `floor`, where the label sits."""
+    cx = SIZE // 2
+    for angle, pace, color in sparks:
+        for back, shade in ((0, color), (2, dim(color, 0.45))):
+            r = reach * pace - back
+            y = ICON_Y + int(round(math.sin(angle) * r)) + fall
+            if y < floor:
+                _put(frame, cx + int(round(math.cos(angle) * r)), y, shade)
+
+
+def _flourish(frame: Frame, win: str) -> None:
+    """The icon's own gesture on the fourth step: a white rim on the workout's disc, a Z
+    drifting off the moon, a star over the book."""
+    cx = SIZE // 2
+    if win == "sleep":
+        draw_text(frame, cx + 7, ICON_Y - 9, "z", WHITE, SMALL)
+        draw_text(frame, cx + 12, ICON_Y - 15, "Z", WHITE, SMALL)
+    elif win == "book":
+        draw_twinkle(frame, cx, ICON_Y - 10, 2, GOLD)
+    else:
+        draw_ring(frame, cx, ICON_Y, 9, WHITE)
+
+
 def sparkle_clip(win: Win = "workout", seed: int = 11, dot: int | None = None) -> Clip:
-    """The small-win clip: the icon arriving, ringed at full size, settled among the stars,
-    five stills of STEP_MS each. `win` picks the icon and the label; for a workout,
-    `dot` (the week's count including this one) colours the disc and its ring like the Week
-    screen's Nth dot (Max, 2026-10-06: a different colour for the 1st, 2nd and 3rd)."""
+    """The small-win clip, five stills of STEP_MS each, every one a different picture
+    (Max, 2026-10-09: "more dynamic"): the icon rising from the bottom edge on a streak; the
+    burst, rays to the frame's edge; the sparks thrown out as the label arrives; the sparks
+    falling wide while the icon makes its own gesture; the icon settled among the stars.
+    `win` picks the icon and the label; for a workout, `dot` (the week's count including this
+    one) colours the disc, its rays and its ring like the Week screen's Nth dot (Max,
+    2026-10-06: a different colour for the 1st, 2nd and 3rd)."""
     rng = random.Random(seed)
     accent = nth_dot_color(dot) if win == "workout" else GOLD
     lines = WIN_LABELS[win]
@@ -127,29 +188,46 @@ def sparkle_clip(win: Win = "workout", seed: int = 11, dot: int | None = None) -
     stars = []
     while len(stars) < 14:
         x, y = rng.randrange(4, SIZE - 4), rng.randrange(4, star_floor)
-        if abs(x - SIZE // 2) < 12 and abs(y - 26) < 12:
+        if abs(x - SIZE // 2) < 12 and abs(y - ICON_Y) < 12:
             continue
         stars.append((x, y, rng.randrange(6), rng.random()))
+    sparks = [
+        (rng.uniform(0, 2 * math.pi), rng.uniform(0.8, 1.2), rng.choice(CONFETTI))
+        for _ in range(28)
+    ]
 
     frames: list[Frame] = []
-    for tick in range(SPARKLE_TICKS):
+    for beat in range(SPARKLE_BEATS):
         frame = new_frame()
-        grow = min(1.0, (tick + 1) / 6)
-        overshoot = 1.15 if tick in (5, 6) else 1.0
-        _win_icon(frame, win, min(1.0, grow) * overshoot if win == "workout" else grow, accent)
-        if 4 <= tick <= 11:
-            draw_ring(
-                frame, SIZE // 2, 26, 6 + (tick - 4) * 2, dim(accent, 1.0 - (tick - 4) * 0.12)
-            )
-        for x, y, phase, colour_at in stars:
-            step = (tick + phase) % 6
-            size = (0, 1, 2, 1, 0, -1)[step]
-            draw_twinkle(frame, x, y, size, hue(colour_at + tick * 0.02))
-        for row, line in enumerate(lines):
-            draw_text_centered(frame, 57 - 7 * (len(lines) - row), line, TEXT, SMALL)
-        draw_text_centered(frame, 57, "SMALL WIN", LABEL, SMALL)
+        if beat == 0:
+            _launch_trail(frame, accent)
+            _win_icon(frame, win, 0.45, accent, cy=_LAUNCH_Y)
+        elif beat == 1:
+            _burst_rays(frame, accent)
+            _win_icon(frame, win, 1.3 if win == "workout" else 1.0, accent)
+        else:
+            if beat == 2:
+                draw_ring(frame, SIZE // 2, ICON_Y, 13, accent)
+                _sparks(frame, sparks, 20, 0, star_floor)
+            elif beat == 3:
+                _sparks(frame, sparks, 33, 5, star_floor)
+                _flourish(frame, win)
+            _win_icon(frame, win, 1.0, accent)
+        for index, (x, y, phase, colour_at) in enumerate(stars):
+            size = {
+                0: 0 if index % 2 else -1,
+                1: -1,
+                2: 2 if index % 2 else 0,
+                3: 0 if index % 2 else 2,
+                4: (1, 2, 1, 0, 2, 1)[phase],
+            }[beat]
+            draw_twinkle(frame, x, y, size, hue(colour_at + beat * 0.13))
+        if beat >= 2:
+            for row, line in enumerate(lines):
+                draw_text_centered(frame, 57 - 7 * (len(lines) - row), line, TEXT, SMALL)
+            draw_text_centered(frame, 57, "SMALL WIN", LABEL, SMALL)
         frames.append(frame)
-    return _steps(frames, SPARKLE_STEPS, poster=2)
+    return Clip(tuple(frames), (STEP_MS,) * SPARKLE_BEATS, poster_index=2)
 
 
 def _bounce_y(tick: int) -> int:

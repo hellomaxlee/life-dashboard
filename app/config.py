@@ -148,6 +148,7 @@ class Settings:
     workout: WorkoutConfig
     week_target: int
     sleep_target_hours: float
+    sleep_max_hours: float
     books: BooksConfig
     wellness: WellnessConfig
     claude_usage: ClaudeUsageConfig
@@ -371,6 +372,7 @@ def load_settings(config_path: Path | None = None) -> Settings:
         ),
         week_target=int(raw["week"]["target"]),
         sleep_target_hours=float(raw["sleep"]["target_hours"]),
+        sleep_max_hours=float(raw["sleep"]["max_hours"]),
         books=BooksConfig(
             target_per_year=int(raw["books"]["target_per_year"]),
             fallback_to_date_added=bool(raw["books"]["fallback_to_date_added"]),
