@@ -111,9 +111,9 @@ pixoo_host = "192.168.1.185"
 screen_seconds = 6
 # Panel brightness, 0 to 100: `night_brightness` from `night_from` until `night_until`
 # (home timezone), `brightness` the rest of the day. Equal times = never dimmed. Max,
-# 2026-10-09: the day level down from 100 to the old night level, 3, then "back up to 5";
-# the night level 1, the lowest that is not 0.
-brightness = 5
+# 2026-10-09: the day level down from 100 to the old night level, 3, then "back up to 5",
+# then 25 ("still very dim"); the night level 1, the lowest that is not 0.
+brightness = 25
 night_brightness = 1
 night_from = "22:00"
 night_until = "05:30"

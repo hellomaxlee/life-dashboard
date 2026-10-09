@@ -3,6 +3,10 @@
 Running log, newest first. The Lead reads this to find root causes and prioritize.
 Entry format: `## YYYY-MM-DD · <Title> (<Author>)` followed by terse bullets. Name the fixture combo on render/summary cycles.
 
+## 2026-10-09 · Day brightness 25 (Lucía Ferrer)
+- Max, with the day level at 5: "make the dashboard brighter during the day", then "Still very dim imo". `[device] brightness = 25`; night stays 1 (22:00 to 05:30). 25 is a pick, not a measured level: Max's eye decides whether it goes up or down from here.
+- Gate: ruff clean; full suite 1605 passed. Mutant red: day level back to 5 (2 failed in `tests/jobs`). No render change, so no fixture cycle. Service restarted.
+
 ## 2026-10-09 · Day brightness 5 (Lucía Ferrer)
 - Max, after the day level went to 3: "let's change the brightness back up to 5 for daytime". `[device] brightness = 5`; night stays 1.
 - Gate: ruff clean; `tests/jobs` and the egress test, 131 passed. Mutant red: day level back to 3 (2 failed). No render change, so no fixture cycle. Service restarted.
