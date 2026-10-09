@@ -3,6 +3,10 @@
 Running log, newest first. The Lead reads this to find root causes and prioritize.
 Entry format: `## YYYY-MM-DD · <Title> (<Author>)` followed by terse bullets. Name the fixture combo on render/summary cycles.
 
+## 2026-10-09 · Day brightness 5 (Lucía Ferrer)
+- Max, after the day level went to 3: "let's change the brightness back up to 5 for daytime". `[device] brightness = 5`; night stays 1.
+- Gate: ruff clean; `tests/jobs` and the egress test, 131 passed. Mutant red: day level back to 3 (2 failed). No render change, so no fixture cycle. Service restarted.
+
 ## 2026-10-09 · Dimmer by day and by night; a sleep band; a sparkle that moves; the Month feature is one page (Ingrid Halvorsen; display Lucía Ferrer, Diego Almeida; sleep rule Bartek Zieliński)
 - Max: "make the current level of dimness the default, and a even dimmer level during night time hours; make the small wins animations more dynamic; have an upper bound sleep threshold (yellow if more than 9 hours)", then: "get rid of the patch to porch joke panel. The jokes are not that funny and the monthly feature should be contained to one slide as a general rule."
 - Brightness: asked at 00:37, inside the night window, so "the current level" is the night level, 3. `[device] brightness = 3` (was 100), `night_brightness = 1` (was 3; the lowest level that is not 0). Unphotographed: whether 1 is visibly dimmer than 3 on this panel, and whether 3 reads in daylight; both are Max's eye to confirm.
