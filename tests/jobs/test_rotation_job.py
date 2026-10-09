@@ -709,7 +709,7 @@ def test_interval_jobs_run_once_after_a_sleep_instead_of_logging_a_miss(db, jobs
 
 def test_the_panel_is_dimmed_from_ten_at_night_until_half_past_five(db, jobs_settings):
     dim, day = jobs_settings.device.night_brightness, jobs_settings.device.brightness
-    assert (day, dim) == (25, 1), "a quarter-bright day level; the night is far dimmer"
+    assert (day, dim) == (50, 1), "a half-bright day level; the night is far dimmer"
     night = from_utc_iso("2026-10-05T02:00:00Z")  # 22:00 New York
     cases = {
         "2026-10-05T01:59:00Z": day,  # 21:59
@@ -747,7 +747,7 @@ def test_a_brightness_command_that_fails_is_sent_again_next_tick(db, jobs_settin
         rotation.tick()
     clock.now = rotation.due()
     rotation.tick()
-    assert adapter.levels == [25, 25] and len(adapter.sent) == 1
+    assert adapter.levels == [50, 50] and len(adapter.sent) == 1
 
 
 def test_every_send_is_recorded_with_its_page_time_and_hold(db, jobs_settings):
