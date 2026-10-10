@@ -415,12 +415,41 @@ def _header(frame: Frame, title: str, right: str, stale: str | None = None) -> N
 # the weather page
 
 
+NARROW_ONE = (".#", "##", ".#", ".#", ".#")
+
+
+def _pieces_width(pieces: list[tuple[str, int]]) -> int:
+    return sum(width for _, width in pieces) + len(pieces) - 1
+
+
+def _narrowed(text: str) -> list[tuple[str, int]]:
+    """Every "1" as the two-pixel NARROW_ONE and a leading minus as two pixels."""
+    pieces: list[tuple[str, int]] = []
+    run = ""
+    for index, char in enumerate(text):
+        if char == "1" or (char == "-" and index == 0):
+            if run:
+                pieces.append((run, text_width(run)))
+                run = ""
+            pieces.append((char, 2))
+        else:
+            run += char
+    if run:
+        pieces.append((run, text_width(run)))
+    return pieces
+
+
 def _compact(text: str) -> tuple[list[tuple[str, int]], int] | None:
-    """A step's label as (piece, width) runs no wider than a step: as drawn when it fits, else
-    with a leading "1" as a one-pixel stroke and a minus as two pixels; None if still too wide."""
+    """A step's label as (piece, width) runs no wider than a step: as drawn when it fits; else
+    with every "1" two pixels wide, so "11A" keeps two ones that match (Max, 2026-10-09: a
+    stroke beside a full 1 read as "I1"); else with a leading "1" as a one-pixel stroke
+    ("12A", "100"); a minus is two pixels in both. None if still too wide."""
     if text_width(text) <= STEP_INNER:
         return [(text, text_width(text))], text_width(text)
-    pieces: list[tuple[str, int]] = []
+    pieces = _narrowed(text)
+    if _pieces_width(pieces) <= STEP_INNER:
+        return pieces, _pieces_width(pieces)
+    pieces = []
     rest = text
     if rest.startswith("-"):
         pieces.append(("-", 2))
@@ -430,7 +459,7 @@ def _compact(text: str) -> tuple[list[tuple[str, int]], int] | None:
         rest = rest[1:]
     if rest:
         pieces.append((rest, text_width(rest)))
-    width = sum(w for _, w in pieces) + len(pieces) - 1
+    width = _pieces_width(pieces)
     return (pieces, width) if width <= STEP_INNER else None
 
 
@@ -446,6 +475,8 @@ def _draw_compact(frame: Frame, x0: int, y: int, text: str, color: Color) -> boo
             fill_rect(frame, x, y + 2, x + 1, y + 2, color)
         elif piece == "1" and piece_width == 1:
             fill_rect(frame, x, y, x, y + SMALL.height - 1, color)
+        elif piece == "1" and piece_width == 2:
+            _draw_mark(frame, x, y, NARROW_ONE, color)
         else:
             draw_text(frame, x, y, piece, color, SMALL)
         x += piece_width + 1

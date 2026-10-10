@@ -51,8 +51,11 @@ in the current and previous week that have heart-rate data, no scored activity a
 and no override, and asks the model pinned in `[judge] model` to rule as a fitness coach.
 What it sees (`app/metrics/judge_prompt.py`): the day's whole-day aggregates and, when the
 Health Auto Export automation sends `heart_rate` aggregated by minutes, the day's *bouts*:
-contiguous minutes at or above zone one (gaps up to 3 min joined), each as duration,
-average, peak, zone minutes and Edwards load. Never a timestamp, never the minute series.
+contiguous minutes at or above zone one (dips of up to 3 min joined), each as duration,
+minutes actually read, average, peak, zone minutes and Edwards load. Outside a recorded
+workout the Watch reads the heart only every 4 to 5 minutes, so readings up to 10 minutes
+apart are joined and a minute with no reading takes the lower zone of its two neighbours
+(Max, 2026-10-09; a longer hole splits the bout). Never a timestamp, never the minute series.
 With daily aggregates only (`hr_resolution: daily`) the coach credits only an obvious
 sustained effort; set the automation's heart-rate aggregation to **minutes** for the bouts.
 

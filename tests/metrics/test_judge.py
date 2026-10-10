@@ -300,6 +300,7 @@ def test_bouts_describe_a_22_minute_effort_and_a_2_minute_spike_without_timestam
     assert inputs["bouts"] == [
         {
             "duration_min": 22,
+            "observed_min": 22,
             "avg_hr": 125,
             "peak_hr": 125,
             "z1": 0,
@@ -311,6 +312,7 @@ def test_bouts_describe_a_22_minute_effort_and_a_2_minute_spike_without_timestam
         },
         {
             "duration_min": 2,
+            "observed_min": 2,
             "avg_hr": 165,
             "peak_hr": 165,
             "z1": 0,
@@ -343,6 +345,73 @@ def test_gaps_of_three_minutes_join_a_bout_and_four_split_it(
     )
     bouts = judge.day_bouts(db, DAY, settings)
     assert [b["duration_min"] for b in bouts] == [13, 5, 5]
+
+
+def seed_sparse(db: sqlite3.Connection, start: datetime, samples: list[tuple[int, float]]) -> None:
+    from datetime import timedelta
+
+    for offset, bpm in samples:
+        seed_minutes(db, start + timedelta(minutes=offset), [bpm])
+
+
+def test_golden_sparse_watch_samples_are_one_bout_filled_at_the_lower_zone(
+    db: sqlite3.Connection, settings: Settings
+) -> None:
+    """An effort the Watch did not record, sampled every few minutes (the 2026-10-09 shape).
+    Samples at minute 0 (140, Z3), 6 (145, Z3), 7 (134, Z3), 8 (125, Z2), 16 (120, Z2),
+    22 (100, Z1), 24 (119, Z2), with quiet rows 5 minutes either side. Unsampled minutes take
+    the lower neighbouring zone: 1-5 Z3; 9-15 Z2; 17-21 Z1; 23 Z1. So Z3 = 3 + 5 = 8,
+    Z2 = 3 + 7 = 10, Z1 = 1 + 5 + 1 = 7, 25 minutes, load 8*3 + 10*2 + 7 = 51, and the
+    averages are over the 7 sampled minutes: 883 / 7 = 126."""
+    seed(db)
+    effort = [(0, 140.0), (6, 145.0), (7, 134.0), (8, 125.0), (16, 120.0), (22, 100.0)]
+    seed_sparse(
+        db,
+        datetime(2026, 10, 6, 15, 0, tzinfo=UTC),
+        [(-5, 70.0), *effort, (24, 119.0), (29, 70.0)],
+    )
+    assert judge.day_bouts(db, DAY, settings) == [
+        {
+            "duration_min": 25,
+            "observed_min": 7,
+            "avg_hr": 126,
+            "peak_hr": 145,
+            "z1": 7,
+            "z2": 10,
+            "z3": 8,
+            "z4": 0,
+            "z5": 0,
+            "load": 51,
+        }
+    ]
+
+
+def test_samples_ten_minutes_apart_join_and_eleven_split(
+    db: sqlite3.Connection, settings: Settings
+) -> None:
+    seed(db)
+    seed_sparse(db, datetime(2026, 10, 6, 11, 0, tzinfo=UTC), [(0, 120.0), (10, 120.0)])
+    seed_sparse(db, datetime(2026, 10, 6, 15, 0, tzinfo=UTC), [(0, 120.0), (11, 120.0)])
+    bouts = judge.day_bouts(db, DAY, settings)
+    assert [(b["duration_min"], b["observed_min"], b["z2"]) for b in bouts] == [
+        (11, 2, 11),
+        (1, 1, 1),
+        (1, 1, 1),
+    ]
+    assert str(judge.BOUT_JOIN_MIN) in SYSTEM_PROMPT and judge.grounded(
+        f"readings {judge.BOUT_JOIN_MIN} minutes apart", {"bouts": []}
+    )
+
+
+def test_a_sparse_spike_with_a_quiet_sample_after_it_stays_a_spike(
+    db: sqlite3.Connection, settings: Settings
+) -> None:
+    """One sample at 165 between quiet samples 5 minutes either side: the unsampled minutes
+    take the quiet zone, so the sprint for the bus is one minute, not ten."""
+    seed(db)
+    seed_sparse(db, datetime(2026, 10, 6, 11, 0, tzinfo=UTC), [(0, 70.0), (5, 165.0), (10, 70.0)])
+    bouts = judge.day_bouts(db, DAY, settings)
+    assert [(b["duration_min"], b["z4"], b["load"]) for b in bouts] == [(1, 1, 4)]
 
 
 def test_a_later_no_never_revokes_a_yes(db: sqlite3.Connection, settings: Settings) -> None:
@@ -378,6 +447,7 @@ def test_golden_bout_load_by_hand_and_the_zone_five_floor(
     assert judge.day_bouts(db, DAY, settings) == [
         {
             "duration_min": 20,
+            "observed_min": 20,
             "avg_hr": 149,
             "peak_hr": 160,
             "z1": 0,
@@ -389,6 +459,7 @@ def test_golden_bout_load_by_hand_and_the_zone_five_floor(
         },
         {
             "duration_min": 2,
+            "observed_min": 2,
             "avg_hr": 170,
             "peak_hr": 170,
             "z1": 0,
@@ -416,6 +487,7 @@ def test_golden_two_halves_two_minutes_apart_are_one_bout(
     assert judge.day_bouts(db, DAY, settings) == [
         {
             "duration_min": 22,
+            "observed_min": 20,
             "avg_hr": 150,
             "peak_hr": 150,
             "z1": 0,
@@ -666,7 +738,8 @@ def test_judge_calls_are_priced_at_the_judge_model(
 
 
 def test_prompt_states_the_ten_minute_floor_and_the_gate_accepts_it() -> None:
-    assert "shorter than 10 minutes at or above zone two is not a workout" in SYSTEM_PROMPT
+    assert "with fewer than 10 minutes at or above zone two (zones two to five" in SYSTEM_PROMPT
+    assert "the lower of their two zones" in SYSTEM_PROMPT
     assert "10" in PROMPT_NUMBERS
     assert judge.grounded("a 10 minute bout is under the floor", {"bouts": []})
 

@@ -17,6 +17,7 @@ HR_MAX = 189
 LOAD_BAR = 60
 BAR_MINUTES = 30
 MIN_BOUT_MINUTES = 10
+BOUT_JOIN_MIN = 10
 ZONE_BOUNDS = ((95, 112), (113, 131), (132, 150), (151, 169), (170, None))
 ZONE_FLOORS = tuple(low for low, _ in ZONE_BOUNDS)
 
@@ -27,6 +28,7 @@ PROMPT_NUMBERS = frozenset(
         LOAD_BAR,
         BAR_MINUTES,
         MIN_BOUT_MINUTES,
+        BOUT_JOIN_MIN,
         *(b for pair in ZONE_BOUNDS for b in pair if b),
     )
 )
@@ -42,11 +44,16 @@ SYSTEM_PROMPT = (
     "A sustained effort counts: a 20-minute HIIT session on a bike with real zone three to "
     "five minutes is a workout even under the bar. A brief spike does not: a two-minute "
     "sprint for a bus or a stressful meeting is not a workout, however high the peak; a bout "
-    f"shorter than {MIN_BOUT_MINUTES} minutes at or above zone two is not a workout, however "
-    "intense. "
+    f"with fewer than {MIN_BOUT_MINUTES} minutes at or above zone two (zones two to five "
+    "summed) is not a workout, however intense. "
     "When hr_resolution is 'minutes' you get the day's bouts (contiguous minutes at or above "
-    "zone one, ordered by load) with duration, average and peak HR, zone minutes and load; "
-    "judge the longest sustained bout. When hr_resolution is 'daily' you get whole-day figures "
+    "zone one, ordered by load) with duration, average and peak HR, zone minutes and load. "
+    "Outside a recorded workout the watch reads the heart only every few minutes, so a bout "
+    f"joins readings up to {BOUT_JOIN_MIN} minutes apart: a minute with no reading between "
+    "two readings counts in the lower of their two zones, and observed_min is how many of "
+    "the bout's minutes had a reading. A bout whose readings are sparse but all elevated is "
+    "a sustained effort, not a spike. Judge the bout with the most minutes at or above zone "
+    "two. When hr_resolution is 'daily' you get whole-day figures "
     "only: answer no, say the resolution is too low to tell a bout from a spike, and credit "
     "waits for minute data or a recorded workout. "
     "Reply with the JSON object only. The reason is one plain clause of at "

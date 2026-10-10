@@ -39,7 +39,13 @@ from typing import Any
 import anthropic
 
 from app.config import Settings
-from app.metrics.judge_prompt import INPUT_KEYS, PROMPT_NUMBERS, REASON_MAX, request_body
+from app.metrics.judge_prompt import (
+    BOUT_JOIN_MIN,
+    INPUT_KEYS,
+    PROMPT_NUMBERS,
+    REASON_MAX,
+    request_body,
+)
 from app.metrics.zones import zone_floors, zone_of
 from app.summary import spend
 from app.timeutil import from_utc_iso, local_day, now_utc, to_utc_iso
@@ -116,15 +122,54 @@ def minutes_cover_the_day(conn: sqlite3.Connection, day_local: str, daily_max: f
 
 
 BOUT_GAP_MIN = 3
-BOUT_KEYS = ("duration_min", "avg_hr", "peak_hr", "z1", "z2", "z3", "z4", "z5", "load")
+BOUT_KEYS = (
+    "duration_min",
+    "observed_min",
+    "avg_hr",
+    "peak_hr",
+    "z1",
+    "z2",
+    "z3",
+    "z4",
+    "z5",
+    "load",
+)
+
+
+def _minute_zones(
+    rows: list[sqlite3.Row], floors: list[float]
+) -> list[tuple[datetime, int, float | None] | None]:
+    """The day minute by minute as (minute, zone, bpm). Outside a recorded workout the Watch
+    samples every few minutes (median gap 4 to 5, 95th percentile 9, measured 2026-10-09), so
+    an unobserved minute between two rows no more than BOUT_JOIN_MIN apart takes the lower
+    of their two zones, with no bpm; a longer hole is unknown and stands as None."""
+    out: list[tuple[datetime, int, float | None] | None] = []
+    before: tuple[datetime, int] | None = None
+    for row in rows:
+        moment, bpm = from_utc_iso(row["minute_utc"]), float(row["hr_avg"])
+        zone = zone_of(bpm, floors)
+        if before is not None:
+            apart = int((moment - before[0]).total_seconds() // 60)
+            if apart > BOUT_JOIN_MIN:
+                out.append(None)
+            else:
+                out.extend(
+                    (before[0] + timedelta(minutes=step), min(before[1], zone), None)
+                    for step in range(1, apart)
+                )
+        out.append((moment, zone, bpm))
+        before = (moment, zone)
+    return out
 
 
 def day_bouts(
     conn: sqlite3.Connection, day_local: str, settings: Settings
 ) -> list[dict[str, Any]] | None:
-    """Contiguous runs of minutes at or above the zone-one floor (gaps of up to
-    BOUT_GAP_MIN minutes tolerated), each described by duration and intensity only, ordered
-    by load. None when the day has no minute rows."""
+    """Contiguous runs of minutes at or above the zone-one floor (dips of up to
+    BOUT_GAP_MIN minutes tolerated, sparse samples filled as in `_minute_zones`), each
+    described by duration and intensity only, ordered by load. `observed_min` is how many of
+    a bout's minutes at or above zone one were sampled; the averages are over those. None
+    when the day has no minute rows."""
     rows = conn.execute(
         "SELECT minute_utc, hr_avg FROM hr_minutes WHERE day_local = ? AND hr_avg IS NOT NULL "
         "ORDER BY minute_utc",
@@ -133,25 +178,31 @@ def day_bouts(
     if not rows:
         return None
     floors = zone_floors(settings.hr_max, settings.zones_pct)
-    runs: list[list[tuple[datetime, float]]] = []
-    for row in rows:
-        moment, bpm = from_utc_iso(row["minute_utc"]), float(row["hr_avg"])
-        if zone_of(bpm, floors) == 0:
+    runs: list[list[tuple[datetime, int, float | None]]] = []
+    open_run = False
+    for minute in _minute_zones(rows, floors):
+        if minute is None:
+            open_run = False
             continue
-        if runs and (moment - runs[-1][-1][0]) <= timedelta(minutes=BOUT_GAP_MIN + 1):
-            runs[-1].append((moment, bpm))
+        if minute[1] == 0:
+            continue
+        if open_run and (minute[0] - runs[-1][-1][0]) <= timedelta(minutes=BOUT_GAP_MIN + 1):
+            runs[-1].append(minute)
         else:
-            runs.append([(moment, bpm)])
+            runs.append([minute])
+            open_run = True
     bouts = []
     for run in runs:
         zones = [0] * 6
-        for _, bpm in run:
-            zones[zone_of(bpm, floors)] += 1
+        for _, zone, _ in run:
+            zones[zone] += 1
+        seen = [bpm for _, _, bpm in run if bpm is not None]
         bouts.append(
             {
                 "duration_min": int((run[-1][0] - run[0][0]).total_seconds() // 60) + 1,
-                "avg_hr": round(sum(b for _, b in run) / len(run)),
-                "peak_hr": round(max(b for _, b in run)),
+                "observed_min": len(seen),
+                "avg_hr": round(sum(seen) / len(seen)),
+                "peak_hr": round(max(seen)),
                 **{f"z{z}": zones[z] for z in range(1, 6)},
                 "load": sum(z * zones[z] for z in range(1, 6)),
             }

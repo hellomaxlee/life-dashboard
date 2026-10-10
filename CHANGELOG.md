@@ -3,6 +3,16 @@
 Running log, newest first. The Lead reads this to find root causes and prioritize.
 Entry format: `## YYYY-MM-DD · <Title> (<Author>)` followed by terse bullets. Name the fixture combo on render/summary cycles.
 
+## 2026-10-09 · Sparse Watch readings make one bout; "11A" is two matching ones (Ingrid Halvorsen; bout rule Bartek Zieliński; display Lucía Ferrer)
+- Max: "The weather by hour shows as I1 AM and I1 PM, also I definitely did a worthy workout today. Recalibrate."
+- Workout, root cause: with no workout recorded the Watch reads the heart every 4 to 5 minutes (median gap per day 4 to 5, 95th percentile 8 to 9 over 2026-09-23..10-01), but `day_bouts` only joined readings within 3 minutes, so the day's 31-minute effort reached the coach as its one dense 7-minute stretch, load 19: "no". The instrument was wrong, not the day.
+- Recalibrated (`app/metrics/judge.py`, `judge_prompt.py`): readings up to `BOUT_JOIN_MIN` = 10 minutes apart are joined; a minute with no reading takes the lower zone of its two neighbours, so one high reading between quiet ones is still one minute; a longer hole splits the bout; each bout carries `observed_min`. The prompt says so, restates the floor as fewer than 10 minutes at or above zone two (summed), and judges the bout with the most such minutes. Dense minute data scores exactly as before (the three goldens changed only by the new key). Assumption in `notes.txt § Goal model`.
+- Live: 2026-10-09 re-read as one bout, 31 min, 20 zone two, 11 zone three, load 73; the coach: yes, 0.95. Week of 10-05 is 3 of 3. The six other days whose bouts changed (09-28, 09-30, 10-01, 10-07, 10-08 "no" again; 09-29's earlier yes kept) show the wider join credits no quiet day.
+- Display: `hour_label` "11A"/"11P" is 11 px in a 9 px step, and the squeeze drew the first 1 as a one-pixel stroke beside a full 1. Now every "1" in a squeezed label is the same two-pixel flagged glyph when that fits ("11A", "101", "-12"); the one-pixel stroke remains only where it does not ("10A", "12A", "100").
+- Gate: ruff clean; full suite 1609 passed (4 new tests). Mutants red: join back to 3 (3 failed), fill at the higher neighbour (2 failed), narrow ones off (2 failed); run with `PYTHONDONTWRITEBYTECODE=1`, tests re-run on the restored tree, `__pycache__` cleared, service restarted.
+- Fixture combo for the eye test: `rest / all sources / broken last week / peak` (new cell, scratch fixture, city steps 11P 2A 5A 8A 11A 2P) read at 1x under gamma: both labels read "11". One snapshot regenerated after review, `train / all sources / alive / peak` city, its diff confined to the "11P" ones (box 22,57 to 27,62).
+- Spend: $0.7629 to $0.7728 of the $3 cap (7 judge calls recorded). One more call, about $0.002, was paid but not recorded: a hand `tools.metrics --recompute` ran into the restarted service's startup writes ("database is locked") and died in `spend.record`; the rerun was clean. Not fixed here.
+
 ## 2026-10-09 · Day brightness 50 (Lucía Ferrer)
 - Max, with the day level at 25: "let's do brightness 50 when awake". `[device] brightness = 50`; night stays 1 (22:00 to 05:30).
 - Gate: ruff clean; full suite 1605 passed. Mutant red: day level back to 25 (2 failed in `tests/jobs`). No render change, so no fixture cycle. Service restarted.

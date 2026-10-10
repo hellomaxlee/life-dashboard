@@ -269,10 +269,29 @@ def test_late_hours_and_three_digit_labels_keep_their_columns(monkeypatch):
     render_city(view_of(status(weather=weather(hours=late))), NOW)
     recorded = pages[0]
     row = sorted((r[1], r[0]) for r in recorded if r[2] == STEP_TEMP_Y)
-    assert [text for _, text in row] == ["01", "00", "2"], "-25 cannot fit and is left out"
+    assert [text for _, text in row] == ["0", "00", "2"], "-25 cannot fit and is left out"
     for x, text in row + sorted((r[1], r[0]) for r in recorded if r[2] == STEP_LABEL_Y):
         column = LEFT + (x - LEFT) // 10 * 10
         assert x + text_width(text) <= column + 9, text
+
+
+def test_eleven_oclock_is_two_matching_ones_never_a_stroke_beside_a_one():
+    """Max, 2026-10-09: "11A" drawn as a one-pixel stroke and a full 1 read as "I1"."""
+    rows = tuple((h, 60.0, 0, 3) for h in (8, 11, 14, 17, 20, 23))
+    drawn = strip_steps(weather(hours=steps(rows)))
+    assert [s.label for s in drawn] == ["8A", "11A", "2P", "5P", "8P", "11P"]
+    page = render_city(view_of(status(weather=weather(hours=steps(rows)))), NOW).frames[0]
+    one = [(False, True), (True, True), (False, True), (False, True), (False, True)]
+    for step in (drawn[1], drawn[5]):
+        lit = [
+            [page.getpixel((step.x + dx, STEP_LABEL_Y + dy)) != BLACK for dx in range(9)]
+            for dy in range(5)
+        ]
+        first = [tuple(row[0:2]) for row in lit]
+        second = [tuple(row[3:5]) for row in lit]
+        assert first == second == one, f"{step.label}: both ones are the same glyph"
+        assert not any(row[2] or row[5] for row in lit), "a dark column after each one"
+        assert any(row[8] for row in lit), "the letter ends on the column's last pixel"
 
 
 def test_each_gauge_is_filled_from_the_bottom_by_the_floored_percent():
