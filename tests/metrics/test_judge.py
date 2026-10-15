@@ -602,7 +602,6 @@ def test_the_prompt_and_the_gate_share_the_stated_constants(settings: Settings) 
         "30",
         "10",
         "4",
-        "20",
         "95",
         "112",
         "113",
@@ -798,9 +797,9 @@ def test_sick_day_baselines_reach_the_coach_and_only_the_flag_rehashes(
     """Max, 2026-10-13: a flu day (resting 64 against a baseline near 60) was credited for an
     evening bout of 19 zone-two minutes, and in a live dry run the coach at low effort still
     said yes with the baselines in front of it. So the flag is computed here: both baselines
-    by the daily row's own rule, likely_ill from them, and a flagged day with no bout of ten
-    hard minutes is declined by rule, no call. Baseline drift alone never re-judges a day;
-    the flag flipping does."""
+    by the daily row's own rule, likely_ill from the resting rate, and a flagged day whose
+    bouts clear neither the bar without zone one nor ten hard minutes is declined by rule,
+    no call. Baseline drift alone never re-judges a day; the flag flipping does."""
     settings = replace(settings, judge_model="fake")
     seed(db, hr_max=137)
     for metric, value in (("resting_heart_rate", 64), ("heart_rate_variability", 38.9)):
@@ -838,7 +837,9 @@ def test_sick_day_baselines_reach_the_coach_and_only_the_flag_rehashes(
     assert inputs["heart_rate_variability_baseline"] == 45.0
     assert inputs["likely_ill"] is True
     assert judge.inputs_hash(inputs) != bare
-    assert inputs["bouts"][0]["z2"] == 19 and inputs["bouts"][0]["z3"] == 4
+    best = inputs["bouts"][0]
+    assert best["z2"] == 19 and best["z3"] == 4 and best["load"] == 50
+    assert judge.effort_load(best) == 50
 
     client = FakeClient({"workout": True, "confidence": 0.9, "reason": "10 hard minutes"})
     run = judge.judge_window(db, settings, client, set(), NOW)
@@ -846,8 +847,8 @@ def test_sick_day_baselines_reach_the_coach_and_only_the_flag_rehashes(
     row = judge.stored(db, DAY)
     assert row.verdict == "no" and row.model == "rule"
     assert row.reason == (
-        "Resting heart rate 64 against a baseline of 59.4 reads as a sick day; 4 minutes at "
-        "or above zone three, under the 10 a sick day needs."
+        "Resting heart rate 64 against a baseline of 59.4 reads as a sick day, and no bout "
+        "clears the 60 bar without zone one."
     )
     assert len(row.reason) <= REASON_MAX and judge.grounded(row.reason, inputs)
     recompute(db, settings)
@@ -866,15 +867,18 @@ def test_sick_day_baselines_reach_the_coach_and_only_the_flag_rehashes(
     assert "\nlikely_ill: True\nsteps: 9000\n" in text
     system = client.messages.last["system"]
     assert "at least 4 above its baseline" in system
-    assert "at least 20 percent below its baseline" in system
+    assert "a low heart rate variability alone flags nothing" in system
+    assert "zone two to five minutes alone carry the 60 bar" in system
     assert "at least 10 minutes at or above zone three" in system
-    assert "illness" in system and "declined before it reaches you" in system
+    assert "illness" in system and "zone one minutes count for nothing" in system
     assert judge.stored(db, DAY).credited
 
 
-def test_hrv_alone_flags_a_sick_day_and_a_kept_yes_survives_the_flag(
+def test_an_hrv_dip_alone_flags_nothing_and_a_kept_yes_survives_the_flag(
     db: sqlite3.Connection, settings: Settings
 ) -> None:
+    """Max's calibration round, 2026-10-14, scenario 5: a 25 percent HRV drop on a normal
+    resting rate still counts. A yes already stored survives the day turning likely-ill."""
     settings = replace(settings, judge_model="fake")
     seed(db)
     db.execute(
@@ -883,20 +887,70 @@ def test_hrv_alone_flags_a_sick_day_and_a_kept_yes_survives_the_flag(
         (DAY,),
     )
     db.commit()
+    seed_prior_days(db, 7, 60, 42.7)
+    inputs = judge.day_inputs(db, DAY, settings)
+    assert inputs["heart_rate_variability_baseline"] == 42.7
+    assert inputs["likely_ill"] is False
     client = FakeClient(YES)
     judge.judge_window(db, settings, client, set(), NOW)
     assert client.messages.calls == 1 and judge.stored(db, DAY).credited
-    seed_prior_days(db, 7, 60, 42.7)
+    seed_prior_days(db, 7, 55, 42.7)
     inputs = judge.day_inputs(db, DAY, settings)
     assert inputs["likely_ill"] is True
     reason = judge.sick_day_reason(inputs)
     assert reason == (
-        "Heart rate variability 20.7 against a baseline of 42.7 reads as a sick day; no "
-        "minutes at or above zone three, under the 10 a sick day needs."
+        "Resting heart rate 60 against a baseline of 55 reads as a sick day, and no bout "
+        "clears the 60 bar without zone one."
     )
     assert judge.grounded(reason, inputs)
     run = judge.judge_window(db, settings, client, set(), NOW)
     assert client.messages.calls == 1 and run.kept == 1
     assert judge.stored(db, DAY).credited
-    seed_prior_days(db, 7, 60, 25.8)
-    assert judge.day_inputs(db, DAY, settings)["likely_ill"] is False
+
+
+def bout(**zones: int) -> dict:
+    z = {f"z{n}": zones.get(f"z{n}", 0) for n in range(1, 6)}
+    minutes = sum(z.values())
+    return {
+        "duration_min": minutes,
+        "observed_min": minutes,
+        "avg_hr": 0,
+        "peak_hr": 0,
+        **z,
+        "load": sum(n * z[f"z{n}"] for n in range(1, 6)),
+    }
+
+
+# Max's calibration round, 2026-10-14 (baseline resting 60, HRV 43). "route" is what this
+# module decides: "rule-no" never reaches the coach; "coach" does, and "max" is the verdict
+# Max gave, which the coach is expected to return.
+SCENARIOS = [
+    ("1 easy 35-min run, normal day", 60, 44, [bout(z2=35)], "coach", True),
+    ("2 same run, resting 63", 63, 40, [bout(z2=35)], "coach", True),
+    ("3 same run, resting 65", 65, 42, [bout(z2=35)], "coach", True),
+    ("4 brisk walk on a flu day, resting 66", 66, 38, [bout(z1=8, z2=22)], "rule-no", False),
+    ("5 HRV 32, resting 60, 40-min zone-two ride", 60, 32, [bout(z2=40)], "coach", True),
+    ("6 trained through a sick day, resting 67", 67, 40, [bout(z2=8, z3=12, z1=5)], "coach", True),
+    ("7 20-min bike intervals", 60, 44, [bout(z1=6, z4=10, z5=4)], "coach", True),
+    ("8 three 12-min walks", 60, 44, [bout(z1=2, z2=10)] * 3, "coach", False),
+    ("9 90-min slow hike", 60, 44, [bout(z1=75, z2=15)], "coach", True),
+    ("10 strength, spikes to zone three", 60, 44, [bout(z1=33, z3=12)], "coach", True),
+    ("Monday 2026-10-12, resting 64", 64, 38.9, [bout(z1=23, z2=19, z3=4)], "rule-no", False),
+]
+
+
+@pytest.mark.parametrize(("name", "resting", "hrv", "bouts", "route", "max_said"), SCENARIOS)
+def test_calibration_scenarios_route_as_max_judged(
+    name: str, resting: float, hrv: float, bouts: list[dict], route: str, max_said: bool
+) -> None:
+    values = {
+        "resting_heart_rate": float(resting),
+        "resting_heart_rate_baseline": 60.0,
+        "heart_rate_variability": float(hrv),
+        "heart_rate_variability_baseline": 43.0,
+    }
+    ill = judge.likely_ill(values)
+    declined = ill and not judge.clears_sick_day(bouts)
+    assert ("rule-no" if declined else "coach") == route, name
+    if route == "rule-no":
+        assert max_said is False, name

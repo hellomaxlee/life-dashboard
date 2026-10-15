@@ -41,10 +41,10 @@ import anthropic
 from app.config import Settings
 from app.metrics.judge_prompt import (
     BOUT_JOIN_MIN,
-    ILL_HRV_PCT,
     ILL_RHR_BPM,
     ILL_ZONE3_MIN,
     INPUT_KEYS,
+    LOAD_BAR,
     PROMPT_NUMBERS,
     REASON_MAX,
     request_body,
@@ -118,36 +118,40 @@ def day_inputs(
 
 
 def likely_ill(values: dict[str, Any]) -> bool:
-    """A resting heart rate at least ILL_RHR_BPM over its baseline, or an HRV at least
-    ILL_HRV_PCT percent under its baseline (Max, 2026-10-13: a flu day's evening walk was
-    credited as a workout). False without a baseline."""
+    """A resting heart rate at least ILL_RHR_BPM over its baseline (Max, 2026-10-13: a flu
+    day's evening walk was credited as a workout). An HRV dip alone flags nothing (Max's
+    calibration round, 2026-10-14, scenario 5: a 25 percent HRV drop with a normal resting
+    rate and a 40-minute zone-two ride counts). False without a baseline."""
     resting = values.get("resting_heart_rate")
-    resting_base = values.get("resting_heart_rate_baseline")
-    hrv = values.get("heart_rate_variability")
-    hrv_base = values.get("heart_rate_variability_baseline")
-    high = None not in (resting, resting_base) and resting - resting_base >= ILL_RHR_BPM
-    low = hrv is not None and bool(hrv_base) and hrv <= hrv_base * (1 - ILL_HRV_PCT / 100)
-    return bool(high or low)
+    base = values.get("resting_heart_rate_baseline")
+    return None not in (resting, base) and resting - base >= ILL_RHR_BPM
 
 
 def hard_minutes(bout: dict[str, Any]) -> int:
     return int(bout["z3"] + bout["z4"] + bout["z5"])
 
 
+def effort_load(bout: dict[str, Any]) -> int:
+    """The bout's Edwards load without its zone one minutes."""
+    return int(2 * bout["z2"] + 3 * bout["z3"] + 4 * bout["z4"] + 5 * bout["z5"])
+
+
+def clears_sick_day(bouts: list[dict[str, Any]]) -> bool:
+    """On a likely-ill day zone one counts for nothing: a bout reaches the coach only when
+    its zone two to five minutes alone carry the bar, or it has ILL_ZONE3_MIN hard minutes
+    (Max's calibration round, 2026-10-14: a 35-minute all-zone-two run on resting 65 counts,
+    a 30-minute walk with 22 zone-two minutes on resting 66 does not; Monday's 19 zone two
+    and 4 zone three score 50)."""
+    return any(effort_load(b) >= LOAD_BAR or hard_minutes(b) >= ILL_ZONE3_MIN for b in bouts)
+
+
 def sick_day_reason(inputs: dict[str, Any]) -> str:
     """The rule's own reason, for Max's dashboard; every digit is an input or a prompt
     constant, so it passes the same grounding gate as the coach's."""
     resting, base = inputs["resting_heart_rate"], inputs["resting_heart_rate_baseline"]
-    if base is not None and resting is not None and resting - base >= ILL_RHR_BPM:
-        signal = f"Resting heart rate {resting:g} against a baseline of {base:g}"
-    else:
-        hrv, hrv_base = inputs["heart_rate_variability"], inputs["heart_rate_variability_baseline"]
-        signal = f"Heart rate variability {hrv:g} against a baseline of {hrv_base:g}"
-    hardest = max((hard_minutes(b) for b in inputs["bouts"]), default=0)
-    minutes = f"{hardest} minutes" if hardest else "no minutes"
     return (
-        f"{signal} reads as a sick day; {minutes} at or above zone three, under the "
-        f"{ILL_ZONE3_MIN} a sick day needs."
+        f"Resting heart rate {resting:g} against a baseline of {base:g} reads as a sick day, "
+        f"and no bout clears the {LOAD_BAR} bar without zone one."
     )
 
 
@@ -443,7 +447,7 @@ def judge_day(
     if previous is not None and previous.inputs_hash == digest:
         return "unchanged"
     moment = now or now_utc()
-    if inputs["likely_ill"] and not any(hard_minutes(b) >= ILL_ZONE3_MIN for b in inputs["bouts"]):
+    if inputs["likely_ill"] and not clears_sick_day(inputs["bouts"]):
         if previous is not None and previous.credited:
             store(conn, replace(previous, inputs_hash=digest))
             return "kept"
