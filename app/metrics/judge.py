@@ -41,19 +41,25 @@ import anthropic
 from app.config import Settings
 from app.metrics.judge_prompt import (
     BOUT_JOIN_MIN,
+    ILL_HRV_PCT,
+    ILL_RHR_BPM,
+    ILL_ZONE3_MIN,
     INPUT_KEYS,
     PROMPT_NUMBERS,
     REASON_MAX,
     request_body,
 )
+from app.metrics.wellness import baseline
 from app.metrics.zones import zone_floors, zone_of
 from app.summary import spend
 from app.timeutil import from_utc_iso, local_day, now_utc, to_utc_iso
 
 TABLE = "judged_workouts"
 YES, NO, DENIED, FAILED = "yes", "no", "denied", "failed"
+RULE = "rule"
 MIN_MINUTE_ROWS = 60
 MINUTE_MAX_TOLERANCE = 0.10
+BASELINE_KEYS = ("resting_heart_rate", "heart_rate_variability")
 log = logging.getLogger(__name__)
 _NUMBER = re.compile(r"\d+(?:\.\d+)?")
 _REASON_TAIL = re.compile(r"""[\s{}'"\]\[]+$""")
@@ -90,6 +96,8 @@ def day_inputs(
     ):
         if row["metric"] in INPUT_KEYS:
             values[row["metric"]] = round(float(row["value"]), 1)
+    for metric in BASELINE_KEYS:
+        values[f"{metric}_baseline"] = day_baseline(conn, day_local, metric, settings)
     steps = conn.execute(
         "SELECT steps FROM steps_daily WHERE day_local = ?", (day_local,)
     ).fetchone()
@@ -103,9 +111,64 @@ def day_inputs(
         else None
     )
     values["hr_resolution"] = "minutes" if bouts is not None else "daily"
+    values["likely_ill"] = likely_ill(values)
     out: dict[str, Any] = {key: values.get(key) for key in INPUT_KEYS}
     out["bouts"] = bouts or []
     return out
+
+
+def likely_ill(values: dict[str, Any]) -> bool:
+    """A resting heart rate at least ILL_RHR_BPM over its baseline, or an HRV at least
+    ILL_HRV_PCT percent under its baseline (Max, 2026-10-13: a flu day's evening walk was
+    credited as a workout). False without a baseline."""
+    resting = values.get("resting_heart_rate")
+    resting_base = values.get("resting_heart_rate_baseline")
+    hrv = values.get("heart_rate_variability")
+    hrv_base = values.get("heart_rate_variability_baseline")
+    high = None not in (resting, resting_base) and resting - resting_base >= ILL_RHR_BPM
+    low = hrv is not None and bool(hrv_base) and hrv <= hrv_base * (1 - ILL_HRV_PCT / 100)
+    return bool(high or low)
+
+
+def hard_minutes(bout: dict[str, Any]) -> int:
+    return int(bout["z3"] + bout["z4"] + bout["z5"])
+
+
+def sick_day_reason(inputs: dict[str, Any]) -> str:
+    """The rule's own reason, for Max's dashboard; every digit is an input or a prompt
+    constant, so it passes the same grounding gate as the coach's."""
+    resting, base = inputs["resting_heart_rate"], inputs["resting_heart_rate_baseline"]
+    if base is not None and resting is not None and resting - base >= ILL_RHR_BPM:
+        signal = f"Resting heart rate {resting:g} against a baseline of {base:g}"
+    else:
+        hrv, hrv_base = inputs["heart_rate_variability"], inputs["heart_rate_variability_baseline"]
+        signal = f"Heart rate variability {hrv:g} against a baseline of {hrv_base:g}"
+    hardest = max((hard_minutes(b) for b in inputs["bouts"]), default=0)
+    minutes = f"{hardest} minutes" if hardest else "no minutes"
+    return (
+        f"{signal} reads as a sick day; {minutes} at or above zone three, under the "
+        f"{ILL_ZONE3_MIN} a sick day needs."
+    )
+
+
+def day_baseline(
+    conn: sqlite3.Connection, day_local: str, metric: str, settings: Settings
+) -> float | None:
+    """The metric's wellness baseline for the day, by the same rule and window the daily
+    metrics row uses (app.metrics.wellness.baseline), so a figure the coach cites is one the
+    dashboard shows; None until MIN_BASELINE_VALUES prior days are on record."""
+    day = date.fromisoformat(day_local)
+    window_days = settings.wellness.baseline_days
+    since = (day - timedelta(days=window_days)).isoformat()
+    series = {
+        date.fromisoformat(row["day_local"]): float(row["value"])
+        for row in conn.execute(
+            "SELECT day_local, value FROM wellness_daily WHERE metric = ? "
+            "AND day_local >= ? AND day_local < ?",
+            (metric, since, day_local),
+        )
+    }
+    return baseline(series, day, window_days)
 
 
 def minutes_cover_the_day(conn: sqlite3.Connection, day_local: str, daily_max: float) -> bool:
@@ -210,12 +273,20 @@ def day_bouts(
     return sorted(bouts, key=lambda b: b["load"], reverse=True)
 
 
-HASHED_KEYS = ("heart_rate_max", "heart_rate_avg", "heart_rate_min", "hr_resolution", "bouts")
+HASHED_KEYS = (
+    "heart_rate_max",
+    "heart_rate_avg",
+    "heart_rate_min",
+    "hr_resolution",
+    "bouts",
+    "likely_ill",
+)
 
 
 def inputs_hash(inputs: dict[str, Any]) -> str:
-    """Over the heart-rate fields only (HASHED_KEYS); steps, daylight, HRV, resting HR and
-    VO2 max still go in the payload but a change to them alone never re-judges a day."""
+    """Over the heart-rate fields and the likely_ill flag (HASHED_KEYS); steps, daylight,
+    HRV, resting HR, their baselines and VO2 max still go in the payload but a change to
+    them alone never re-judges a day: only the flag flipping does."""
     hashed = {key: inputs.get(key) for key in HASHED_KEYS}
     return hashlib.sha256(json.dumps(hashed, sort_keys=True).encode()).hexdigest()
 
@@ -371,12 +442,21 @@ def judge_day(
     previous = stored(conn, day_local)
     if previous is not None and previous.inputs_hash == digest:
         return "unchanged"
+    moment = now or now_utc()
+    if inputs["likely_ill"] and not any(hard_minutes(b) >= ILL_ZONE3_MIN for b in inputs["bouts"]):
+        if previous is not None and previous.credited:
+            store(conn, replace(previous, inputs_hash=digest))
+            return "kept"
+        judgement = Judgement(
+            day_local, NO, 1.0, sick_day_reason(inputs), RULE, digest, to_utc_iso(moment)
+        )
+        store(conn, judgement)
+        return judgement
     model = settings.judge_model
     request = request_body(inputs, model)
     cap = spend.cap_check(conn, settings, request, now)
     if not cap.allowed:
         return f"cap: {cap.describe()}"
-    moment = now or now_utc()
     try:
         response = client.messages.create(**request)
     except anthropic.APIError as exc:

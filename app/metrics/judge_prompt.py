@@ -20,6 +20,9 @@ MIN_BOUT_MINUTES = 10
 BOUT_JOIN_MIN = 10
 ZONE_BOUNDS = ((95, 112), (113, 131), (132, 150), (151, 169), (170, None))
 ZONE_FLOORS = tuple(low for low, _ in ZONE_BOUNDS)
+ILL_RHR_BPM = 4
+ILL_HRV_PCT = 20
+ILL_ZONE3_MIN = 10
 
 PROMPT_NUMBERS = frozenset(
     str(n)
@@ -29,6 +32,9 @@ PROMPT_NUMBERS = frozenset(
         BAR_MINUTES,
         MIN_BOUT_MINUTES,
         BOUT_JOIN_MIN,
+        ILL_RHR_BPM,
+        ILL_HRV_PCT,
+        ILL_ZONE3_MIN,
         *(b for pair in ZONE_BOUNDS for b in pair if b),
     )
 )
@@ -53,7 +59,18 @@ SYSTEM_PROMPT = (
     "two readings counts in the lower of their two zones, and observed_min is how many of "
     "the bout's minutes had a reading. A bout whose readings are sparse but all elevated is "
     "a sustained effort, not a spike. Judge the bout with the most minutes at or above zone "
-    "two. When hr_resolution is 'daily' you get whole-day figures "
+    "two. "
+    "resting_heart_rate_baseline and heart_rate_variability_baseline are the means of the "
+    "prior four weeks, None until a week of readings is on record. likely_ill is computed "
+    f"for you: true when the resting heart rate is at least {ILL_RHR_BPM} above its baseline "
+    f"or the heart rate variability at least {ILL_HRV_PCT} percent below its baseline, a day "
+    "of likely illness, fever or poor recovery, when the heart runs high without effort and a "
+    "walk reads as zone two. A likely_ill day with no bout of at least "
+    f"{ILL_ZONE3_MIN} minutes at or above zone three (zones three to five summed) is declined "
+    "before it reaches you; one that does reach you had such a bout, and you judge whether "
+    "those minutes were a real effort. Cite figures as given, never a difference you "
+    "computed. With no baseline, judge as on an "
+    "ordinary day. When hr_resolution is 'daily' you get whole-day figures "
     "only: answer no, say the resolution is too low to tell a bout from a spike, and credit "
     "waits for minute data or a recorded workout. "
     "Reply with the JSON object only. The reason is one plain clause of at "
@@ -83,7 +100,10 @@ INPUT_KEYS = (
     "heart_rate_avg",
     "heart_rate_min",
     "resting_heart_rate",
+    "resting_heart_rate_baseline",
     "heart_rate_variability",
+    "heart_rate_variability_baseline",
+    "likely_ill",
     "steps",
     "time_in_daylight",
     "vo2_max",

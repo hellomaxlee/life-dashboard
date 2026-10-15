@@ -6,7 +6,7 @@ import json
 import re
 import sqlite3
 from dataclasses import dataclass, field, replace
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 
 import anthropic
 import httpx
@@ -601,6 +601,8 @@ def test_the_prompt_and_the_gate_share_the_stated_constants(settings: Settings) 
         "189",
         "30",
         "10",
+        "4",
+        "20",
         "95",
         "112",
         "113",
@@ -776,3 +778,125 @@ def test_prompt_says_no_at_daily_resolution_and_reason_is_for_max() -> None:
     assert "credit the day only when a sustained effort is obvious" not in SYSTEM_PROMPT
     assert REASON_AUDIENCE_RULE in SYSTEM_PROMPT
     assert "read by Max on his dashboard" in SYSTEM_PROMPT
+
+
+def seed_prior_days(db: sqlite3.Connection, days: int, resting: float, hrv: float) -> None:
+    for back in range(1, days + 1):
+        day = (date.fromisoformat(DAY) - timedelta(days=back)).isoformat()
+        for metric, value in (("resting_heart_rate", resting), ("heart_rate_variability", hrv)):
+            db.execute(
+                "INSERT OR REPLACE INTO wellness_daily (day_local, metric, value, units, source) "
+                "VALUES (?, ?, ?, 'x', 'test')",
+                (day, metric, value),
+            )
+    db.commit()
+
+
+def test_sick_day_baselines_reach_the_coach_and_only_the_flag_rehashes(
+    db: sqlite3.Connection, settings: Settings
+) -> None:
+    """Max, 2026-10-13: a flu day (resting 64 against a baseline near 60) was credited for an
+    evening bout of 19 zone-two minutes, and in a live dry run the coach at low effort still
+    said yes with the baselines in front of it. So the flag is computed here: both baselines
+    by the daily row's own rule, likely_ill from them, and a flagged day with no bout of ten
+    hard minutes is declined by rule, no call. Baseline drift alone never re-judges a day;
+    the flag flipping does."""
+    settings = replace(settings, judge_model="fake")
+    seed(db, hr_max=137)
+    for metric, value in (("resting_heart_rate", 64), ("heart_rate_variability", 38.9)):
+        db.execute(
+            "INSERT OR REPLACE INTO wellness_daily (day_local, metric, value, units, source) "
+            "VALUES (?, ?, ?, 'x', 'test')",
+            (DAY, metric, value),
+        )
+    evening = [70.0] * 10 + [125.0] * 19 + [135.0] * 4 + [70.0] * 30
+    seed_minutes(db, datetime(2026, 10, 6, 23, 0, tzinfo=UTC), evening)
+    db.commit()
+    inputs = judge.day_inputs(db, DAY, settings)
+    assert inputs["resting_heart_rate_baseline"] is None
+    assert inputs["heart_rate_variability_baseline"] is None
+    assert inputs["likely_ill"] is False
+    bare = judge.inputs_hash(inputs)
+
+    seed_prior_days(db, 6, 60, 45)
+    assert judge.day_inputs(db, DAY, settings)["resting_heart_rate_baseline"] is None
+    seed_prior_days(db, 7, 61, 45)
+    inputs = judge.day_inputs(db, DAY, settings)
+    assert inputs["resting_heart_rate_baseline"] == 61.0
+    assert inputs["likely_ill"] is False
+    assert judge.inputs_hash(inputs) == bare
+
+    seed_prior_days(db, 7, 60, 45)
+    db.execute(
+        "UPDATE wellness_daily SET value = 59 WHERE metric = 'resting_heart_rate' "
+        "AND day_local < ? AND day_local >= ?",
+        (DAY, (date.fromisoformat(DAY) - timedelta(days=4)).isoformat()),
+    )
+    db.commit()
+    inputs = judge.day_inputs(db, DAY, settings)
+    assert inputs["resting_heart_rate_baseline"] == 59.4
+    assert inputs["heart_rate_variability_baseline"] == 45.0
+    assert inputs["likely_ill"] is True
+    assert judge.inputs_hash(inputs) != bare
+    assert inputs["bouts"][0]["z2"] == 19 and inputs["bouts"][0]["z3"] == 4
+
+    client = FakeClient({"workout": True, "confidence": 0.9, "reason": "10 hard minutes"})
+    run = judge.judge_window(db, settings, client, set(), NOW)
+    assert client.messages.calls == 0 and run.judged == 1 and run.yes == 0
+    row = judge.stored(db, DAY)
+    assert row.verdict == "no" and row.model == "rule"
+    assert row.reason == (
+        "Resting heart rate 64 against a baseline of 59.4 reads as a sick day; 4 minutes at "
+        "or above zone three, under the 10 a sick day needs."
+    )
+    assert len(row.reason) <= REASON_MAX and judge.grounded(row.reason, inputs)
+    recompute(db, settings)
+    assert day_row(db)["quality_workout"] is False
+
+    seed_prior_days(db, 7, 60, 49)
+    assert judge.day_inputs(db, DAY, settings)["likely_ill"] is True
+    assert judge.judge_window(db, settings, client, set(), NOW).skipped == 1
+
+    seed_minutes(db, datetime(2026, 10, 6, 12, 0, tzinfo=UTC), [70.0] * 10 + [140.0] * 10)
+    judge.judge_window(db, settings, client, set(), NOW)
+    assert client.messages.calls == 1
+    text = client.messages.last["messages"][0]["content"]
+    assert "resting_heart_rate: 64.0\nresting_heart_rate_baseline: 60.0\n" in text
+    assert "heart_rate_variability: 38.9\nheart_rate_variability_baseline: 49.0\n" in text
+    assert "\nlikely_ill: True\nsteps: 9000\n" in text
+    system = client.messages.last["system"]
+    assert "at least 4 above its baseline" in system
+    assert "at least 20 percent below its baseline" in system
+    assert "at least 10 minutes at or above zone three" in system
+    assert "illness" in system and "declined before it reaches you" in system
+    assert judge.stored(db, DAY).credited
+
+
+def test_hrv_alone_flags_a_sick_day_and_a_kept_yes_survives_the_flag(
+    db: sqlite3.Connection, settings: Settings
+) -> None:
+    settings = replace(settings, judge_model="fake")
+    seed(db)
+    db.execute(
+        "INSERT OR REPLACE INTO wellness_daily (day_local, metric, value, units, source) "
+        "VALUES (?, 'heart_rate_variability', 20.7, 'ms', 'test')",
+        (DAY,),
+    )
+    db.commit()
+    client = FakeClient(YES)
+    judge.judge_window(db, settings, client, set(), NOW)
+    assert client.messages.calls == 1 and judge.stored(db, DAY).credited
+    seed_prior_days(db, 7, 60, 42.7)
+    inputs = judge.day_inputs(db, DAY, settings)
+    assert inputs["likely_ill"] is True
+    reason = judge.sick_day_reason(inputs)
+    assert reason == (
+        "Heart rate variability 20.7 against a baseline of 42.7 reads as a sick day; no "
+        "minutes at or above zone three, under the 10 a sick day needs."
+    )
+    assert judge.grounded(reason, inputs)
+    run = judge.judge_window(db, settings, client, set(), NOW)
+    assert client.messages.calls == 1 and run.kept == 1
+    assert judge.stored(db, DAY).credited
+    seed_prior_days(db, 7, 60, 25.8)
+    assert judge.day_inputs(db, DAY, settings)["likely_ill"] is False

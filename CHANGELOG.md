@@ -3,6 +3,16 @@
 Running log, newest first. The Lead reads this to find root causes and prioritize.
 Entry format: `## YYYY-MM-DD · <Title> (<Author>)` followed by terse bullets. Name the fixture combo on render/summary cycles.
 
+## 2026-10-14 · A sick day is not a workout: baselines and a likely-ill flag for the coach (Ingrid Halvorsen; rule and hash Bartek Zieliński; prompt Theodora Makris)
+- Max, 2026-10-13: "I did not do a workout on Monday and I also finished a book"; "I have the flu, maybe that elevated my heart rate?"
+- Book: not a bug. Goodreads is polled at 06:30; "The Lie" was marked read at 11:25, after the poll. Pulled by hand, metrics picked it up at the next recompute (books 2, book win on 10-13).
+- Workout, root cause: Monday 10-12 had no activity; the coach credited a 46-minute evening bout (19 zone two, 4 zone three, load 73) with no way to see that resting HR 64 sat 4.2 over its 59.8 baseline and HRV 10 percent under. Max removed the credit on /workouts (denied, 23:02Z).
+- Change (`app/metrics/judge.py`, `judge_prompt.py`): the payload gains `resting_heart_rate_baseline`, `heart_rate_variability_baseline` (the daily row's own `wellness.baseline`) and `likely_ill` (resting HR ≥ 4 over baseline or HRV ≥ 20 percent under; `ILL_RHR_BPM`, `ILL_HRV_PCT`). A likely-ill day whose best bout has under `ILL_ZONE3_MIN` = 10 minutes at or above zone three is declined by rule, no call, with a grounded reason for /workouts; a day that does reach the coach carries the flag. `likely_ill` joins the hash; the baselines do not. The prompt states the rule and asks for figures as given, never a computed difference (the live 10-14 dry run cited "14 above", ungrounded).
+- Why code, not the prompt: a live dry run with the baselines alone still credited Monday at 0.73 ("sustained aerobic effort"); Sonnet at low effort did not do the subtraction.
+- Live dry run of the rule over the window: 10-12, 10-13, 10-14 declined by rule with grounded reasons; 10-09's yes untouched (resting 59 against 60.3, 11 hard minutes); 10-05 flagged on HRV alone (33.4 against 43.6), moot under its override but a hint the HRV margin may be noisy. Calibration open: Max is judging sample scenarios; the three constants are the dials. Documented in `notes.txt § Goal model`.
+- Test cell: a judge fixture, `rest / all sources / alive / base` with a sick-day variant (flagged resting HR, flagged HRV alone); no render or summary cycle this push.
+- Gate: ruff clean; full suite 1611 passed (2 new tests). Mutants red: flag never set (2 failed), rule gate removed (2), baseline in the hash (1), margin loosened to 5 (2), HRV margin to 60 (3); run with `PYTHONDONTWRITEBYTECODE=1`, tests re-run on the restored tree, `__pycache__` cleared, service restarted.
+
 ## 2026-10-09 · Sparse Watch readings make one bout; "11A" is two matching ones (Ingrid Halvorsen; bout rule Bartek Zieliński; display Lucía Ferrer)
 - Max: "The weather by hour shows as I1 AM and I1 PM, also I definitely did a worthy workout today. Recalibrate."
 - Workout, root cause: with no workout recorded the Watch reads the heart every 4 to 5 minutes (median gap per day 4 to 5, 95th percentile 8 to 9 over 2026-09-23..10-01), but `day_bouts` only joined readings within 3 minutes, so the day's 31-minute effort reached the coach as its one dense 7-minute stretch, load 19: "no". The instrument was wrong, not the day.
