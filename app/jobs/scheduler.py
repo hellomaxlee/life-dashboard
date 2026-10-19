@@ -34,6 +34,7 @@ from app.jobs.rotation import (
     DeviceRotation,
     device_adapter,
 )
+from app.jobs.sleepwatch import SleepWatcher
 from app.metrics.job import RECOMPUTE_JOB, ROLLOVER_JOB, run_recompute
 from app.month import store as month_store
 from app.month.generate import ensure_month_feature
@@ -311,6 +312,9 @@ def stop_scheduler(scheduler: BackgroundScheduler) -> bool:
 
     Returns False when a job was still running at the deadline; shutdown then proceeds
     without it rather than waiting forever."""
+    watcher = getattr(scheduler, "sleep_watcher", None)
+    if watcher is not None:
+        watcher.stop()
     waiter = threading.Thread(
         target=lambda: scheduler.shutdown(wait=True), name="scheduler-shutdown", daemon=True
     )
@@ -478,6 +482,16 @@ def build_scheduler(
                 misfire_grace_time=ROTATION_MISFIRE_GRACE_S,
             )
 
+            def woke() -> None:
+                """Start over at Today now, not at the end of a hold set before the sleep."""
+                rotation.wake()
+                try:
+                    scheduler.modify_job(ROTATION_JOB, next_run_time=now_utc())
+                except JobLookupError:
+                    pass
+
+            scheduler.sleep_watcher = SleepWatcher(rotation.park, woke)
+
     return scheduler
 
 
@@ -495,4 +509,10 @@ def clip_publisher(settings: Settings) -> Callable[[Clip], str]:
 def start_scheduler(settings: Settings, open_conn: OpenConn) -> BackgroundScheduler:
     scheduler = build_scheduler(settings, open_conn)
     scheduler.start()
+    watcher = getattr(scheduler, "sleep_watcher", None)
+    if watcher is not None:
+        if watcher.start():
+            log.info("sleep watcher: the panel parks on Today when this host sleeps")
+        else:
+            log.info("sleep watcher: not available here; a late tick restarts at Today")
     return scheduler

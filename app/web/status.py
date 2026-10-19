@@ -131,5 +131,6 @@ def display_sends(request: Request) -> dict[str, object]:
     stats = getattr(scheduler, "job_stats", {})
     return {
         "sends": [asdict(record) for record in rotation.sends] if rotation else [],
+        "resumes": rotation.resumes if rotation else 0,
         "jobs": {name: asdict(record) for name, record in stats.items()},
     }

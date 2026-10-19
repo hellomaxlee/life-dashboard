@@ -147,16 +147,16 @@ def percent_text(used_pct: float) -> str:
     return f"{int(clamped)}%"
 
 
-def draw_usage(frame: Frame, state: UsageState) -> None:
-    """Draw the bar and its two label lines."""
+def draw_usage(frame: Frame, state: UsageState, track: Color = TRACK) -> None:
+    """Draw the bar and its two label lines; `track` is the unfilled bar's tone."""
     pixels = frame.load()
     for y in range(BAR_TOP, BAR_TOP + BAR_HEIGHT):
         for offset in range(BAR_WIDTH):
             x = BAR_LEFT + offset
             if not state.has_data:
-                pixels[x, y] = TRACK if offset % 4 < 2 else (0, 0, 0)
+                pixels[x, y] = track if offset % 4 < 2 else (0, 0, 0)
             else:
-                pixels[x, y] = state.color if offset < state.fill_px else TRACK
+                pixels[x, y] = state.color if offset < state.fill_px else track
 
     after = draw_text(frame, BAR_LEFT, LINE_1_Y, "CLAUDE", LABEL, SMALL)
     if not state.has_data:

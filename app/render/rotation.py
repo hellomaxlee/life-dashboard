@@ -8,7 +8,8 @@ the device as one animation.
 The sequence is day, the day's city, week, month, year, then the wins: Today, City, Week,
 Month, Books, one sparkle per small win the day earned, and the week-complete party once the
 week's target is met, repeated. `sequence_names` is the one definition; the device job,
-/pixoo, /preview and the tools all read it.
+/pixoo, /preview and the tools all read it. PARKED is outside the sequence: Today with a dim
+"zz", what the device job leaves up when its host is about to sleep.
 A still screen holds for the dwell (`device.screen_seconds`). A paged screen (City's weather,
 lines and alert pages, Books' summary, Month's plate, note and calendar, and both
 celebrations, which are steps of celebrate.STEP_MS each) holds until it has paged through
@@ -31,13 +32,15 @@ from app.render.celebrate import WIN_ORDER, earned_wins, party_clip, sparkle_cli
 from app.render.city import render_city
 from app.render.frame import Clip, still
 from app.render.month import render_month
-from app.render.screens import render_books, render_today, render_week
+from app.render.screens import render_books, render_parked, render_today, render_week
+from app.render.theme import theme_for
 from app.render.view import DayView
 
 ROTATION_ORDER = ("today", "city", "week", "month", "books")
 WIN_PREFIX = "win-"
 WIN_NAMES = tuple(f"{WIN_PREFIX}{win}" for win in WIN_ORDER)
 PARTY = "party"
+PARKED = "parked"
 SCREEN_NAMES = (*ROTATION_ORDER, *WIN_NAMES, PARTY)
 ONE_PASS = ("city", "month", "books", PARTY)
 WIN_HOLD_MS = 4000
@@ -56,7 +59,7 @@ def party_for(view: DayView) -> Clip:
     """The party with the week's stored count; for a week not yet done, the target twice,
     which is the sample `celebrate.celebrations_for` shows."""
     count = view.week_dots if week_complete(view) else view.week_target
-    return party_clip(count, view.week_target)
+    return party_clip(count, view.week_target, confetti=theme_for(view).confetti)
 
 
 def render_screen(name: str, view: DayView, now: datetime) -> Clip:
@@ -73,9 +76,12 @@ def render_screen(name: str, view: DayView, now: datetime) -> Clip:
         return render_books(view)
     if name in WIN_NAMES:
         win = name.removeprefix(WIN_PREFIX)
-        return sparkle_clip(win, dot=view.week_dots if win == "workout" else None)
+        dot = view.week_dots if win == "workout" else None
+        return sparkle_clip(win, dot=dot, confetti=theme_for(view).confetti)
     if name == PARTY:
         return party_for(view)
+    if name == PARKED:
+        return render_parked(view, now)
     raise KeyError(name)
 
 

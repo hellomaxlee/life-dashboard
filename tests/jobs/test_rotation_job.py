@@ -23,6 +23,7 @@ from app.jobs.rotation import (
     DeviceRotation,
     device_adapter,
 )
+from app.jobs.sleepwatch import SleepWatcher
 from app.main import create_app
 from app.render.adapters.pixoo import PixooAdapter, PixooError
 from app.render.celebrate import STEP_MS, party_clip, sparkle_clip
@@ -37,7 +38,7 @@ from app.render.rotation import (
 )
 from app.render.view import fixture_feature
 from app.render.view_db import view_from_db
-from app.timeutil import from_utc_iso, local_day
+from app.timeutil import from_utc_iso, local_day, to_utc_iso
 
 HOST = "192.168.1.50"
 NOON = datetime(2026, 10, 2, 16, 0, tzinfo=UTC)
@@ -843,3 +844,365 @@ def test_the_scheduler_wires_a_publisher_only_when_fetch_clips_is_on(db, jobs_se
     for settings, expected in ((on, True), (off, False)):
         scheduler = jobs.build_scheduler(settings, opener(settings), NOON, FakeAdapter())
         assert (scheduler.rotation._clip_url is not None) is expected
+
+
+# The host can stop: a sleeping MacBook (2026-10-19). The panel must never be left on a
+# half-shown page, and the first screen after any pause is a whole, fresh Today.
+
+
+def _to_books_page(rotation, clock, page: int) -> None:
+    for name in ("today", "city", "week", "month"):
+        assert rotation.tick() == name
+        clock.now = rotation.due()
+    for _ in range(page):
+        assert rotation.tick() == "books"
+        clock.now = rotation.due()
+
+
+def test_a_tick_long_after_its_time_starts_over_at_today(db, jobs_settings):
+    set_day(db, "2026-10-02", summary_device_line=LONG_SUMMARY)
+    clock, adapter = Clock(), FakeAdapter()
+    rotation = DeviceRotation(jobs_settings, opener(jobs_settings), adapter, clock)
+    _to_books_page(rotation, clock, 2)
+    clock.advance(17 * 60)
+    assert rotation.tick() == "today", "after a sleep, a whole screen, not Books page 3"
+    assert rotation.resumes == 1
+    clock.now = rotation.due()
+    assert rotation.tick() == "city"
+
+
+def test_a_short_pause_goes_on_with_the_pages(db, jobs_settings):
+    set_day(db, "2026-10-02", summary_device_line=LONG_SUMMARY)
+    clock, adapter = Clock(), FakeAdapter()
+    rotation = DeviceRotation(jobs_settings, opener(jobs_settings), adapter, clock)
+    _to_books_page(rotation, clock, 2)
+    clock.advance(rotation_job.RESUME_GAP_S)
+    assert rotation.tick() == "books"
+    assert rotation.resumes == 0
+
+
+def test_park_puts_up_today_with_the_sleep_mark_and_nothing_follows_it(db, jobs_settings):
+    set_day(db, "2026-10-02", summary_device_line=LONG_SUMMARY)
+    clock, adapter = Clock(), FakeAdapter()
+    rotation = DeviceRotation(jobs_settings, opener(jobs_settings), adapter, clock)
+    _to_books_page(rotation, clock, 2)
+    assert rotation.park() is True
+    parked = render_screen("parked", view_from_db(db, jobs_settings, "2026-10-02"), clock.now)
+    today = render_screen("today", view_from_db(db, jobs_settings, "2026-10-02"), clock.now)
+    assert same(adapter.sent[-1], parked)
+    assert not same(parked, today), "the mark is drawn"
+    assert rotation.sends[-1].name == "parked"
+    sent = len(adapter.sent)
+    for _ in range(3):
+        assert rotation.tick() == "parked"
+        clock.advance(9)
+    assert len(adapter.sent) == sent, "the ticks of the grace send nothing after the park"
+    clock.now = rotation.due()
+    assert rotation.tick() == "today", "the host did not sleep after all: start over"
+    assert rotation.resumes == 1
+
+
+def test_wake_starts_over_at_today_at_once_even_when_no_park_went_out(db, jobs_settings):
+    set_day(db, "2026-10-02", summary_device_line=LONG_SUMMARY)
+    clock, adapter = Clock(), FakeAdapter()
+    rotation = DeviceRotation(jobs_settings, opener(jobs_settings), adapter, clock)
+    _to_books_page(rotation, clock, 2)
+    clock.advance(0.5)
+    rotation.wake()
+    assert rotation.due() <= clock.now
+    assert rotation.tick() == "today"
+    clock.now = rotation.due()
+    assert rotation.tick() == "city"
+
+
+def test_a_park_that_fails_leaves_the_rotation_as_it_was(db, jobs_settings):
+    set_day(db, "2026-10-02", summary_device_line=LONG_SUMMARY)
+    clock, adapter = Clock(), FakeAdapter(fail_on_sends=(7,))
+    rotation = DeviceRotation(jobs_settings, opener(jobs_settings), adapter, clock)
+    _to_books_page(rotation, clock, 2)
+    assert rotation.park() is False
+    assert rotation.sends[-1].name == "parked" and rotation.sends[-1].error
+    assert rotation.tick() == "books"
+
+
+def test_park_waits_for_a_send_in_flight_and_gives_up_in_time(db, jobs_settings, monkeypatch):
+    class SlowAdapter(FakeAdapter):
+        def __init__(self) -> None:
+            super().__init__()
+            self.release = threading.Event()
+            self.started = threading.Event()
+
+        def send(self, clip: Clip) -> None:
+            self.started.set()
+            self.release.wait(5)
+            super().send(clip)
+
+    monkeypatch.setattr(rotation_job, "PARK_WAIT_S", 0.2)
+    clock, adapter = Clock(), SlowAdapter()
+    rotation = DeviceRotation(jobs_settings, opener(jobs_settings), adapter, clock)
+    ticker = threading.Thread(target=rotation.tick)
+    ticker.start()
+    assert adapter.started.wait(5)
+    assert rotation.park() is False, "a send in flight is not interrupted; the park is skipped"
+    adapter.release.set()
+    ticker.join(5)
+    assert [record.name for record in rotation.sends] == ["today"]
+
+
+def test_the_parked_screen_is_today_plus_a_dim_mark_at_the_foot(db, jobs_settings):
+    view = view_from_db(db, jobs_settings, "2026-10-02")
+    today = render_screen("today", view, NOON).poster.load()
+    parked = render_screen("parked", view, NOON)
+    assert not parked.animated
+    pixels = parked.poster.load()
+    changed = [(x, y) for x in range(64) for y in range(64) if pixels[x, y] != today[x, y]]
+    assert changed and all(54 <= x <= 61 and 58 <= y <= 63 for x, y in changed)
+    assert {pixels[x, y] for x, y in changed} == {(150, 140, 190)}
+
+
+def test_sends_json_counts_resumes(jobs_settings):
+    app = create_app(with_device(jobs_settings))
+    with TestClient(app) as client:
+        body = client.get("/display/sends.json").json()
+    assert body["resumes"] == 0
+
+
+def test_wake_during_a_send_in_flight_still_starts_over_at_once(db, jobs_settings):
+    class SlowAdapter(FakeAdapter):
+        def __init__(self) -> None:
+            super().__init__()
+            self.release = threading.Event()
+            self.started = threading.Event()
+
+        def send(self, clip: Clip) -> None:
+            self.started.set()
+            self.release.wait(5)
+            super().send(clip)
+
+    clock, adapter = Clock(), SlowAdapter()
+    rotation = DeviceRotation(jobs_settings, opener(jobs_settings), adapter, clock)
+    ticker = threading.Thread(target=rotation.tick)
+    ticker.start()
+    assert adapter.started.wait(5)
+    threading.Timer(0.2, adapter.release.set).start()
+    rotation.wake()
+    ticker.join(5)
+    assert rotation.due() <= clock.now, "the send's hold did not land on top of the wake"
+    assert rotation.tick() == "today"
+
+
+def test_a_second_sleep_notice_in_the_grace_sends_nothing_more(db, jobs_settings):
+    set_day(db, "2026-10-02", summary_device_line=LONG_SUMMARY)
+    clock, adapter = Clock(), FakeAdapter()
+    rotation = DeviceRotation(jobs_settings, opener(jobs_settings), adapter, clock)
+    _to_books_page(rotation, clock, 2)
+    assert rotation.park() is True
+    clock.advance(25)
+    assert rotation.park() is True, "WILL_SLEEP after CAN_SLEEP: parked already"
+    assert [record.name for record in rotation.sends].count("parked") == 1
+    clock.advance(20)
+    assert rotation.tick() == "parked", "the grace runs from the second notice"
+    clock.now = rotation.due()
+    assert rotation.tick() == "today"
+
+
+def test_a_restart_whose_send_fails_tries_today_again(db, jobs_settings):
+    set_day(db, "2026-10-02", summary_device_line=LONG_SUMMARY)
+    clock, adapter = Clock(), FakeAdapter(fail_on_sends=(7,))
+    rotation = DeviceRotation(jobs_settings, opener(jobs_settings), adapter, clock)
+    _to_books_page(rotation, clock, 2)
+    rotation.wake()
+    with pytest.raises(PixooError):
+        rotation.tick()
+    clock.now = rotation.due()
+    assert rotation.tick() == "today", "the network comes back after the host: Today, not City"
+    assert rotation.resumes == 1
+
+
+def _walk_to_books(rotation, clock) -> None:
+    for name in ("today", "city", "week", "month"):
+        assert rotation.tick() == name
+        clock.now = rotation.due()
+
+
+def _books_page_one_at(
+    jobs_settings, moment: datetime
+) -> tuple[DeviceRotation, Clock, FakeAdapter]:
+    """A rotation that has shown Today, City, Week and Month on time and put Books page 1
+    out at exactly `moment`: a dry run measures the walk, the real one starts that much
+    before."""
+    dry = Clock(moment)
+    _walk_to_books(DeviceRotation(jobs_settings, opener(jobs_settings), FakeAdapter(), dry), dry)
+    clock, adapter = Clock(moment - (dry.now - moment)), FakeAdapter()
+    rotation = DeviceRotation(jobs_settings, opener(jobs_settings), adapter, clock)
+    _walk_to_books(rotation, clock)
+    assert clock.now == moment
+    assert rotation.tick() == "books"
+    assert rotation.sends[-1].page == 1 and rotation.sends[-1].at_utc == to_utc_iso(moment)
+    return rotation, clock, adapter
+
+
+def test_the_evening_of_2026_10_19_a_nap_goes_on_with_books_and_a_real_sleep_restarts(
+    db, jobs_settings
+):
+    """The send log of the failure (power log against /display/sends.json): Books page 1 at
+    22:18:40Z, the host asleep at 22:18:43Z, a dark wake at 22:18:55Z, asleep again at
+    22:19:40Z, awake at 22:37:40Z. No sleep hook in this half: the 12 s nap leaves the tick
+    13 s late, so the pages go on; the 18 min sleep leaves it 18 min late, so Today."""
+    set_day(db, "2026-10-19", summary_device_line=LONG_SUMMARY)
+    rotation, clock, adapter = _books_page_one_at(
+        jobs_settings, datetime(2026, 10, 19, 22, 18, 40, tzinfo=UTC)
+    )
+    assert rotation.due() == datetime(2026, 10, 19, 22, 18, 42, tzinfo=UTC)
+
+    clock.now = datetime(2026, 10, 19, 22, 18, 55, tzinfo=UTC)
+    assert rotation.tick() == "books", "a 12 s nap: the pages go on"
+    assert rotation.sends[-1].page == 2
+    assert rotation.resumes == 0
+
+    clock.now = datetime(2026, 10, 19, 22, 37, 40, tzinfo=UTC)
+    assert rotation.tick() == "today", "18 min asleep: a whole screen, not Books page 3"
+    assert rotation.resumes == 1
+    assert rotation.sends[-1].name == "today" and rotation.sends[-1].page == 1
+    clock.now = rotation.due()
+    assert rotation.tick() == "city"
+    assert rotation.resumes == 1
+
+
+def test_the_evening_of_2026_10_19_with_the_sleep_hook_parks_twice_and_wakes_once(
+    db, jobs_settings
+):
+    """The same evening with the watcher wired: the park before the first sleep, the grace
+    covering the dark wake, a second park for the second sleep, and the wake at 22:37:40Z
+    starting over at Today. One "parked" record per park, no record for a grace tick, one
+    resume for the one wake."""
+    set_day(db, "2026-10-19", summary_device_line=LONG_SUMMARY)
+    rotation, clock, adapter = _books_page_one_at(
+        jobs_settings, datetime(2026, 10, 19, 22, 18, 40, tzinfo=UTC)
+    )
+
+    clock.now = datetime(2026, 10, 19, 22, 18, 43, tzinfo=UTC)
+    assert rotation.park() is True
+    sent = len(rotation.sends)
+    clock.now = datetime(2026, 10, 19, 22, 18, 55, tzinfo=UTC)
+    assert rotation.tick() == "parked", "a dark wake inside the grace sends nothing"
+    assert len(rotation.sends) == sent
+    assert rotation.due() == datetime(2026, 10, 19, 22, 19, 13, tzinfo=UTC)
+
+    clock.now = datetime(2026, 10, 19, 22, 19, 40, tzinfo=UTC)
+    assert rotation.park() is True, "the grace ran out at 22:19:13; this sleep parks again"
+    assert [record.name for record in rotation.sends].count("parked") == 2
+    assert rotation.resumes == 0
+
+    clock.now = datetime(2026, 10, 19, 22, 37, 40, tzinfo=UTC)
+    rotation.wake()
+    assert rotation.due() <= clock.now
+    assert rotation.tick() == "today"
+    assert rotation.resumes == 1
+    assert [record.name for record in rotation.sends][-3:] == ["parked", "parked", "today"]
+
+
+@pytest.mark.parametrize(
+    ("late", "screen", "resumes"),
+    [(rotation_job.RESUME_GAP_S, "books", 0), (rotation_job.RESUME_GAP_S + 1, "today", 1)],
+)
+def test_the_resume_gap_is_a_closed_bound(db, jobs_settings, late, screen, resumes):
+    set_day(db, "2026-10-02", summary_device_line=LONG_SUMMARY)
+    clock, adapter = Clock(), FakeAdapter()
+    rotation = DeviceRotation(jobs_settings, opener(jobs_settings), adapter, clock)
+    _to_books_page(rotation, clock, 2)
+    clock.advance(late)
+    assert rotation.tick() == screen
+    assert rotation.resumes == resumes
+
+
+def test_a_wake_after_midnight_starts_over_on_the_new_york_day_that_has_begun(db, jobs_settings):
+    """Park at 23:59:50 local (03:59:50Z, EDT) and wake at 00:00:20 local: the parked
+    still is the old day's Today; the restart is the new day's, from view_from_db with
+    local_day(now). The hook-less path, a tick 61 s late across midnight, lands the same."""
+    set_day(db, "2026-10-01", steps=1111)
+    set_day(db, "2026-10-02", steps=22222)
+    park_at = datetime(2026, 10, 2, 3, 59, 50, tzinfo=UTC)
+    wake_at = datetime(2026, 10, 2, 4, 0, 20, tzinfo=UTC)
+    today = {
+        day: render_screen("today", view_from_db(db, jobs_settings, day), moment)
+        for day, moment in (("2026-10-01", park_at), ("2026-10-02", wake_at))
+    }
+    parked_old = render_screen("parked", view_from_db(db, jobs_settings, "2026-10-01"), park_at)
+    assert not same(today["2026-10-01"], today["2026-10-02"])
+
+    clock, adapter = Clock(datetime(2026, 10, 2, 3, 58, 0, tzinfo=UTC)), FakeAdapter()
+    rotation = DeviceRotation(jobs_settings, opener(jobs_settings), adapter, clock)
+    assert rotation.tick() == "today"
+    assert same(adapter.sent[-1], today["2026-10-01"])
+    clock.now = park_at
+    assert rotation.park() is True
+    assert same(adapter.sent[-1], parked_old)
+    clock.now = wake_at
+    rotation.wake()
+    assert rotation.tick() == "today"
+    assert same(adapter.sent[-1], today["2026-10-02"]), "the new local day, not the parked one"
+    assert rotation.resumes == 1
+
+    clock, adapter = Clock(datetime(2026, 10, 2, 3, 59, 0, tzinfo=UTC)), FakeAdapter()
+    rotation = DeviceRotation(jobs_settings, opener(jobs_settings), adapter, clock)
+    assert rotation.tick() == "today"
+    clock.now = rotation.due()
+    assert rotation.tick() == "city"
+    clock.now = rotation.due() + timedelta(seconds=rotation_job.RESUME_GAP_S + 1)
+    assert clock.now > datetime(2026, 10, 2, 4, 0, 0, tzinfo=UTC)
+    assert rotation.tick() == "today"
+    assert same(adapter.sent[-1], today["2026-10-02"])
+
+
+def test_resumes_and_the_send_log_count_each_pause_once(db, jobs_settings):
+    """A park is one "parked" record; its grace ticks add none; park then wake then the
+    restart is one resume, and a second wake before the tick adds none."""
+    set_day(db, "2026-10-02", summary_device_line=LONG_SUMMARY)
+    clock, adapter = Clock(), FakeAdapter()
+    rotation = DeviceRotation(jobs_settings, opener(jobs_settings), adapter, clock)
+    _to_books_page(rotation, clock, 2)
+    before = len(rotation.sends)
+    assert rotation.park() is True
+    assert len(rotation.sends) == before + 1 and rotation.sends[-1].name == "parked"
+    for _ in range(4):
+        clock.advance(5)
+        assert rotation.tick() == "parked"
+    assert len(rotation.sends) == before + 1, "a grace tick appends nothing"
+    assert rotation.resumes == 0
+    clock.advance(60)
+    rotation.wake()
+    rotation.wake()
+    assert rotation.tick() == "today"
+    assert rotation.resumes == 1
+    assert [record.name for record in rotation.sends][before:] == ["parked", "today"]
+    clock.now = rotation.due()
+    assert rotation.tick() == "city"
+    assert rotation.resumes == 1
+
+
+def test_the_watcher_is_wired_to_park_and_a_wake_pulls_the_job_to_now(db, jobs_settings):
+    settings = with_device(jobs_settings)
+    device = PixooAdapter(HOST, fake_device([]))
+    scheduler = jobs.build_scheduler(settings, opener(settings), NOON, device)
+    watcher = scheduler.sleep_watcher
+    assert isinstance(watcher, SleepWatcher)
+    assert watcher._on_sleep == scheduler.rotation.park
+    scheduler.start(paused=True)
+    try:
+        scheduler.get_job(ROTATION_JOB).func()
+        booked = scheduler.get_job(ROTATION_JOB).next_run_time
+        assert booked > datetime.now(UTC) + timedelta(seconds=15), "a dwell is booked"
+        watcher._on_wake()
+        assert scheduler.get_job(ROTATION_JOB).next_run_time <= datetime.now(UTC)
+        assert scheduler.rotation.due() <= datetime.now(UTC)
+    finally:
+        assert jobs.stop_scheduler(scheduler) is True
+    assert watcher._thread is None, "never started here; stop is harmless"
+
+
+def test_without_a_host_there_is_no_watcher_and_stop_still_works(jobs_settings):
+    scheduler = jobs.build_scheduler(jobs_settings, opener(jobs_settings))
+    assert getattr(scheduler, "sleep_watcher", None) is None
+    scheduler.start(paused=True)
+    assert jobs.stop_scheduler(scheduler) is True

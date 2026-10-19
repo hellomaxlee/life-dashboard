@@ -207,14 +207,14 @@ def test_a_scored_day_pushed_since_the_last_recompute_is_never_judged(
         settings,
     )
     client = FakeClient(YES)
-    assert judge_before(db, settings, client).judged == 0
+    assert judge_before(db, settings, client, now=NOW).judged == 0
     assert client.messages.calls == 0
     recompute(db, settings, now=NOW)
     row = day_row(db)
     assert row["quality_workout"] and not row["judged_workout"] and row["workout_count"] == 1
     db.execute("DELETE FROM activities")
     db.execute("DELETE FROM workout_hr_samples")
-    assert judge_before(db, settings, client).judged == 1
+    assert judge_before(db, settings, client, now=NOW).judged == 1
     assert client.messages.calls == 1
 
 

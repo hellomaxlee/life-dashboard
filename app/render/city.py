@@ -70,13 +70,12 @@ from app.render.palette import (
     MTA_YELLOW,
     RAIN,
     RED,
-    RING,
     SECONDARY,
     TEXT,
-    TRACK,
     WHITE,
 )
 from app.render.screens import LEFT, RIGHT, clean_summary, draw_disc, fill_rect, wrap_lines
+from app.render.theme import STOCK, MonthTheme, theme_for
 from app.render.view import DayView
 from app.timeutil import clock_12h, from_utc_iso
 
@@ -517,20 +516,20 @@ def bar_box(step: Step) -> tuple[int, int, int, int]:
     return x0, BAR_TOP, x0 + BAR_WIDTH - 1, BAR_TOP + BAR_HEIGHT - 1
 
 
-def _draw_strip(frame: Frame, steps: list[Step], temps: bool) -> None:
+def _draw_strip(frame: Frame, steps: list[Step], temps: bool, theme: MonthTheme = STOCK) -> None:
     pixels = frame.load()
     was_tomorrow = False
     for index, step in enumerate(steps):
         ink = SECONDARY if step.tomorrow else TEXT
         if step.tomorrow and not was_tomorrow and index:
             for y in range(STEP_ICON_Y, BAR_TOP + BAR_HEIGHT, 2):
-                pixels[step.x - 1, y] = RING
+                pixels[step.x - 1, y] = theme.ring
         was_tomorrow = step.tomorrow
         if temps and step.temp is not None:
             _draw_compact(frame, step.x, STEP_TEMP_Y, step.temp, ink)
         draw_icon(frame, step.x + 1, STEP_ICON_Y, MINI_ICONS[step.kind])
         x0, y0, x1, y1 = bar_box(step)
-        fill_rect(frame, x0, y0, x1, y1, TRACK)
+        fill_rect(frame, x0, y0, x1, y1, theme.track)
         if step.fill_px:
             fill_rect(frame, x0, y1 - step.fill_px + 1, x1, y1, RAIN)
         _draw_compact(frame, step.x, STEP_LABEL_Y, step.label, ink)
@@ -601,7 +600,7 @@ def _weather_frame(view: DayView, city: CityStatus, now: datetime | None) -> Fra
             draw_text(frame, LEFT, STEP_TEMP_Y, notice[1], AMBER, SMALL)
     elif CONDITION_WORDS[kind]:
         draw_text(frame, LEFT, NOTICE_Y, CONDITION_WORDS[kind], SECONDARY, SMALL)
-    _draw_strip(frame, strip_steps(weather), temps=len(notice) < 2)
+    _draw_strip(frame, strip_steps(weather), temps=len(notice) < 2, theme=theme_for(view))
     return frame
 
 

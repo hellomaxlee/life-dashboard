@@ -11,6 +11,8 @@ colour: a quotation in VOICE, its "- Author" in ATTRIBUTION, Max's own words in 
 
 Each screen's header word wears its own accent (palette.HEADERS) so the rotation reads as
 distinct places; the stamp on the right and the field labels inside keep TEXT and LABEL.
+The structural tones (the sleep bar's track, the empty rings, the inactive page pip) come
+from the month's theme (theme.py): the stock palette tones unless the month has a feature.
 """
 
 from __future__ import annotations
@@ -33,6 +35,7 @@ from app.render.font import (
 from app.render.frame import SIZE, Clip, Color, Frame, new_frame, still
 from app.render.palette import (
     ATTRIBUTION,
+    BLACK,
     DOTS,
     GOLD,
     GREEN,
@@ -43,7 +46,6 @@ from app.render.palette import (
     SKY,
     SPINES,
     TEXT,
-    TRACK,
     VIOLET,
     VOICE,
     WHITE,
@@ -52,6 +54,7 @@ from app.render.palette import (
     dim,
     shelf_tint,
 )
+from app.render.theme import theme_for
 from app.render.usage import draw_usage, usage_state
 from app.render.view import DayView, has_health_data, valid_count, valid_sleep_hours
 from app.timeutil import clock_12h, from_utc_iso
@@ -66,6 +69,7 @@ LINE_WIDTH = 60
 WORD_WIDTH = SIZE - LEFT
 PAGE_MS = 2000
 TITLE_GAP = 3
+AS_OF_Y = 58
 SUMMARY_MAX_CHARS = 220
 SUMMARY_LINE_YS = (45, 54)
 PAGE_PIP_Y = SIZE - 1
@@ -84,6 +88,16 @@ MOON = (
     "..######.",
     "...####..",
 )
+ZZ = (
+    ".....###",
+    "......#.",
+    ".....###",
+    "###.....",
+    ".#......",
+    "###.....",
+)
+ZZ_X = RIGHT - len(ZZ[0]) + 1
+ZZ_GAP = 2
 
 
 def _in_disc(dx: int, dy: int, radius: int) -> bool:
@@ -163,6 +177,7 @@ def _draw_streak(frame: Frame, streak: int) -> None:
 
 def _week_frame(view: DayView, now: datetime) -> Frame:
     frame = new_frame()
+    theme = theme_for(view)
     draw_text(frame, LEFT, 2, "WEEK", HEADERS["week"], SMALL)
     centres, radius = dot_layout(view.week_target)
     dots = _count(view.week_dots)
@@ -173,18 +188,18 @@ def _week_frame(view: DayView, now: datetime) -> Frame:
         draw_text_right(frame, RIGHT, 2, f"{dots} OF {view.week_target}", TEXT, SMALL)
     for index, cx in enumerate(centres):
         if dots is None:
-            draw_ring(frame, cx, DOT_ROW_Y, radius, RING, dashed=True)
+            draw_ring(frame, cx, DOT_ROW_Y, radius, theme.ring, dashed=True)
         elif index < dots:
             draw_disc(frame, cx, DOT_ROW_Y, radius, dot_color(index))
         else:
-            draw_ring(frame, cx, DOT_ROW_Y, radius, RING)
+            draw_ring(frame, cx, DOT_ROW_Y, radius, theme.ring)
 
     if streak is None:
         draw_text_centered(frame, STREAK_Y + 2, "STREAK NO DATA", TEXT, SMALL)
     else:
         _draw_streak(frame, streak)
 
-    draw_usage(frame, usage_state(view.claude, now, view.stale_hours))
+    draw_usage(frame, usage_state(view.claude, now, view.stale_hours), theme.track)
     return frame
 
 
@@ -294,6 +309,7 @@ def no_dot_label(view: DayView) -> str:
 def render_today(view: DayView, now: datetime | None = None) -> Clip:
     """Last night's sleep against the target, today's dot, steps, and when the data is from."""
     frame = new_frame()
+    theme = theme_for(view)
     day = date.fromisoformat(view.day_shown or view.day_local)
     title = "TODAY" if view.day_shown in (None, view.day_local) else "YESTERDAY"
     draw_text(frame, LEFT, 2, title, HEADERS["today"], SMALL)
@@ -305,7 +321,7 @@ def render_today(view: DayView, now: datetime | None = None) -> Clip:
 
     draw_bitmap(frame, LEFT, 11, MOON, VIOLET)
     target_x = LEFT + int(view.sleep_target_hours / SLEEP_BAR_HOURS * 60)
-    fill_rect(frame, LEFT, 26, RIGHT, 28, TRACK)
+    fill_rect(frame, LEFT, 26, RIGHT, 28, theme.track)
     if not valid_sleep_hours(view.sleep_hours):
         draw_text(frame, 16, 9, "--", TEXT, BODY, scale=2)
         draw_text(frame, LEFT, 32, "SLEEP", LABEL, SMALL)
@@ -328,13 +344,13 @@ def render_today(view: DayView, now: datetime | None = None) -> Clip:
         fill_rect(frame, max_x, 25, max_x, 29, WHITE)
 
     if view.today_dot is None:
-        draw_ring(frame, 6, 44, 4, RING, dashed=True)
+        draw_ring(frame, 6, 44, 4, theme.ring, dashed=True)
         draw_text(frame, 13, 42, "DOT NO DATA", TEXT, SMALL)
     elif view.today_dot:
         draw_disc(frame, 6, 44, 4, GOLD)
         draw_text(frame, 13, 42, "WORKOUT DONE", GOLD, SMALL)
     else:
-        draw_ring(frame, 6, 44, 4, RING)
+        draw_ring(frame, 6, 44, 4, theme.ring)
         draw_text(frame, DOT_LABEL_X, 42, no_dot_label(view), TEXT, SMALL)
 
     draw_text(frame, LEFT, 51, "STEPS", LABEL, SMALL)
@@ -342,7 +358,32 @@ def render_today(view: DayView, now: datetime | None = None) -> Clip:
     draw_text_right(frame, RIGHT, 51, steps, TEXT, SMALL)
     as_of = as_of_label(view, now)
     if as_of is not None:
-        draw_text(frame, LEFT, 58, as_of, SECONDARY, SMALL)
+        draw_text(frame, LEFT, AS_OF_Y, as_of, SECONDARY, SMALL)
+    return still(frame)
+
+
+def parked_as_of(as_of: str | None) -> str | None:
+    """The as-of line as the parked screen prints it: Today's own when the "zz" fits after
+    it with ZZ_GAP columns clear, else without its AS OF prefix. The weekday form ("AS OF
+    WED 12:59P") can run to the frame's edge, where the mark would overprint the time."""
+    if as_of is None or LEFT + text_width(as_of, SMALL) + ZZ_GAP <= ZZ_X:
+        return as_of
+    return as_of.removeprefix("AS OF ")
+
+
+def render_parked(view: DayView, now: datetime | None = None) -> Clip:
+    """Today with a dim "zz" at the foot: the one screen the panel keeps while the host
+    sleeps (Max, 2026-10-19: a fallback for the sleeping Mac, "pretty, not obvious/stark").
+    A complete screen with its as-of time, so nothing half-shown is left up, and the mark is
+    the as-of line's own colour, so it reads as a note, not an alarm. A long as-of line is
+    reprinted without AS OF (`parked_as_of`) so the mark never sits on the time."""
+    frame = render_today(view, now).poster.copy()
+    as_of = as_of_label(view, now)
+    short = parked_as_of(as_of)
+    if short != as_of:
+        fill_rect(frame, 0, AS_OF_Y, SIZE - 1, SIZE - 1, BLACK)
+        draw_text(frame, LEFT, AS_OF_Y, short, SECONDARY, SMALL)
+    draw_bitmap(frame, ZZ_X, AS_OF_Y, ZZ, SECONDARY)
     return still(frame)
 
 
@@ -589,17 +630,18 @@ def _draw_runs(frame: Frame, x: int, y: int, line: str, colors: list[Color]) -> 
             start = end
 
 
-def _draw_page_pips(frame: Frame, page: int, pages: int) -> None:
+def _draw_page_pips(frame: Frame, page: int, pages: int, pip: Color = RING) -> None:
     width = pages * 3 - 1
     x0 = (SIZE - width) // 2
     for index in range(pages):
-        color = TEXT if index == page else RING
+        color = TEXT if index == page else pip
         fill_rect(frame, x0 + index * 3, PAGE_PIP_Y, x0 + index * 3 + 1, PAGE_PIP_Y, color)
 
 
 def render_books(view: DayView) -> Clip:
     """Books this year on a shelf, and the day's one-line summary in pages underneath."""
     base = _books_base(view)
+    pip = theme_for(view).pip
     pages = wrap_pages(view.summary_line or NO_SUMMARY) or wrap_pages(NO_SUMMARY)
     colors = iter(line_colors([line for page in pages for line in page]))
     frames: list[Frame] = []
@@ -608,7 +650,7 @@ def render_books(view: DayView) -> Clip:
         for line, y in zip(page, SUMMARY_LINE_YS, strict=False):
             _draw_runs(frame, LEFT, y, line, next(colors))
         if len(pages) > 1:
-            _draw_page_pips(frame, number, len(pages))
+            _draw_page_pips(frame, number, len(pages), pip)
         frames.append(frame)
     if len(frames) == 1:
         return still(frames[0])

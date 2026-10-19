@@ -47,6 +47,7 @@ from app.render.screens import (
     fill_rect,
     sleep_met,
 )
+from app.render.theme import theme_for
 from app.render.view import DayView, valid_count
 
 Win = Literal["sleep", "workout", "book"]
@@ -173,14 +174,20 @@ def _flourish(frame: Frame, win: str) -> None:
         draw_ring(frame, cx, ICON_Y, 9, WHITE)
 
 
-def sparkle_clip(win: Win = "workout", seed: int = 11, dot: int | None = None) -> Clip:
+def sparkle_clip(
+    win: Win = "workout",
+    seed: int = 11,
+    dot: int | None = None,
+    confetti: tuple[Color, ...] = CONFETTI,
+) -> Clip:
     """The small-win clip, five stills of STEP_MS each, every one a different picture
     (Max, 2026-10-09: "more dynamic"): the icon rising from the bottom edge on a streak; the
     burst, rays to the frame's edge; the sparks thrown out as the label arrives; the sparks
     falling wide while the icon makes its own gesture; the icon settled among the stars.
     `win` picks the icon and the label; for a workout, `dot` (the week's count including this
     one) colours the disc, its rays and its ring like the Week screen's Nth dot (Max,
-    2026-10-06: a different colour for the 1st, 2nd and 3rd)."""
+    2026-10-06: a different colour for the 1st, 2nd and 3rd). `confetti` is what the sparks
+    are drawn from: the stock set, or the month theme's (theme.py), which adds its accent."""
     rng = random.Random(seed)
     accent = nth_dot_color(dot) if win == "workout" else GOLD
     lines = WIN_LABELS[win]
@@ -192,7 +199,7 @@ def sparkle_clip(win: Win = "workout", seed: int = 11, dot: int | None = None) -
             continue
         stars.append((x, y, rng.randrange(6), rng.random()))
     sparks = [
-        (rng.uniform(0, 2 * math.pi), rng.uniform(0.8, 1.2), rng.choice(CONFETTI))
+        (rng.uniform(0, 2 * math.pi), rng.uniform(0.8, 1.2), rng.choice(confetti))
         for _ in range(28)
     ]
 
@@ -260,11 +267,14 @@ def _rainbow_wave(frame: Frame, text: str, y: int, tick: int) -> None:
         x = draw_text(frame, x, y + bob, char, hue(index * 0.11 + tick * 0.04), BODY)
 
 
-def party_clip(count: int = 3, target: int = 3, seed: int = 7) -> Clip:
+def party_clip(
+    count: int = 3, target: int = 3, seed: int = 7, confetti: tuple[Color, ...] = CONFETTI
+) -> Clip:
     """The week-complete clip, six stills of STEP_MS each: the last dot falling, landed,
     the flash, the burst with WEEK DONE, then confetti twice.
 
     `count` and `target` are the week's stored numbers; the clip prints them as given.
+    `confetti` is the particle colour set, the stock one or the month theme's.
     """
     rng = random.Random(seed)
     centres, radius = dot_layout(target)
@@ -280,7 +290,7 @@ def party_clip(count: int = 3, target: int = 3, seed: int = 7) -> Clip:
                     float(DOT_ROW_Y),
                     math.cos(angle) * speed,
                     math.sin(angle) * speed,
-                    rng.choice(CONFETTI),
+                    rng.choice(confetti),
                     burst_at + index * 3 + rng.randrange(3),
                     rng.randrange(2),
                 )
@@ -292,7 +302,7 @@ def party_clip(count: int = 3, target: int = 3, seed: int = 7) -> Clip:
                 -2.0,
                 rng.uniform(-0.3, 0.3),
                 rng.uniform(0.4, 1.1),
-                rng.choice(CONFETTI),
+                rng.choice(confetti),
                 burst_at + 6 + rng.randrange(30),
                 rng.randrange(2),
             )
@@ -388,7 +398,12 @@ def celebrations_for(view: DayView) -> list[Celebration]:
     win = earned_win(view)
     done = week_complete(view)
     count = view.week_dots if done else view.week_target
+    confetti = theme_for(view).confetti
     return [
-        Celebration("sparkle", sparkle_clip(win or "workout", dot=view.week_dots), win is not None),
-        Celebration("party", party_clip(count, view.week_target), done),
+        Celebration(
+            "sparkle",
+            sparkle_clip(win or "workout", dot=view.week_dots, confetti=confetti),
+            win is not None,
+        ),
+        Celebration("party", party_clip(count, view.week_target, confetti=confetti), done),
     ]

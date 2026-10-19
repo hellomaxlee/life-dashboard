@@ -565,3 +565,52 @@ What to expect:
   the ingested tables only; run `tools.metrics --recompute` and verify again.
 - A recompute that fails writes nothing (one transaction) and the job logs
   `job metrics_recompute failed`; the previous rows stay on the frame.
+
+## 20. The host sleeps (lid closed, on battery)
+
+Section 8 keeps the Mac awake for pushes; this is what happens when it sleeps anyway. A
+MacBook with the lid closed sleeps within seconds and dark-wakes for 2 to 60 s about every
+17 minutes. The panel keeps whatever was last sent, so without help a sleep landing between
+two pages of Books left a half-shown quote up for a quarter of an hour (power log against
+`/display/sends.json`, 2026-10-19).
+
+What the panel shows: in the seconds before sleep the service puts up **Today with a dim
+"zz"** at the foot (`parked`) and sends nothing more for 30 s. On wake it starts the
+rotation over at Today, at once; a dark wake shows Today, then the parked screen again as
+the Mac goes back to sleep. A restart after any pause always begins at Today, whole and
+fresh, never at page 3 of something. Nothing is sent while the Mac sleeps, so the display
+never blanks.
+
+How: `app/jobs/sleepwatch.py` registers with IOKit for system power notices
+(`IORegisterForSystemPower`) on its own thread and acknowledges each sleep notice after
+parking; the kernel waits at most 30 s for that acknowledgement. The park waits up to 20 s
+for a send in flight (a still takes about 1.5 s), so it fits; if the panel is unreachable
+the park is skipped, the sleep goes ahead at 30 s, and the late acknowledgement is ignored.
+A tick more than 60 s late starts over at Today whether or not the notice arrived, so a
+Raspberry Pi, or a Mac where the registration failed, still recovers at the next tick.
+
+Log lines (out log):
+
+```
+sleep watcher: the panel parks on Today when this host sleeps   # at start; or "not available here"
+display: parked for sleep                                        # a sleep notice, PARKED sent
+display: the host woke; starting over at Today                   # power-on notice
+display: a tick 1043 s late; starting over at Today              # no notice, the late tick caught it
+display: could not park before sleep; a send was still in flight # err log: park skipped
+```
+
+Drill, with Max watching the panel: restart the service (section 4), close the lid, count
+ten, open it.
+
+```sh
+curl -s http://192.168.1.171:8080/display/sends.json | uv run python -c \
+  "import sys,json; b=json.load(sys.stdin); print('resumes', b['resumes']); \
+  [print(r['at_utc'], r['name'], r['page'], '/', r['pages'], r['error']) for r in b['sends'][-6:]]"
+grep -h "parked\|starting over\|sleep watcher" data/logs/life-dashboard.out.log | tail
+pmset -g log | grep "PM Client Acks" | tail -3      # who held the sleep, and for how many ms
+```
+
+Expect a `parked` row, then after the lid opens a `today` row and `resumes` one higher;
+`pmset` names any process that delayed the sleep and by how many ms (ours should be under
+a few thousand). A `parked` row with an error means the panel refused the send; the panel
+keeps its last page and the late-tick restart does the rest on wake.

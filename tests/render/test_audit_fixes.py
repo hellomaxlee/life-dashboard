@@ -22,6 +22,7 @@ from app.render.screens import (
     render_week,
     wrap_lines,
 )
+from app.render.theme import theme_for
 from app.render.usage import age_label, fill_width, reset_label, usage_state
 from app.render.view import ClaudeUsage, DayView, load_fixture, view_from_metrics
 from app.render.view_db import view_from_db
@@ -147,7 +148,7 @@ def test_usage_fill_is_floored_and_crosses_each_tick_with_its_colour(settings):
         (85.0, RED, RED, 52),
     ):
         frame = render_week(replace(view, claude=replace(view.claude, used_pct=pct)), now).poster
-        reached = frame.getpixel((tick_x, 42)) != TRACK
+        reached = frame.getpixel((tick_x, 42)) != theme_for(view).track
         assert frame.getpixel((2, 42)) == before == after
         assert reached == (pct in (60.0, 85.0)), pct
         for y in (41, 45):

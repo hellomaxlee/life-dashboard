@@ -14,6 +14,7 @@ import pytest
 from app.render.font import BODY, text_width
 from app.render.frame import Clip, new_frame
 from app.render.screens import render_books, render_today, render_week
+from app.render.theme import theme_for
 from app.render.view import ClaudeUsage, DayView, view_from_metrics
 from app.timeutil import from_utc_iso, to_utc_iso
 from tests.render import COMBOS, WEEK_41, load
@@ -226,7 +227,7 @@ def test_sleep_bar_fill_is_floored(settings):
     at_goal = render_today(replace(view, sleep_hours=7.0)).poster
     short = render_today(replace(view, sleep_hours=6.95)).poster
     assert at_goal.getpixel((43, 27)) == (60, 220, 90)
-    assert short.getpixel((43, 27)) == TRACK
+    assert short.getpixel((43, 27)) == theme_for(view).track
     assert short.getpixel((42, 27)) == (80, 170, 255)
     assert at_goal.getpixel((44, 27)) == short.getpixel((44, 27)) == (255, 255, 255)
 
@@ -266,8 +267,9 @@ def test_celebrations_are_marked_sample_unless_earned(settings, client, capsys):
     assert (sparkle.earned, party.earned) == (True, True), "a finished week keeps the workout win"
     short = replace(two_dots, week_dots=2, today_dot=None, sleep_hours=6.0)
     assert [c.earned for c in celebrations_for(short)] == [False, False]
-    assert party.clip.poster.tobytes() == party_clip(4, 3).poster.tobytes()
-    assert party.clip.poster.tobytes() != party_clip(3, 3).poster.tobytes()
+    confetti = theme_for(four).confetti
+    assert party.clip.poster.tobytes() == party_clip(4, 3, confetti=confetti).poster.tobytes()
+    assert party.clip.poster.tobytes() != party_clip(3, 3, confetti=confetti).poster.tobytes()
 
     page = client.get(f"/preview?fixture={WEEK_41}").text
     assert "party (sample)" in page and "sparkle (sample)" not in page

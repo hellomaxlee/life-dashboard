@@ -13,6 +13,7 @@ from app.render.frame import new_frame
 from app.render.gamma import led_gamma
 from app.render.rotation import device_parts
 from app.render.screens import render_week
+from app.render.theme import theme_for
 from app.render.usage import reset_label, usage_state
 from app.render.view import ClaudeUsage, view_from_metrics
 from app.timeutil import from_utc_iso, to_utc_iso
@@ -46,7 +47,7 @@ def test_41_2_percent_fills_24_of_60_pixels(settings):
     frame = clip.poster
     # floor(0.412 * 60) = 24 px: columns 2 through 25. The fill never overstates.
     assert filled_columns(frame, GREEN) == list(range(2, 26))
-    assert filled_columns(frame, TRACK) == list(range(26, 62))
+    assert filled_columns(frame, theme_for(view).track) == list(range(26, 62))
     for y in (40, 46):
         assert all(pixel == (0, 0, 0) for pixel in bar_row(frame, y))
 
@@ -77,7 +78,8 @@ def test_missing_reading_says_no_data_and_leaves_the_week_intact(settings):
     for y in BAR_ROWS:
         row = bar_row(frame, y)
         assert not {GREEN, AMBER, RED} & set(row)
-        assert [x for x in range(64) if row[x] == TRACK] == [x for x in BAR_X if (x - 2) % 4 < 2]
+        track = theme_for(view).track
+        assert [x for x in range(64) if row[x] == track] == [x for x in BAR_X if (x - 2) % 4 < 2]
 
     with_reading = replace(
         view,
@@ -106,7 +108,8 @@ def test_extremes_never_overflow_the_track(settings):
     view, now = load(WEEK_41, settings)
     for pct, width in ((0.0, 0), (0.2, 1), (99.6, 59), (100.0, 60)):
         frame = render_week(replace(view, claude=replace(view.claude, used_pct=pct)), now).poster
-        lit = [x for x in range(64) if frame.getpixel((x, 42)) not in (TRACK, (0, 0, 0))]
+        track = theme_for(view).track
+        lit = [x for x in range(64) if frame.getpixel((x, 42)) not in (track, (0, 0, 0))]
         assert lit == list(range(2, 2 + width)), pct
 
 

@@ -9,11 +9,22 @@ A tick renders only its own screen from a fresh connection, so a renderer or a d
 fails costs that one slot: the slot is spent before any work, the error goes to the
 scheduler's guard, and the next tick, one dwell later, tries the next screen. Nothing is sent
 on a failed tick, so the device keeps whatever it showed last.
+
+The host can stop. Max's MacBook sleeps with the lid closed (power log, 2026-10-19: on
+battery, dark-waking for a few seconds every 17 minutes), and the panel then keeps whatever
+page was up, a mid-quote Books page as often as not. Two answers. `park` is called by the
+macOS sleep watcher (app/jobs/sleepwatch) in the seconds before sleep: it puts up PARKED,
+Today with a dim "zz", a complete screen, and the ticks of the next PARK_GRACE_S send
+nothing, so no page follows it. A tick that arrives more than RESUME_GAP_S after its time, or
+after `wake`, drops any pages left and starts the sequence over at Today, so the first screen
+after any pause is whole and fresh, hook or no hook.
 """
 
 from __future__ import annotations
 
+import logging
 import sqlite3
+import threading
 import time
 from collections import deque
 from collections.abc import Callable
@@ -25,7 +36,7 @@ from zoneinfo import ZoneInfo
 from app.config import Settings
 from app.render.adapters.pixoo import FRAME_BUDGET_S, PixooAdapter, PixooError
 from app.render.frame import Clip
-from app.render.rotation import device_parts, hold_ms, render_screen, sequence_names
+from app.render.rotation import PARKED, device_parts, hold_ms, render_screen, sequence_names
 from app.render.view_db import view_from_db
 from app.timeutil import local_day, to_utc_iso
 
@@ -35,8 +46,13 @@ DEVICE_TIMEOUT_S = 5.0
 ROTATION_FALLBACK_S = 300
 ROTATION_MISFIRE_GRACE_S = 24 * 3600
 HOLDING = "holding"
+RESUME_GAP_S = 60
+PARK_GRACE_S = 30
+PARK_WAIT_S = 20.0
 SEND_LOG_SIZE = 80
 SEND_ERRORS = (PixooError,)
+
+log = logging.getLogger(__name__)
 
 
 class ClipAdapter(Protocol):
@@ -94,6 +110,10 @@ class DeviceRotation:
         self._pages: list[Clip] = []
         self._page_of = ""
         self._page_count = 1
+        self._lock = threading.Lock()
+        self._restart: str | None = None
+        self._parked_at: datetime | None = None
+        self.resumes = 0
         self.sends: deque[SendRecord] = deque(maxlen=SEND_LOG_SIZE)
 
     def _deliver(self, clip: Clip) -> str:
@@ -128,10 +148,32 @@ class DeviceRotation:
             )
 
     def tick(self) -> str:
-        """Send the next screen and return its name, or HOLDING while the last one's hold runs."""
+        """Send the next screen and return its name; HOLDING while the last one's hold runs;
+        PARKED while the host is going to sleep."""
+        with self._lock:
+            return self._tick()
+
+    def _in_grace(self, now: datetime) -> bool:
+        return self._parked_at is not None and now < self._parked_at + timedelta(
+            seconds=PARK_GRACE_S
+        )
+
+    def _tick(self) -> str:
         now = self._clock()
+        if self._in_grace(now):
+            self._hold_until = self._parked_at + timedelta(seconds=PARK_GRACE_S)
+            return PARKED
         if self._hold_until is not None and now < self._hold_until:
             return HOLDING
+        late = 0.0 if self._hold_until is None else (now - self._hold_until).total_seconds()
+        if late > RESUME_GAP_S:
+            self._restart = f"a tick {late:.0f} s late"
+        restarting = self._restart is not None
+        if restarting:
+            self._pages, self._next, self._parked_at = [], 0, None
+            self.resumes += 1
+            log.info("display: %s; starting over at Today", self._restart)
+            self._restart = None
         dwell = self._settings.device.screen_seconds
         self._hold_until = now + timedelta(seconds=dwell)
         if self._pages:
@@ -162,7 +204,12 @@ class DeviceRotation:
             self._brightness = level
         first, *rest = device_parts(clip)
         hold = first.total_ms if rest else hold_ms(name, clip, dwell)
-        self._send(first, name, 1, 1 + len(rest), hold)
+        try:
+            self._send(first, name, 1, 1 + len(rest), hold)
+        except Exception:
+            if restarting:
+                self._next = index
+            raise
         self._pages, self._page_of, self._page_count = rest, name, 1 + len(rest)
         self._hold_until = self._clock() + timedelta(milliseconds=hold)
         return name
@@ -171,6 +218,53 @@ class DeviceRotation:
         """When the next tick should run: the end of the current hold, or of the wait after a
         failed tick."""
         return self._hold_until or self._clock()
+
+    def park(self) -> bool:
+        """The host is about to sleep: put up PARKED, Today with its dim "zz", and keep the
+        ticks of the next PARK_GRACE_S from sending anything after it. Waits PARK_WAIT_S for a
+        send in flight; the sleep itself waits no longer than that for us. False when the
+        wait ran out or the send failed, and the panel keeps whatever it showed. A second
+        notice inside the grace (CAN_SLEEP, then WILL_SLEEP) renews it and sends nothing."""
+        if not self._lock.acquire(timeout=PARK_WAIT_S):
+            log.error("display: could not park before sleep; a send was still in flight")
+            return False
+        try:
+            now = self._clock()
+            if self._in_grace(now):
+                self._parked_at = now
+                self._hold_until = now + timedelta(seconds=PARK_GRACE_S)
+                return True
+            conn = self._open_conn()
+            try:
+                view = view_from_db(conn, self._settings, local_day(now, self._settings.home_tz))
+            finally:
+                conn.close()
+            clip = render_screen(PARKED, view, now)
+            try:
+                self._send(clip, PARKED, 1, 1, 0)
+            except SEND_ERRORS as exc:
+                log.error("display: park failed: %s", exc)
+                return False
+            self._parked_at = self._clock()
+            self._restart = "the host slept"
+            self._hold_until = self._parked_at + timedelta(seconds=PARK_GRACE_S)
+            log.info("display: parked for sleep")
+            return True
+        finally:
+            self._lock.release()
+
+    def wake(self) -> None:
+        """The host is back: the next tick starts over at Today, whatever was up. Waits for a
+        send in flight so its hold cannot land on top of this; one stuck past PARK_WAIT_S is
+        not waited for, and the restart then comes at the end of that hold."""
+        held = self._lock.acquire(timeout=PARK_WAIT_S)
+        try:
+            self._parked_at = None
+            self._hold_until = None
+            self._restart = "the host woke"
+        finally:
+            if held:
+                self._lock.release()
 
 
 def device_adapter(settings: Settings) -> PixooAdapter:

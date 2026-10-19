@@ -31,7 +31,10 @@ class JobResult:
 
 
 def judge_before(
-    conn: sqlite3.Connection, settings: Settings, client: object | None
+    conn: sqlite3.Connection,
+    settings: Settings,
+    client: object | None,
+    now: datetime | None = None,
 ) -> judge.JudgeRun:
     """Judge the unjudged days of the two-week window (notes.txt § Goal model, Judged
     workout). Days scored at the bar (from the raw series, not the stale metrics row) or
@@ -42,7 +45,7 @@ def judge_before(
     skip = scored_days(conn, settings) | {
         row["day_local"] for row in conn.execute("SELECT day_local FROM manual_workouts")
     }
-    return judge.judge_window(conn, settings, client, skip)
+    return judge.judge_window(conn, settings, client, skip, now)
 
 
 def run_recompute(

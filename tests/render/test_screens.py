@@ -13,9 +13,21 @@ from app.render.celebrate import celebrations_for, party_clip, sparkle_clip
 from app.render.font import BODY, SMALL, draw_text, text_width
 from app.render.frame import SIZE, Clip, new_frame, still, upscale
 from app.render.gamma import led_gamma, led_lut
-from app.render.palette import SPINES
+from app.render.palette import SECONDARY, SPINES
 from app.render.rotation import PAGED_FRAME_MS, rotation_clips
-from app.render.screens import as_of_label, render_books, render_today, sleep_text
+from app.render.screens import (
+    AS_OF_Y,
+    LEFT,
+    ZZ,
+    ZZ_X,
+    as_of_label,
+    parked_as_of,
+    render_books,
+    render_parked,
+    render_today,
+    sleep_text,
+)
+from app.render.theme import theme_for
 from app.render.view import DayView
 from app.timeutil import from_utc_iso
 from tests.render import (
@@ -141,7 +153,7 @@ def test_today_states(settings):
     assert frame.getpixel((2, 27)) == sky
     assert not any(p == (255, 60, 50) for p in frame.get_flattened_data())
     missing, _ = load(NO_READING, settings)
-    assert render_today(missing).poster.getpixel((2, 27)) == (34, 36, 54)
+    assert render_today(missing).poster.getpixel((2, 27)) == theme_for(missing).track
     for any_view in (view, short, missing):
         assert render_today(any_view).poster.getpixel((44, 25)) == (255, 255, 255)
 
@@ -273,3 +285,62 @@ def test_every_sparkle_step_is_a_different_picture(win, monkeypatch):
         "the icon starts low and rises"
     )
     assert frames[1].crop((0, 0, SIZE, 4)).getbbox() is not None, "the rays reach the edge"
+
+
+ZZ_LIT = {
+    (ZZ_X + x, AS_OF_Y + y) for y, row in enumerate(ZZ) for x, ch in enumerate(row) if ch == "#"
+}
+ZZ_CLEAR = 2
+PARKED_AS_OF_CASES = (
+    ("2026-09-30T16:59:00Z", "AS OF 12:59PM"),
+    ("2026-09-28T16:59:00Z", "AS OF MON 12:59P"),
+    ("2026-09-24T16:59:00Z", "AS OF THU 12:59P"),
+    ("2026-09-26T02:10:00Z", "AS OF FRI 10:10P"),
+    ("2025-08-31T15:30:00Z", "AS OF 395D AGO"),
+)
+
+
+def parked_views(settings) -> list[tuple[str, DayView, object]]:
+    """Every fixture as it is, plus the widest as-of lines Today can print: the same-day clock,
+    the weekday form at its longest, and a stale push a year old."""
+    cases = [(combo, *load(combo, settings)) for combo in COMBOS]
+    view, _ = load(WEEK_41, settings)
+    for stamp, label in PARKED_AS_OF_CASES:
+        case = replace(view, as_of_utc=stamp)
+        assert as_of_label(case, NOW) == label
+        cases.append((label, case, NOW))
+    return cases
+
+
+def test_the_parked_zz_never_touches_the_as_of_line(settings):
+    """The mark's own pixels are SECONDARY, the rest of its box and two columns before
+    it are black, and the as-of row says the time Today said, with AS OF dropped only when
+    Today's line would run under the mark (the weekday form reaches the frame's edge)."""
+    shortened = 0
+    for name, view, now in parked_views(settings):
+        today = render_today(view, now).poster
+        parked = render_parked(view, now).poster
+        px = parked.load()
+        assert all(px[at] == SECONDARY for at in ZZ_LIT), name
+        box = {(ZZ_X + dx, AS_OF_Y + dy) for dy in range(len(ZZ)) for dx in range(len(ZZ[0]))}
+        gap = {(x, y) for x in range(ZZ_X - ZZ_CLEAR, ZZ_X) for y in range(AS_OF_Y, SIZE)}
+        assert all(px[at] == (0, 0, 0) for at in (box | gap) - ZZ_LIT), name
+        above = (0, 0, SIZE, AS_OF_Y)
+        assert ImageChops.difference(today.crop(above), parked.crop(above)).getbbox() is None
+        as_of = as_of_label(view, now)
+        printed = parked_as_of(as_of)
+        if printed == as_of:
+            row = (0, AS_OF_Y, ZZ_X - ZZ_CLEAR, SIZE)
+            assert ImageChops.difference(today.crop(row), parked.crop(row)).getbbox() is None
+        else:
+            shortened += 1
+            assert as_of.startswith("AS OF ") and printed == as_of.removeprefix("AS OF ")
+            assert LEFT + text_width(as_of, SMALL) + ZZ_CLEAR > ZZ_X
+            expect = new_frame()
+            draw_text(expect, LEFT, AS_OF_Y, printed, SECONDARY, SMALL)
+            row = (0, AS_OF_Y, SIZE, SIZE)
+            assert ImageChops.difference(expect.crop(row), today.crop(row)).getbbox() is not None
+            for at in ZZ_LIT:
+                expect.putpixel(at, SECONDARY)
+            assert ImageChops.difference(expect.crop(row), parked.crop(row)).getbbox() is None
+    assert shortened >= 4
