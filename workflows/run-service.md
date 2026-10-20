@@ -589,7 +589,10 @@ the park is skipped, the sleep goes ahead at 30 s, and the late acknowledgement 
 A tick more than 60 s late starts over at Today whether or not the notice arrived, so a
 Raspberry Pi, or a Mac where the registration failed, still recovers at the next tick.
 
-Log lines (out log):
+Log lines, at INFO, which the service does not write by default (it has no logging config,
+so only WARNING and above reach the logs); the proof of a park is the send log: a `parked`
+row in `/display/sends.json`, then `today`, and `resumes` up by one. The lines, when logging
+is raised to INFO:
 
 ```
 sleep watcher: the panel parks on Today when this host sleeps   # at start; or "not available here"
