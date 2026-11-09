@@ -280,10 +280,12 @@ def test_every_sparkle_step_is_a_different_picture(win, monkeypatch):
         moved = ImageChops.difference(before, after).convert("L").point(lambda v: 255 if v else 0)
         assert moved.histogram()[255] >= 100, f"step {step} to {step + 1} barely moves"
     assert [text for text, *_ in drawn].count("SMALL WIN") == 3, "the label arrives with step 3"
-    low = frames[0].crop((0, 34, SIZE, SIZE)).getbbox()
-    assert low is not None and frames[0].crop((20, 14, 44, 34)).getbbox() is None, (
-        "the icon starts low and rises"
+    assert frames[0].crop((20, 14, 44, 34)).getbbox() is not None, "the icon pops in at home"
+    assert frames[0].crop((26, 36, 38, SIZE)).getbbox() is None, (
+        "no streak trails below the icon (Max, 2026-11-09)"
     )
+    if win == "workout":
+        assert frames[-1].getpixel((32, 27)) == (0, 0, 0), "the disc carries its check mark"
     assert frames[1].crop((0, 0, SIZE, 4)).getbbox() is not None, "the rays reach the edge"
 
 

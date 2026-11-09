@@ -3,8 +3,10 @@
 Wins are celebrated on the device; nothing here is ever shown for a miss. Both clips are
 deterministic (a seeded generator, no clock), so they snapshot-test like any still frame.
 
-Sparkle: the win's own icon rises on a streak, bursts into rays, throws sparks that fall wide
-while the label arrives, and settles among four-point stars.
+Sparkle: the win's own icon pops in small with a glint, bursts into rays, throws sparks that
+fall wide while the label arrives, and settles among four-point stars. No tail, no ring around
+the icon (Max, 2026-11-09: the old rising streak and ringed disc read as a sperm and an egg);
+the workout's disc carries a check mark so it reads as a badge.
 Party: the frame opens as the Week screen's dot row with the last dot missing; that dot drops
 in and bounces, all dots flash, then they throw confetti while "WEEK DONE" rides a rainbow wave.
 
@@ -60,7 +62,6 @@ WIN_LABELS: dict[str, tuple[str, ...]] = {
 WIN_ORDER: tuple[Win, ...] = ("workout", "sleep", "book")
 SPARKLE_BEATS = 5
 ICON_Y = 26
-_LAUNCH_Y = 44
 PARTY_TICKS = 56
 PARTY_STEPS = (3, 11, 13, 17, 28, 44)
 STEP_MS = 300
@@ -114,21 +115,26 @@ def _win_icon(frame: Frame, win: str, grow: float, color: Color = GOLD, cy: int 
                 fill_rect(frame, cx + 2, line_y, cx + half - 2, line_y, dim(TEAL, 0.45))
     else:
         draw_disc(frame, cx, cy, max(1, int(7 * grow)), color)
+        if grow >= 1.0:
+            _check(frame, cx, cy)
+
+
+def _check(frame: Frame, cx: int, cy: int) -> None:
+    """A two-pixel check mark cut out of the workout disc, clear of its centre pixel."""
+    for dx, dy in ((-4, -1), (-3, 0), (-2, 1), (-1, 2), (0, 1), (1, 0), (2, -1), (3, -2), (4, -3)):
+        _put(frame, cx + dx, cy + dy, BLACK)
+        _put(frame, cx + dx, cy + dy + 1, BLACK)
 
 
 def _steps(ticks: list[Frame], steps: tuple[int, ...], poster: int) -> Clip:
     return Clip(tuple(ticks[tick] for tick in steps), (STEP_MS,) * len(steps), poster_index=poster)
 
 
-def _launch_trail(frame: Frame, accent: Color) -> None:
-    """The streak the icon leaves on its way up from the bottom edge."""
+def _pop_glint(frame: Frame, accent: Color) -> None:
+    """The first step's glint: a white star up and right of the small icon, a faint one opposite."""
     cx = SIZE // 2
-    for step, y in enumerate(range(_LAUNCH_Y + 5, SIZE)):
-        shade = dim(accent, max(0.15, 1.0 - step * 0.07))
-        _put(frame, cx, y, WHITE if step < 3 else shade)
-        if step % 3 == 1:
-            _put(frame, cx - 2 - step // 4, y, shade)
-            _put(frame, cx + 2 + step // 4, y, shade)
+    draw_twinkle(frame, cx + 7, ICON_Y - 7, 2, accent)
+    draw_twinkle(frame, cx - 6, ICON_Y + 6, 1, dim(accent, 0.6))
 
 
 def _burst_rays(frame: Frame, accent: Color) -> None:
@@ -162,7 +168,7 @@ def _sparks(
 
 
 def _flourish(frame: Frame, win: str) -> None:
-    """The icon's own gesture on the fourth step: a white rim on the workout's disc, a Z
+    """The icon's own gesture on the fourth step: a glint off the workout's disc, a Z
     drifting off the moon, a star over the book."""
     cx = SIZE // 2
     if win == "sleep":
@@ -171,7 +177,8 @@ def _flourish(frame: Frame, win: str) -> None:
     elif win == "book":
         draw_twinkle(frame, cx, ICON_Y - 10, 2, GOLD)
     else:
-        draw_ring(frame, cx, ICON_Y, 9, WHITE)
+        draw_twinkle(frame, cx + 9, ICON_Y - 8, 2, WHITE)
+        draw_twinkle(frame, cx - 9, ICON_Y - 6, 1, WHITE)
 
 
 def sparkle_clip(
@@ -181,8 +188,8 @@ def sparkle_clip(
     confetti: tuple[Color, ...] = CONFETTI,
 ) -> Clip:
     """The small-win clip, five stills of STEP_MS each, every one a different picture
-    (Max, 2026-10-09: "more dynamic"): the icon rising from the bottom edge on a streak; the
-    burst, rays to the frame's edge; the sparks thrown out as the label arrives; the sparks
+    (Max, 2026-10-09: "more dynamic"): the icon popping in small with a glint; the burst,
+    rays to the frame's edge; the sparks thrown out as the label arrives; the sparks
     falling wide while the icon makes its own gesture; the icon settled among the stars.
     `win` picks the icon and the label; for a workout, `dot` (the week's count including this
     one) colours the disc, its rays and its ring like the Week screen's Nth dot (Max,
@@ -207,14 +214,13 @@ def sparkle_clip(
     for beat in range(SPARKLE_BEATS):
         frame = new_frame()
         if beat == 0:
-            _launch_trail(frame, accent)
-            _win_icon(frame, win, 0.45, accent, cy=_LAUNCH_Y)
+            _win_icon(frame, win, 0.45, accent)
+            _pop_glint(frame, accent)
         elif beat == 1:
             _burst_rays(frame, accent)
             _win_icon(frame, win, 1.3 if win == "workout" else 1.0, accent)
         else:
             if beat == 2:
-                draw_ring(frame, SIZE // 2, ICON_Y, 13, accent)
                 _sparks(frame, sparks, 20, 0, star_floor)
             elif beat == 3:
                 _sparks(frame, sparks, 33, 5, star_floor)

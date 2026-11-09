@@ -59,3 +59,30 @@ def test_on_a_mac_it_registers_takes_a_notice_through_the_c_callback_and_lets_go
     w.stop()
     assert w._thread is not None and not w._thread.is_alive()
     assert sleepwatch.ACKNOWLEDGED == (WILL_SLEEP, CAN_SLEEP)
+
+
+def _pmset(stdout: str):
+    import subprocess
+
+    return lambda *a, **k: subprocess.CompletedProcess(a, 0, stdout=stdout)
+
+
+def test_user_present_reads_pmsets_user_is_active():
+    import subprocess
+
+    from app.jobs.sleepwatch import user_present
+
+    awake = "Assertion status system-wide:\n   UserIsActive                   1\n"
+    dark = "Assertion status system-wide:\n   UserIsActive                   0\n"
+    assert user_present(_pmset(awake)) is True
+    assert user_present(_pmset(dark)) is False
+    assert user_present(_pmset("no such line")) is True, "a host pmset cannot read is present"
+
+    def missing(*a, **k):
+        raise FileNotFoundError("pmset")
+
+    def hung(*a, **k):
+        raise subprocess.TimeoutExpired("pmset", 5)
+
+    assert user_present(missing) is True, "the Pi has no pmset"
+    assert user_present(hung) is True

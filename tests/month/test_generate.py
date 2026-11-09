@@ -308,6 +308,22 @@ def test_a_tradition_named_in_paraphrase_passes_and_a_digit_in_the_theme_does_no
     assert generate.judge(json.dumps(caption), MONTH) == "day 9 caption: ban: 'grind'"
 
 
+def test_capitals_in_a_caption_or_title_are_not_shouting_and_bans_still_apply(db, keyed):
+    """November 2026: both runs were rejected for "second exclamatory clause" on a day
+    caption: captions are drawn in capitals, the model writes them so, and two clauses of
+    capital words read as shouting."""
+    feature = feature_object(MONTH)
+    feature["title"] = "FOG. RAIN."
+    feature["days"][3]["caption"] = "FOG. THEN RAIN."
+    assert not isinstance(generate.judge(json.dumps(feature), MONTH), str)
+    feature["days"][8]["caption"] = "DAILY GRIND"
+    assert generate.judge(json.dumps(feature), MONTH) == "day 9 caption: ban: 'grind'"
+    shouted = with_note("FOG. THEN RAIN.")
+    assert generate.judge(shouted, MONTH) == "day 3 note: ban: second exclamatory clause", (
+        "a note keeps the shouting rule"
+    )
+
+
 def seed_health(client) -> None:
     from tests.conftest import post_fixture
 

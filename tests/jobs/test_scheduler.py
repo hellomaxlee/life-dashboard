@@ -289,7 +289,7 @@ def test_summary_catch_up_respects_the_monthly_cap(db, jobs_settings, monkeypatc
     assert db.execute("SELECT COUNT(*) FROM model_spend").fetchone()[0] == 0
 
 
-def test_month_feature_job_is_registered_daily_at_twenty_past_midnight(jobs_settings):
+def test_month_feature_job_is_registered_hourly_at_twenty_past(jobs_settings):
     opener = lambda: open_db(jobs_settings.storage.db_path)  # noqa: E731
     scheduler = jobs.build_scheduler(jobs_settings, opener)
     scheduler.start(paused=True)
@@ -297,10 +297,11 @@ def test_month_feature_job_is_registered_daily_at_twenty_past_midnight(jobs_sett
         job = scheduler.get_job(jobs.MONTH_JOB)
         assert jobs.MONTH_JOB in jobs.CORE_JOBS
         assert job.max_instances == 1 and job.coalesce
-        assert job.misfire_grace_time == jobs.MONTH_MISFIRE_GRACE_S == 20 * 3600
+        assert job.misfire_grace_time == jobs.MONTH_MISFIRE_GRACE_S == 30 * 60
         assert str(job.trigger.timezone) == "America/New_York"
-        fire = job.trigger.get_next_fire_time(None, datetime(2026, 10, 31, 12, 0, tzinfo=UTC))
-        assert fire == datetime(2026, 11, 1, 0, 20, tzinfo=ZoneInfo("America/New_York"))
+        tz = ZoneInfo("America/New_York")
+        fire = job.trigger.get_next_fire_time(None, datetime(2026, 11, 9, 18, 25, tzinfo=tz))
+        assert fire == datetime(2026, 11, 9, 19, 20, tzinfo=tz)
     finally:
         scheduler.shutdown(wait=False)
 
@@ -322,7 +323,7 @@ def test_month_feature_catch_up_runs_once_after_a_start_without_one(db, jobs_set
         scheduler.start(paused=True)
         try:
             due = scheduler.get_job(jobs.MONTH_JOB).next_run_time
-            return None if (due.hour, due.minute) == jobs.MONTH_TIME else due
+            return None if due.minute == jobs.MONTH_MINUTE else due
         finally:
             scheduler.shutdown(wait=False)
 
@@ -362,6 +363,33 @@ def test_month_feature_job_never_calls_over_the_cap_or_twice_a_day(db, jobs_sett
     assert jobs.run_month_feature(jobs_settings, opener) == "skipped"
     assert len(fake.requests) == 2
     assert db.execute("SELECT COUNT(*) FROM model_spend").fetchone()[0] == 2
+
+
+def test_month_feature_job_defers_in_a_dark_wake_and_records_no_attempt(
+    db, jobs_settings, monkeypatch
+):
+    """November 2026: three runs started in two-second dark wakes, the host slept mid-call,
+    and the three ReadTimeouts used up the month's automatic attempts."""
+    from app.month import generate
+    from tests.month.conftest import FakeClient, feature_text, reply
+
+    now = datetime(2026, 11, 1, 0, 20, tzinfo=ZoneInfo(jobs_settings.home_tz))
+    monkeypatch.setattr(jobs, "now_utc", lambda: now.astimezone(UTC))
+    opener = lambda: open_db(jobs_settings.storage.db_path)  # noqa: E731
+    fake = FakeClient(reply(feature_text("2026-11")))
+    monkeypatch.setattr(generate, "make_client", lambda settings: fake)
+
+    monkeypatch.setattr(jobs, "user_present", lambda: False)
+    assert jobs.run_month_feature(jobs_settings, opener) == jobs.MONTH_DEFERRED
+    assert fake.requests == []
+    assert db.execute("SELECT COUNT(*) FROM month_feature_attempts").fetchone()[0] == 0
+
+    monkeypatch.setattr(jobs, "user_present", lambda: True)
+    assert jobs.run_month_feature(jobs_settings, opener) == "generated"
+    assert len(fake.requests) == 1
+
+    monkeypatch.setattr(jobs, "user_present", lambda: False)
+    assert jobs.run_month_feature(jobs_settings, opener) == "stored", "a stored month never defers"
 
 
 def test_month_feature_catch_up_runs_when_the_db_cannot_say(jobs_settings, caplog):

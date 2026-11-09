@@ -128,15 +128,18 @@ def extract_object(text: str) -> dict | None:
 def voice_problem(feature: MonthFeature) -> str | None:
     """The first text that breaks the voice rules, or None. The ban list is the daily
     summary's (`gate.check_ban`); words under a person's name are found with the gate's
-    attribution patterns. The theme is web-only, so the spec lets digits through; not here."""
-    texts = [("title", feature.title), ("theme", feature.theme)]
+    attribution patterns. The theme is web-only, so the spec lets digits through; not here.
+    The title and captions are drawn in capitals whatever their case, so the ban list reads
+    them lowercased: capitals there are not shouting (November 2026: a two-clause capital
+    caption such as "FOG. THEN RAIN." read as two exclamatory clauses; both runs rejected)."""
+    texts = [("title", feature.title, True), ("theme", feature.theme, False)]
     for plate in feature.days:
-        texts.append((f"day {plate.day} caption", plate.caption))
-        texts.append((f"day {plate.day} note", plate.note))
-    for where, text in texts:
+        texts.append((f"day {plate.day} caption", plate.caption, True))
+        texts.append((f"day {plate.day} note", plate.note, False))
+    for where, text, in_capitals in texts:
         if not text:
             continue
-        banned = gate.check_ban(text)
+        banned = gate.check_ban(text.lower() if in_capitals else text)
         if banned:
             return f"{where}: {banned[0]}"
         if gate.ATTRIBUTION.search(text) or (gate.quotations_in(text) and gate.persons_in(text)):

@@ -34,7 +34,7 @@ from app.jobs.rotation import (
     DeviceRotation,
     device_adapter,
 )
-from app.jobs.sleepwatch import SleepWatcher
+from app.jobs.sleepwatch import SleepWatcher, user_present
 from app.metrics.job import RECOMPUTE_JOB, ROLLOVER_JOB, run_recompute
 from app.month import store as month_store
 from app.month.generate import ensure_month_feature
@@ -60,8 +60,9 @@ CITY_JOBS = frozenset({CITY_TRANSIT_JOB, CITY_WEATHER_JOB})
 CITY_ERRORS = (city_fetch.FetchError, CityParseError)
 CITY_TRANSIT_FIRST_DELAY = timedelta(seconds=20)
 CITY_WEATHER_FIRST_DELAY = timedelta(seconds=30)
-MONTH_TIME = (0, 20)
-MONTH_MISFIRE_GRACE_S = 20 * 3600
+MONTH_MINUTE = 20
+MONTH_MISFIRE_GRACE_S = 30 * 60
+MONTH_DEFERRED = "deferred"
 MONTH_CATCHUP_DELAY = timedelta(minutes=5)
 SUMMARY_MISFIRE_GRACE_S = 12 * 3600
 SUMMARY_CATCHUP_DELAY = timedelta(minutes=4)
@@ -261,9 +262,14 @@ def summary_overdue(settings: Settings, open_conn: OpenConn, now: datetime) -> b
 
 def run_month_feature(settings: Settings, open_conn: OpenConn) -> str:
     """Author this home-timezone month's feature if it has none. A stored feature, the
-    attempt guard and the monthly cap each mean no model call."""
+    attempt guard and the monthly cap each mean no model call. While no user is at the host
+    (a dark wake) the run is deferred to the next hour and records no attempt: the host would
+    sleep again seconds into the call."""
     moment = now_utc()
     month = local_day(moment, settings.home_tz)[:7]
+    if month_feature_missing(settings, open_conn, moment) and not user_present():
+        log.info("%s %s [%s] no user at the host", MONTH_JOB, month, MONTH_DEFERRED)
+        return MONTH_DEFERRED
     conn = open_conn()
     try:
         result = ensure_month_feature(conn, settings, month, now=moment)
@@ -275,7 +281,7 @@ def run_month_feature(settings: Settings, open_conn: OpenConn) -> str:
 
 def month_feature_missing(settings: Settings, open_conn: OpenConn, now: datetime) -> bool:
     """True when this month has no stored feature, or the db cannot say. A start in the
-    middle of a month would otherwise wait for 00:20."""
+    middle of a month would otherwise wait for the next hourly run."""
     try:
         conn = open_conn()
         try:
@@ -407,7 +413,7 @@ def build_scheduler(
         first_month = {"next_run_time": moment + MONTH_CATCHUP_DELAY}
     scheduler.add_job(
         guarded(MONTH_JOB, lambda: run_month_feature(settings, open_conn), stats),
-        CronTrigger(hour=MONTH_TIME[0], minute=MONTH_TIME[1], timezone=tz),
+        CronTrigger(minute=MONTH_MINUTE, timezone=tz),
         id=MONTH_JOB,
         misfire_grace_time=MONTH_MISFIRE_GRACE_S,
         **first_month,

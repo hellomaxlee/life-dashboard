@@ -20,6 +20,8 @@ from __future__ import annotations
 import ctypes
 import ctypes.util
 import logging
+import re
+import subprocess
 import sys
 import threading
 from collections.abc import Callable
@@ -32,12 +34,33 @@ ACKNOWLEDGED = (WILL_SLEEP, CAN_SLEEP)
 IOKIT = "/System/Library/Frameworks/IOKit.framework/IOKit"
 CORE_FOUNDATION = "/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation"
 START_WAIT_S = 2.0
+PMSET_TIMEOUT_S = 5.0
+_USER_ACTIVE = re.compile(r"^\s*UserIsActive\s+(\d+)\s*$", re.MULTILINE)
 
 log = logging.getLogger(__name__)
 
 _Callback = ctypes.CFUNCTYPE(
     None, ctypes.c_void_p, ctypes.c_uint32, ctypes.c_uint32, ctypes.c_void_p
 )
+
+
+def user_present(run: Callable[..., subprocess.CompletedProcess] = subprocess.run) -> bool:
+    """False only when macOS says no user is active: a dark wake, the lid closed. A
+    multi-minute model call started then dies when the host drops back to sleep two seconds
+    later (all three November 2026 month runs, power log against the attempt rows). True
+    anywhere pmset cannot answer, so a host that never sleeps (the Pi) is always present."""
+    try:
+        out = run(
+            ["pmset", "-g", "assertions"],
+            capture_output=True,
+            text=True,
+            timeout=PMSET_TIMEOUT_S,
+            check=False,
+        ).stdout
+    except (OSError, subprocess.SubprocessError):
+        return True
+    match = _USER_ACTIVE.search(out or "")
+    return match is None or match.group(1) != "0"
 
 
 class SleepWatcher:
