@@ -85,18 +85,9 @@ HEADERS: dict[str, Color] = {"today": VIOLET, "week": CORAL, "books": GOLD}
 VOICE: Color = (255, 212, 120)
 ATTRIBUTION: Color = GOLD
 
-# An unread shelf slot is this fraction of the spine colour it will take when read. Through
-# the panel curve 0.18 keeps every tint under half the lit spine's luma (worst 0.46) with its
-# hue intact (HSV saturation at least 0.32), at about the weight the old grey track had.
-SHELF_TINT = 0.18
-
 
 def dim(color: Color, factor: float) -> Color:
     return (int(color[0] * factor), int(color[1] * factor), int(color[2] * factor))
-
-
-def shelf_tint(color: Color) -> Color:
-    return dim(color, SHELF_TINT)
 
 
 def _to_linear(channel: int) -> float:

@@ -78,10 +78,10 @@ Colour (approved 2026-10-05). Each rotation screen's header word wears its own a
 `palette.HEADERS`: `TODAY`/`YESTERDAY` violet, `WEEK` coral, `BOOKS` gold; the right-hand stamp
 (weekday and date, `0 OF 3`, the year) stays TEXT, and the small field labels inside a screen
 (`SLEEP`, `STEPS`, `CLAUDE`, `WK STREAK`) stay LABEL blue. City keeps its LABEL header and Month
-its feature palette. On the shelf, an unread slot is the spine colour it will take when read at
-`SHELF_TINT` (0.18): through the panel curve every tint is under half the lit spine's luma
-(worst 0.46), keeps its hue (HSV saturation at least 0.32), and sits at about the old grey
-track's weight, so the shelf reads as colour waiting to fill, not as lit. The summary is painted
+its feature palette. On the shelf, a read book is its lit spine and every unread slot is one quiet tone, the month
+theme's track (`theme.py`; TRACK without a feature), so the read books carry the colour and
+the empty slots read as structure (Max, 2026-11-09; the per-spine tints at 0.18 before it read
+as olive, maroon and slate on the panel). The summary is painted
 in three voices by character (Max, 2026-10-05: the quotation in white, the author in gold,
 his own clause in a third colour): a double-quoted quotation, marks included, in TEXT; the
 `- Author` after a closing mark in GOLD to the end of its clause; and Max's own words around

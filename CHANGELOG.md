@@ -3,6 +3,13 @@
 Running log, newest first. The Lead reads this to find root causes and prioritize.
 Entry format: `## YYYY-MM-DD · <Title> (<Author>)` followed by terse bullets. Name the fixture combo on render/summary cycles.
 
+## 2026-11-09 · One quiet tone for the unread shelf (Lucía Ferrer; proposal Mei-Lin Tsao; build Diego Almeida)
+- Max: "yes, do the one-tone unread shelf" (Mei-Lin's open proposal from the colour-system round).
+- `app/render/screens.py`: a read book is its lit spine; every unread slot is the month theme's track (TRACK without a feature), so the empty slots read as structure and the read books carry the colour. `SHELF_TINT` and `shelf_tint` removed from palette.py; render.md and notes.txt § Design updated. The ring tone was rendered too and competed with the read spines at 1x; through the panel the track sits at 0.57 of the dimmest lit spine's luma, the ring at 0.80.
+- Fixture combos for the eye test: the real 2026-11-09 (2 of 12 over ten plum slots in November's tint) and all eleven Books snapshots old over new at 1x under gamma, diffs confined to the shelf (y 27 to 41) and starting where the read books end; 11 snapshots regenerated, 5 no-feature digests re-pinned, README books image and rotation strip refreshed.
+- Gates: ruff clean; full suite 1666 passed (two shelf-tint tests replaced by two one-tone tests). Mutants red: the per-spine tint back (1), the stock track ignoring the month theme (17), a track as bright as the ring (1). Mid-round a mutant cleanup ran `git checkout` on palette.py and dropped the uncommitted tint removal; re-applied and diffed against HEAD before the suite.
+- No model calls; spend unchanged at $1.5182 of $3. Service restart needed.
+
 ## 2026-11-09 · A colour system: one family, roles before values; the calendar takes the month's theme (Ingrid Halvorsen; design Mei-Lin Tsao, new hire; build Diego Almeida; QA Lucía Ferrer)
 - Max: "can you calibrate the calendar boxes screen with the month's theme color?", then "Let's work on the colors. Vibrant, subtle when appropriate, concordant, sleek. Make sure to follow color theory", "We should orient ourselves as designers as well", "hire a designer and run the entire process to the end", "It's not just colors but design choices in general ... Make sure to not compromise on utility".
 - Hired Mei-Lin Tsao (Associate, colour systems; `agents/[Associate] Mei-Lin Tsao.md`). Her brief and school (Swiss on an emissive grid) are in `notes.txt § Design`.

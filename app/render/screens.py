@@ -52,7 +52,6 @@ from app.render.palette import (
     WOOD,
     YELLOW,
     dim,
-    shelf_tint,
 )
 from app.render.theme import theme_for
 from app.render.usage import draw_usage, usage_state
@@ -406,7 +405,11 @@ def _draw_book_count(frame: Frame, count: int, target: int) -> None:
 
 
 def _books_base(view: DayView) -> Frame:
+    """The count over the shelf. A read book is its lit spine; an unread slot is the month
+    theme's track, one quiet tone for every slot (Max, 2026-11-09, on Mei-Lin's proposal: the
+    ten dim tints of the spines-to-be read as olive, maroon and slate on the panel)."""
     frame = new_frame()
+    theme = theme_for(view)
     draw_text(frame, LEFT, 2, "BOOKS", HEADERS["books"], SMALL)
     draw_text_right(frame, RIGHT, 2, view.day_local[:4], TEXT, SMALL)
     read = _count(view.books_ytd)
@@ -428,7 +431,7 @@ def _books_base(view: DayView) -> Frame:
             fill_rect(frame, x0, top, x0 + spine - 1, 40, color)
             fill_rect(frame, x0, top + 2, x0 + spine - 1, top + 2, dim(color, 0.45))
         else:
-            fill_rect(frame, x0, top, x0 + spine - 1, 40, shelf_tint(color))
+            fill_rect(frame, x0, top, x0 + spine - 1, 40, theme.track)
     fill_rect(frame, LEFT, 41, RIGHT, 42, WOOD)
     return frame
 

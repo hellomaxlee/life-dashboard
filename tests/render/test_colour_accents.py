@@ -10,20 +10,18 @@ import pytest
 
 from app.render.font import BODY, text_width
 from app.render.frame import Color, Frame
-from app.render.gamma import led_gamma, led_lut
+from app.render.gamma import led_lut
 from app.render.palette import (
     ATTRIBUTION,
     GOLD,
     HEADERS,
     LABEL,
-    SHELF_TINT,
     SPINES,
     TEXT,
     TRACK,
     VIOLET,
     VOICE,
     WOOD,
-    shelf_tint,
 )
 from app.render.rotation import rotation_clips
 from app.render.screens import (
@@ -34,6 +32,7 @@ from app.render.screens import (
     summary_colors,
     wrap_pages,
 )
+from app.render.theme import theme_for, theme_of
 from app.render.view import DayView
 from app.timeutil import from_utc_iso
 from tests.render import COMBOS, WEEK_41, load, record_text
@@ -105,42 +104,30 @@ def test_yesterday_header_is_violet_too(settings):
     assert lit_colours(frame, (41, 2, 64, 7)) == {TEXT}
 
 
-# 2. the shelf: unread slots are dim tints of the spine they will become
+# 2. the shelf: a read book is its lit spine, every unread slot one quiet tone
 
 
-def test_every_unread_slot_is_the_tint_of_its_positions_spine(settings):
+def test_every_unread_slot_is_the_month_themes_track(settings):
+    """Max, 2026-11-09: one tone for unread slots instead of a tint of each spine-to-be."""
     view, _ = load(WEEK_41, settings)
-    for read in (0, 3, 7, 12, 15, None):
-        frame = render_books(replace(view, books_ytd=read)).poster
-        for index in range(12):
-            spine = SPINES[index % len(SPINES)]
-            expected = spine if index < (read or 0) else shelf_tint(spine)
-            assert frame.getpixel((2 + index * 5, 40)) == expected, (read, index)
-            assert frame.getpixel((2 + index * 5 + 3, 40)) == expected, (read, index)
-        assert frame.getpixel((2, 41)) == WOOD
-        assert TRACK not in lit_colours(frame, (0, 24, 64, 43))
+    for case in (view, replace(view, month_feature=None)):
+        track = theme_for(case).track
+        for read in (0, 3, 7, 12, 15, None):
+            frame = render_books(replace(case, books_ytd=read)).poster
+            for index in range(12):
+                expected = SPINES[index % len(SPINES)] if index < (read or 0) else track
+                assert frame.getpixel((2 + index * 5, 40)) == expected, (read, index)
+                assert frame.getpixel((2 + index * 5 + 3, 40)) == expected, (read, index)
+            assert frame.getpixel((2, 41)) == WOOD
+    assert theme_for(replace(view, month_feature=None)).track == TRACK
 
 
-def test_shelf_tint_is_dark_but_still_coloured_through_the_panel_curve():
-    assert SHELF_TINT == 0.18
+def test_an_unread_slot_is_quiet_but_there_through_the_panel_curve():
     night = led_lut(brightness=0.2)
-    for spine in SPINES:
-        tint, lit = on_panel(shelf_tint(spine)), on_panel(spine)
-        assert luma(tint) / luma(lit) < 0.5, (spine, tint, lit)
-        assert saturation(tint) > 0.3, (spine, tint)
-        assert max(tint) - min(tint) > 30, (spine, tint)
-        assert abs(luma(tint) - luma(on_panel(TRACK))) < 25, (spine, tint)
-        assert max(night[channel] for channel in shelf_tint(spine)) > 0, spine
-    tints = {shelf_tint(spine) for spine in SPINES}
-    assert len(tints) == len(SPINES)
-
-
-def test_the_shelf_tints_survive_the_gamma_emulator_in_a_rendered_frame(settings):
-    view, _ = load(WEEK_41, settings)
-    shown = led_gamma(render_books(replace(view, books_ytd=0)).poster)
-    colours = [shown.getpixel((2 + index * 5, 40)) for index in range(12)]
-    assert len(set(colours)) == len(SPINES)
-    assert all(saturation(colour) > 0.3 for colour in colours)
+    dimmest_spine = min(luma(on_panel(spine)) for spine in SPINES)
+    for track in (TRACK, theme_of(((0xE8, 0x5C, 0xFF),)).track):
+        assert luma(on_panel(track)) < 0.6 * dimmest_spine, track
+        assert max(night[channel] for channel in track) > 0, "never dark at night"
 
 
 # 3. the summary's three voices
