@@ -26,6 +26,7 @@ from app.render.font import SMALL, Font, draw_text, text_width
 from app.render.frame import SIZE, Clip, Color, Frame, new_frame, still
 from app.render.palette import LABEL, TEXT, TRACK, WHITE, dim, hue
 from app.render.screens import fill_rect
+from app.render.theme import STOCK, MonthTheme, theme_for
 from app.render.view import DayView
 
 PLATE_MS = 6000
@@ -65,7 +66,7 @@ CELL_PITCH = 8
 GRID_X = (SIZE - (7 * CELL_PITCH - (CELL_PITCH - CELL))) // 2
 HEADER_GAP = 3
 CALENDAR_TOP = 8
-PAST_SHADE = 0.5
+PAST_SHADE = 0.7
 
 
 def legible(color: Color) -> Color:
@@ -168,10 +169,16 @@ def month_color(month: int) -> Color:
     return hue((month - 1) / 12 + 0.55)
 
 
-def _calendar_frame(day_local: str) -> Frame:
+def _calendar_frame(day_local: str, theme: MonthTheme = STOCK) -> Frame:
+    """With a month theme (a stored feature), the month's name and the days gone take its
+    accent and the days to come its tinted track (Max, 2026-11-09: "calibrate the calendar
+    boxes screen with the month's theme color"); without one, the month's own hue and the
+    stock track. The days gone are at PAST_SHADE: at 0.5 an accent and its track sat too close
+    at 1x and the palette's lighter hues went to mud, and at full strength a pale accent hides
+    today's white."""
     frame = new_frame()
     day = date.fromisoformat(day_local)
-    color = month_color(day.month)
+    color = theme.accent or month_color(day.month)
     name, year = MONTH_NAMES[day.month - 1], f"{day.year:04d}"
     if text_width(f"{name} {year}") > TEXT_WIDTH:
         name = name[:3]
@@ -189,7 +196,7 @@ def _calendar_frame(day_local: str) -> Frame:
         elif n < day.day:
             shade = dim(color, PAST_SHADE)
         else:
-            shade = TRACK
+            shade = theme.track
         fill_rect(frame, x, y, x + CELL - 1, y + CELL - 1, shade)
     return frame
 
@@ -203,5 +210,5 @@ def render_month(view: DayView, now: datetime | None = None) -> Clip:
     if found is None:
         return still(_calendar_frame(view.day_local))
     feature, plate = found
-    frames = (_plate_frame(feature, plate), _calendar_frame(view.day_local))
+    frames = (_plate_frame(feature, plate), _calendar_frame(view.day_local, theme_for(view)))
     return Clip(frames, (PLATE_MS, CALENDAR_MS))

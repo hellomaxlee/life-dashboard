@@ -337,7 +337,7 @@ def render_today(view: DayView, now: datetime | None = None) -> Clip:
         if filled:
             fill_rect(frame, LEFT, 26, LEFT + filled - 1, 28, color)
         draw_text(frame, LEFT, 32, "SLEEP", LABEL, SMALL)
-        draw_text_right(frame, RIGHT, 32, sleep_goal_label(view), TEXT, SMALL)
+        draw_text_right(frame, RIGHT, 32, sleep_goal_label(view), SECONDARY, SMALL)
     fill_rect(frame, target_x, 25, target_x, 29, WHITE)
     max_x = LEFT + int(view.sleep_max_hours / SLEEP_BAR_HOURS * 60)
     if target_x < max_x <= RIGHT:

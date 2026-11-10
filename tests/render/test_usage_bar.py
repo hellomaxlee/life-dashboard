@@ -11,6 +11,7 @@ from PIL import Image, ImageChops
 from app.render.font import SMALL, draw_text
 from app.render.frame import new_frame
 from app.render.gamma import led_gamma
+from app.render.palette import AMBER, RED
 from app.render.rotation import device_parts
 from app.render.screens import render_week
 from app.render.theme import theme_for
@@ -20,8 +21,6 @@ from app.timeutil import from_utc_iso, to_utc_iso
 from tests.render import NO_READING, RED_91, STALE, WEEK_41, WEEK_COMPLETE, load
 
 GREEN = (60, 220, 90)
-AMBER = (255, 170, 0)
-RED = (255, 60, 50)
 TRACK = (34, 36, 54)
 BAR_ROWS = (42, 43, 44)
 BAR_X = range(2, 62)

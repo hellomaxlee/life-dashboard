@@ -92,8 +92,8 @@ def test_a_palette_of_greys_has_no_accent_and_keeps_the_stock_tones(settings):
 
 def test_feature_fixtures_without_their_feature_render_exactly_as_before_the_theme(settings):
     """Digests of the five feature fixtures rendered with month_feature=None, taken from the
-    tree before theme.py existed. The five no-feature fixtures and the empty view are held by
-    test_snapshots on their untouched snapshots."""
+    tree before theme.py existed and re-pinned with the colour system (2026-11-09). The five
+    no-feature fixtures and the empty view are held by test_snapshots on their snapshots."""
     pinned = json.loads(NO_FEATURE_DIGESTS.read_text())
     combos = feature_combos(settings)
     assert combos, "no fixture carries a month feature"

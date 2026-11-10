@@ -13,6 +13,7 @@ from app.render.adapters.pixoo import PixooAdapter
 from app.render.celebrate import earned_wins
 from app.render.font import BODY, SMALL, text_width
 from app.render.frame import Clip, new_frame
+from app.render.palette import AMBER, RED
 from app.render.rotation import render_screen
 from app.render.screens import (
     as_of_label,
@@ -32,8 +33,6 @@ from tools.render import main as render_main
 
 HOST = "192.168.1.50"
 GREEN = (60, 220, 90)
-AMBER = (255, 170, 0)
-RED = (255, 60, 50)
 TRACK = (34, 36, 54)
 NOON = from_utc_iso("2026-09-30T16:00:00Z")
 

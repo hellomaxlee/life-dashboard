@@ -64,7 +64,7 @@ Rules that survive any refactor. Break one and the dashboard is wrong even if th
 Source of truth: `/agent-creation` (roster contract) and `/performance-review` (review cycle).
 - **Lead:** Ingrid Halvorsen. Reads `CHANGELOG.md` and `notes.txt` first, frames the task as verifiable claims, sets acceptance criteria before work starts, closes issues only after verification.
 - **No Engagement Partner** (personal, single-user; no cost or market dimension beyond the model budget, which Ingrid owns).
-- **Arbitration:** Bartek Zieliński owns data-truth and metric-semantics calls; Lucía Ferrer owns display, legibility, and hardware calls; Ingrid owns what-counts-as-progress and the summary's voice (Theodora drafts, Ingrid ratifies); Ingrid resolves cross-cutting calls. Device purchase is Max's call only.
+- **Arbitration:** Bartek Zieliński owns data-truth and metric-semantics calls; Lucía Ferrer owns display, legibility, and hardware calls (Mei-Lin Tsao drafts colour and design, `notes.txt § Design`; Lucía ratifies what the panel can show); Ingrid owns what-counts-as-progress and the summary's voice (Theodora drafts, Ingrid ratifies); Ingrid resolves cross-cutting calls. Device purchase is Max's call only.
 - **Flow:** Lead frames → Associates build → Managers QA → a Manager commits + pushes to `dev` → one bullet per contributing agent's log and one CHANGELOG entry.
 - **Branching:** `dev` is the working branch. `main` is never committed to directly (pre-push hook blocks it); promote via `dev → main` PR only when Max asks.
 - **Review** every 15 pushes or via `/performance-review`.

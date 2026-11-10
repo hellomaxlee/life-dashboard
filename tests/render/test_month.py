@@ -187,10 +187,36 @@ def test_the_calendar_is_the_last_page_of_every_month_with_or_without_a_feature(
         bare = render_month(DayView(day_local=day), NOW)
         assert len(bare.frames) == 1 and not bare.animated, "no feature: the calendar alone"
         rich = render_month(view_on(day, feature), NOW)
-        assert rich.frames[-1].tobytes() == bare.poster.tobytes(), "the same calendar, last"
+        assert lit(rich.frames[-1]) == lit(bare.poster), "the same calendar, last"
         assert rich.durations_ms[-1] == CALENDAR_MS
         assert rich.frames[0].tobytes() != bare.poster.tobytes(), "the plate still leads"
         assert [len(part.frames) for part in device_parts(rich)] == [1] * len(rich.frames)
+
+
+def lit(frame) -> set[tuple[int, int]]:
+    return {(x, y) for x in range(SIZE) for y in range(SIZE) if frame.getpixel((x, y)) != BLACK}
+
+
+def test_the_calendar_takes_the_month_themes_accent_and_track():
+    """Max, 2026-11-09: "calibrate the calendar boxes screen with the month's theme color"."""
+    from app.render.palette import dim
+    from app.render.theme import theme_of
+
+    feature = sample()
+    theme = theme_of(tuple(feature.palette))
+    day = "2026-10-14"
+    _, cells = calendar_layout(day)
+    calendar_page = render_month(view_on(day, feature), NOW).frames[-1]
+    centre = {n: (x + 2, y + 2) for n, (x, y) in cells.items()}
+    assert calendar_page.getpixel(centre[13]) == dim(theme.accent, month_screen.PAST_SHADE)
+    assert calendar_page.getpixel(centre[14]) == WHITE
+    assert calendar_page.getpixel(centre[15]) == theme.track
+    assert theme.track != TRACK
+    greys = replace(feature, palette=tuple((v, v, v) for v, *_ in feature.palette))
+    grey_page = render_month(view_on(day, greys), NOW).frames[-1]
+    assert grey_page.tobytes() == render_month(DayView(day_local=day), NOW).poster.tobytes(), (
+        "a palette with no hue leaves the calendar stock"
+    )
 
 
 def test_the_longest_text_the_spec_allows_never_leaves_the_frame(monkeypatch):

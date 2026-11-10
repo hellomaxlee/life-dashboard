@@ -13,7 +13,7 @@ from app.render.celebrate import celebrations_for, party_clip, sparkle_clip
 from app.render.font import BODY, SMALL, draw_text, text_width
 from app.render.frame import SIZE, Clip, new_frame, still, upscale
 from app.render.gamma import led_gamma, led_lut
-from app.render.palette import SECONDARY, SPINES
+from app.render.palette import RED, SECONDARY, SPINES
 from app.render.rotation import PAGED_FRAME_MS, rotation_clips
 from app.render.screens import (
     AS_OF_Y,
@@ -151,7 +151,7 @@ def test_today_states(settings):
     short, _ = load(RED_91, settings)
     frame = render_today(short).poster
     assert frame.getpixel((2, 27)) == sky
-    assert not any(p == (255, 60, 50) for p in frame.get_flattened_data())
+    assert not any(p == RED for p in frame.get_flattened_data())
     missing, _ = load(NO_READING, settings)
     assert render_today(missing).poster.getpixel((2, 27)) == theme_for(missing).track
     for any_view in (view, short, missing):

@@ -13,13 +13,13 @@ import pytest
 
 from app.render.font import BODY, text_width
 from app.render.frame import Clip, new_frame
+from app.render.palette import AMBER
 from app.render.screens import render_books, render_today, render_week
 from app.render.theme import theme_for
 from app.render.view import ClaudeUsage, DayView, view_from_metrics
 from app.timeutil import from_utc_iso, to_utc_iso
 from tests.render import COMBOS, WEEK_41, load
 
-AMBER = (255, 170, 0)
 TRACK = (34, 36, 54)
 LINE_109 = (
     "A hotel-gym session with no heart-rate data, so no dot; 6.9 h of sleep. "
