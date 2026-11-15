@@ -6,17 +6,28 @@ python -m tools.month --force              author it again (skips the attempt gu
 python -m tools.month --show               print the stored feature; nothing is called
 python -m tools.month --dry-run            print the request's size, its worst-case cost and the
                                            cap check; nothing is called or written
+python -m tools.month --install FILE       store a feature drafted by hand (a JSON file in the
+                                           feature's own shape) for the month it names, after the
+                                           same spec and voice checks a model reply gets; no call
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import sys
+from pathlib import Path
 
 from app.config import load_settings
 from app.db import SchemaMismatch, connect_live
 from app.month import store
-from app.month.generate import MAX_CALLS, build_request, ensure_month_feature, guard_reason
+from app.month.generate import (
+    MAX_CALLS,
+    build_request,
+    ensure_month_feature,
+    guard_reason,
+    judge,
+)
 from app.month.spec import MONTH, MonthFeature
 from app.summary import spend
 from app.timeutil import local_day, now_utc
@@ -28,6 +39,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--force", action="store_true", help="author a stored month again")
     parser.add_argument("--show", action="store_true", help="print the stored feature only")
     parser.add_argument("--dry-run", action="store_true", help="price the request, call nothing")
+    parser.add_argument(
+        "--install", metavar="FILE", help="store a drafted feature from a JSON file"
+    )
     args = parser.parse_args(argv)
     settings = load_settings()
     today = local_day(now_utc(), settings.home_tz)
@@ -41,6 +55,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"refusing: {exc}", file=sys.stderr)
         return 2
     try:
+        if args.install:
+            return install(conn, args.install)
         if args.show:
             return show(conn, month)
         if args.dry_run:
@@ -66,6 +82,35 @@ def print_header(feature: MonthFeature, source: tuple[str, str | None] | None) -
     print(f"  theme: {feature.theme}")
     if source is not None:
         print(f"  source: {source[0]} ({source[1] or 'no model'})")
+
+
+DRAFTED = "drafted"
+
+
+def install(conn, path: str) -> int:
+    """Store the feature in `path` for the month it names. It must pass what a model reply
+    must (`judge`: the spec with a fact for every day, then the voice check); the row's source
+    is "drafted" and it replaces any feature already stored for that month. Exit 2 and nothing
+    written when the file cannot be read or is rejected."""
+    try:
+        text = Path(path).read_text(encoding="utf-8")
+        month = json.loads(text).get("month")
+    except (OSError, ValueError, AttributeError) as exc:
+        print(f"refusing: {path}: {exc}", file=sys.stderr)
+        return 2
+    if not isinstance(month, str) or not MONTH.match(month):
+        print(f"refusing: {path}: month {month!r} is not YYYY-MM", file=sys.stderr)
+        return 2
+    judged = judge(text, month)
+    if isinstance(judged, str):
+        print(f"refusing: {path}: {judged}", file=sys.stderr)
+        return 2
+    raw, feature = judged
+    store.save_feature(conn, month, raw, DRAFTED, None, None)
+    conn.commit()
+    print_header(feature, (DRAFTED, None))
+    print(f"{month} [installed] {len(feature.days)} days, each with a fact; no model call")
+    return 0
 
 
 def show(conn, month: str) -> int:

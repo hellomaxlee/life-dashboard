@@ -55,33 +55,21 @@ WORKOUT" (`workout_count` 0), "NO HR DATA" (a workout with no `workout_load`), o
 62/100" (`workout_load` floored against the week's `load_bar`); "NO DOT YET" only when the
 row carries none of those. "NO WORKOUT" needs a day a push has covered (it has sleep or steps); the row the
 engine writes before any push says nothing. The Week screen reads top to bottom: the week's
-dots as planets in a night sky (an earned workout is a planet in the dot's colour, an unearned one an
-empty orbit; the stars are seeded by the day and never land within two pixels of anything), the
-weeks-hit streak under them, the Claude usage bar at the bottom.
+dots as planets (an earned workout is a planet in the dot's colour, an unearned one an empty orbit;
+they never touch, whatever the target), the weeks-hit streak under them, the Claude usage bar at the
+bottom.
 
-Scenes (style B, 2026-11-15). Every rotation screen carries scenery drawn after its words, kept one
-pixel off everything by `screens.draw_field` and `scatter_stars`: Today has last night's stars around
-the sleep number; Books a wall in the weekday's colour; Weather a sky in the condition's tone behind
-the temperature (stars on a clear night) with the hour-by-hour strip unchanged; the Month calendar
-draws each day gone in what it earned (gold a workout, violet sleep, teal a book; a dot for none) from
-the stored `wins`. `tests/render/test_no_bleed.py` is the gate.
-
-Health pushes cover whole days ending yesterday, so today has no sleep, steps or workout
-until tomorrow. When the requested day has none and the day before does, the Today screen
-shows the day before and is headed "YESTERDAY FRI 2" instead of "TODAY SAT 3". Week, streak,
-books, summary and Claude never fall back.
-
-`/preview` and `/pixoo` with no `date` or `fixture` show a placeholder fixture under an amber
-"Placeholder data" banner when the database has no Health data for today or yesterday, and the
-database as soon as it does; `?placeholder=0` always shows the database. The frames a device
-is sent (`/pixoo/rotation.json`, the rotation job) never use the placeholder. The as-of line shows the clock for a
-same-day push ("AS OF 1:30PM"; 12-hour, never 24-hour, Max 2026-10-08), weekday and clock
-up to six days back ("AS OF TUE 1:30P", the one-letter suffix because the full one is wider
-than the frame at 10 to 12 o'clock), and whole days beyond that ("AS OF 8D AGO"); a push dated after the day or after "now" is ignored. A day that has numbers but no
-push before it ended (a later push back-filled it) gets no as-of line; "NO PUSH YET" appears
-only when the day has no data at all. The summary is folded to ASCII before paging: accents
-folded, curly quotes and dashes straightened, paired `*`/`_` markers removed, emoji dropped,
-and a number is kept on the same line as its unit or its "of N".
+Pages and grounds (2026-11-15; `notes.txt § Design` has the reasons). Every rotation page is laid
+edge to edge on one colour: the weekday's ground (`palette.day_ground`), or for Weather its sky over
+a deeper floor (`city.weather_grounds`). Words sit directly on it; `font.draw_text` keeps each one
+legible on what it is laid on (`palette.legible_on`), and a colour that is itself the message (a
+status red, an alert amber) is drawn exactly on a band made to carry it (`screens.band`). A
+structural tone (a bar's track, a day to come) is a recess of the page (`screens.slot`), never
+black. Today has two hills along its foot; Books is a two-shelf bookcase with the count in its
+header; the Month calendar draws each day gone as a whole cell in what it earned (gold a workout,
+violet sleep, a teal corner a book, grey for none) from the stored `wins`. Celebrations stay on
+black. `tests/render/test_grounds.py` is the gate for the pages as the panel shows them; most other
+render tests run on black through the `no_scenery` fixture.
 
 Colour (2026-11-15, replacing one fixed accent per screen from 2026-10-05). The header word of
 Today, Week and Books wears the weekday's accent, `palette.day_accent`: Monday coral, then amber,
@@ -108,11 +96,13 @@ count and target.
 ## The Month screen
 
 `app/render/month.py`. With a stored feature for the requested day's month (`app/month/`, one
-authored theme a month, one 16x16 plate a day): the title in the small face in the palette's
-first colour, the day's plate at three LEDs a cell on black, the caption in the second colour,
-and a rail of one pip per day down each side (days gone in a dimmed second colour, today white,
-days to come in the track grey). The feature is that one page, as a rule (Max, 2026-10-09); a note a stored
-plate carries is never drawn. Text that would not fit is cut at a whole glyph; nothing is
+authored theme a month, one 16x16 plate a day), a plate with a fact (every feature authored or
+drafted since 2026-11-15): the day's plate at two LEDs a cell on a mat a shade deeper than the wall,
+the caption in the palette's second colour, and the day's fact in capitals on up to three lines; the
+feature's title gives its row to the fact. A plate without a fact (an older stored feature): the
+title in the first colour, the plate at three LEDs a cell, the caption, and a rail of one pip per
+day down each side. Either way the page hangs on the weekday's ground and is one page, as a rule
+(Max, 2026-10-09); a `note` an older plate carries is never drawn. Text that would not fit is cut at a whole glyph; nothing is
 drawn off the frame. Title and caption colours too dark for small text are lifted toward white.
 
 The last page, every month, is the calendar (Max, 2026-10-07: "I really like this panel -
@@ -133,16 +123,19 @@ month, the Month screen still shows the new month.
 keeps only the latest transit and weather snapshot, and the day picks which weekday's alert
 lines apply, so a past date renders today's city on that weekday. Pages:
 
-- **weather**: condition icon, the current temperature large, `H`/`L`, one notice line (the
-  first NWS alert in amber, wrapped to a second line in place of the step temperatures when it
-  is long; otherwise the condition in words), and six 3-hour steps: temperature, a small
-  icon, a rain gauge and the hour. Steps past midnight are in the as-of colour behind a dotted
-  rule. Temperatures are rounded half up; a gauge is `floor(percent * 10 / 100)` of 10 px.
-- **lines**: one row per line: a badge in the MTA colour (disc for a subway, blue pill for a
-  bus), the name in white beside it, and the status as a word in a colour: `OK` green, `WORK`
-  amber (a clock mark when it starts later today), `DELAYS` red, `NO SVC` red. Seven lines
-  use the body face for the name; eight use a tighter row in the small face; more than eight
-  end in `+N MORE`.
+- **weather**: the page is its sky. On the sky: the current temperature large, the condition
+  drawn as one picture at the panel's own resolution, `H` and `L` on one line. An NWS alert is an
+  amber band across the foot of the sky, one or two lines, with the compact hero above it (small
+  icon, `H`/`L` stacked); it never takes the steps' temperatures. On the floor: six 3-hour steps:
+  temperature, a small icon, a rain gauge and the hour. Steps past midnight are in the as-of colour
+  behind a dotted rule. Temperatures are rounded half up; a gauge is `floor(percent * 5 / 100)` of
+  5 px. A partly cloudy night shows a moon.
+- **lines**: one row per line: its sign in the MTA colour with the name inside it (a nine-wide oval
+  for a subway letter, a pill for a bus route; black ink on yellow lines, white elsewhere), and on
+  the status board at the right the status as a word in its own colour: `OK` green, `WORK` amber (a
+  clock mark when it starts later today), `DELAYS` red, `NO SVC` red. Seven rows at most; more
+  lines end in `+N MORE`. Line names inside an alert's text are drawn as the same signs
+  (`city.mark_lines`).
 - **detail**, at most three: one per line that is not ok, most severe first, then in effect
   now before later: that line's row as the header and the alert's headline wrapped under it
   (body face, then small face, then cut with `...`). More affected lines than pages: the last

@@ -50,9 +50,9 @@ def record_text(monkeypatch) -> list[tuple[str, int, int, str, int]]:
     drawn: list[tuple[str, int, int, str, int]] = []
     original = font.draw_text
 
-    def recording(frame, x, y, text, color, font_=font.SMALL, scale=1):
+    def recording(frame, x, y, text, color, font_=font.SMALL, scale=1, exact=False):
         drawn.append((text, x, y, font_.name, scale))
-        return original(frame, x, y, text, color, font_, scale)
+        return original(frame, x, y, text, color, font_, scale, exact)
 
     for module in (font, screens, usage, celebrate, month, city):
         monkeypatch.setattr(module, "draw_text", recording)

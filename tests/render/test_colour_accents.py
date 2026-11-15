@@ -56,6 +56,9 @@ EPICTETUS = (
 BANK_LINE = 'Reflection. "Quote words." - Author'
 
 
+pytestmark = pytest.mark.usefixtures("no_scenery")
+
+
 def lit_colours(frame: Frame, box: tuple[int, int, int, int]) -> set[Color]:
     region = frame.crop(box)
     return {pixel for pixel in region.get_flattened_data() if pixel != BLACK}

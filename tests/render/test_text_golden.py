@@ -26,6 +26,9 @@ TEXT, RING = (235, 235, 245), (72, 76, 104)
 DOT_CENTRES = ((11, 17), (32, 17), (53, 17))
 
 
+pytestmark = pytest.mark.usefixtures("no_scenery")
+
+
 def page_lines(drawn: list[tuple]) -> list[list[str]]:
     """The summary lines of each page, in order: a new page starts at each y=45 line. A line
     with a quotation is drawn as several runs of colour on the same row; they are joined
@@ -156,7 +159,6 @@ def test_a_false_dot_says_why(monkeypatch, settings, count, workout_load, bar, l
     assert 13 + text_width(label) - 1 <= 61
 
 
-@pytest.mark.usefixtures("no_scenery")
 @pytest.mark.parametrize(
     ("dot", "label", "centre"),
     [

@@ -94,7 +94,7 @@ def test_cli_dry_run_prints_the_request_and_cap_check_and_writes_nothing(db, set
 def test_cli_spend_readback(db, settings, capsys):
     assert summary_tool.main(["--spend"]) == 0
     out = capsys.readouterr().out
-    assert "0 call(s), month-to-date $0.0000 of cap $3.00, model claude-opus-5-5" in out
+    assert "0 call(s), month-to-date $0.0000 of cap $5.00, model claude-opus-5-5" in out
 
 
 def test_cli_refuses_a_db_that_is_behind(settings, capsys, tmp_path):

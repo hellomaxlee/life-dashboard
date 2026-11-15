@@ -2,14 +2,17 @@
 
 With a feature (app/month/spec.py) for the day's month the screen is two pages: the feature,
 always one page (Max, 2026-10-09: "the monthly feature should be contained to one slide as a
-general rule"; the note page that followed it is gone), the title over the day's 16x16 plate
-drawn at three LEDs a cell on true black, the caption under it, and a rail of one pip per
-day down each side (the days gone, today, the days to come); then the calendar, every day of
-every month (Max, 2026-10-07: "I really like this panel").
+general rule"; the note page that followed it is gone), the day's 16x16 plate hung on the
+weekday's ground: with a fact (every feature since 2026-11-15) the plate at two LEDs a cell
+on a mat, the caption and the fact on up to three lines; without one, the title over the plate
+at three LEDs a cell, the caption, and a rail of one pip per day down each side; then the
+calendar, every day of every month (Max, 2026-10-07: "I really like this panel").
 
-The calendar is drawn from the date alone: the month's name and year, a Monday-first grid
-with one cell per day, past days soft, today bright, the days to come dim but there. No metric
-and no personal data. Without a feature (none generated yet, the model unavailable or over
+The calendar is the month's name and year and a Monday-first grid with one cell per day: today
+bright, the days to come recessed, and each day gone drawn in what it earned when the view
+carries that month's stored wins (`DayView.month_wins`; soft cells in the month's colour when
+it does not). The wins are read from the metrics rows as written; nothing is computed here.
+Without a feature (none generated yet, the model unavailable or over
 budget) it is the whole screen.
 
 The day is always the view's requested day, never `day_shown`: the Today screen may fall back
@@ -21,11 +24,24 @@ from __future__ import annotations
 import calendar
 from datetime import date, datetime
 
-from app.month.spec import ART_SIZE, UNLIT, DayPlate, MonthFeature
+from app.month.spec import ART_SIZE, FACT_LINES, UNLIT, DayPlate, MonthFeature, fact_lines
 from app.render.font import SMALL, Font, draw_text, text_width
 from app.render.frame import SIZE, Clip, Color, Frame, new_frame, still
-from app.render.palette import GOLD, LABEL, TEAL, TEXT, TRACK, VIOLET, WHITE, dim, hue
-from app.render.screens import fill_rect
+from app.render.palette import (
+    BLACK,
+    GOLD,
+    LABEL,
+    TEAL,
+    TEXT,
+    TRACK,
+    VIOLET,
+    WHITE,
+    day_ground,
+    dim,
+    hue,
+    legible_on,
+)
+from app.render.screens import fill_rect, page_ground, slot
 from app.render.theme import STOCK, MonthTheme, theme_for
 from app.render.view import DayView
 
@@ -104,14 +120,21 @@ def plate_for(view: DayView) -> tuple[MonthFeature, DayPlate] | None:
     return None if plate is None else (feature, plate)
 
 
-def draw_plate(frame: Frame, plate: DayPlate, palette: tuple[Color, ...]) -> None:
-    """Each art cell as a PLATE_SCALE block of its palette colour; an unlit cell stays black."""
+def draw_plate(
+    frame: Frame,
+    plate: DayPlate,
+    palette: tuple[Color, ...],
+    scale: int = PLATE_SCALE,
+    left: int = PLATE_X,
+    top: int = PLATE_Y,
+) -> None:
+    """Each art cell as a `scale` block of its palette colour; an unlit cell stays black."""
     for row, cells in enumerate(plate.art[:ART_SIZE]):
         for column, cell in enumerate(cells[:ART_SIZE]):
             if cell == UNLIT or not cell.isdigit() or not 1 <= int(cell) <= len(palette):
                 continue
-            x, y = PLATE_X + column * PLATE_SCALE, PLATE_Y + row * PLATE_SCALE
-            fill_rect(frame, x, y, x + PLATE_SCALE - 1, y + PLATE_SCALE - 1, palette[int(cell) - 1])
+            x, y = left + column * scale, top + row * scale
+            fill_rect(frame, x, y, x + scale - 1, y + scale - 1, palette[int(cell) - 1])
 
 
 def rail_pips(days: int) -> list[tuple[int, int, int]]:
@@ -122,24 +145,54 @@ def rail_pips(days: int) -> list[tuple[int, int, int]]:
     ]
 
 
-def _draw_rails(frame: Frame, today: int, days: int, palette: tuple[Color, ...]) -> None:
+def _draw_rails(
+    frame: Frame, today: int, days: int, palette: tuple[Color, ...], track: Color = TRACK
+) -> None:
     for day, x, y in rail_pips(days):
         if day == today:
             color = WHITE
         elif day < today:
             color = dim(palette[1 % len(palette)], RAIL_PAST)
         else:
-            color = TRACK
+            color = track
         fill_rect(frame, x, y, x + RAIL_PIP - 1, y + RAIL_PIP - 1, color)
 
 
-def _plate_frame(feature: MonthFeature, plate: DayPlate) -> Frame:
-    frame = new_frame()
+FACT_SCALE = 2
+FACT_PLATE_Y = 2
+FACT_CAPTION_Y = 37
+FACT_YS = (44, 50, 56)
+assert len(FACT_YS) == FACT_LINES, "one row for each line a fact may take"
+
+
+def _plate_frame(feature: MonthFeature, plate: DayPlate, day_local: str | None = None) -> Frame:
+    """The day's plate. With a fact that fits (`spec.fact_lines`): the plate at twice its
+    cells on a mat a shade deeper than the wall, the caption, then the fact on up to three
+    lines; the feature's title gives its row to the fact (the caption names the day's
+    subject). Without one (a feature
+    stored before facts were asked for): the plate at three times with the day rails and the
+    caption at the foot, as it always was. Either way it hangs on the weekday's wall."""
+    ground = day_ground(day_local) if day_local is not None else BLACK
+    frame = new_frame(ground)
     palette = feature.palette
-    _centered(frame, TITLE_Y, feature.title, legible(palette[0]))
-    draw_plate(frame, plate, palette)
-    _draw_rails(frame, plate.day, len(feature.days), palette)
-    _centered(frame, CAPTION_Y, plate.caption, legible(palette[1 % len(palette)]))
+    mat = slot(ground, BLACK)
+    title = legible_on(legible(palette[0]), ground)
+    caption = legible_on(legible(palette[1 % len(palette)]), ground)
+    fact = fact_lines(plate.fact) if plate.fact else None
+    if fact is None:
+        _centered(frame, TITLE_Y, feature.title, title)
+        fill_rect(frame, PLATE_X - 1, PLATE_Y - 1, PLATE_X + PLATE_PX, PLATE_Y + PLATE_PX, mat)
+        draw_plate(frame, plate, palette)
+        _draw_rails(frame, plate.day, len(feature.days), palette, slot(ground, TRACK))
+        _centered(frame, CAPTION_Y, plate.caption, caption)
+        return frame
+    side = ART_SIZE * FACT_SCALE
+    x0 = (SIZE - side) // 2
+    fill_rect(frame, x0 - 1, FACT_PLATE_Y - 1, x0 + side, FACT_PLATE_Y + side, mat)
+    draw_plate(frame, plate, palette, FACT_SCALE, x0, FACT_PLATE_Y)
+    _centered(frame, FACT_CAPTION_Y, plate.caption, caption)
+    for line, y in zip(fact, FACT_YS[: len(fact)], strict=True):
+        _centered(frame, y, line, TEXT)
     return frame
 
 
@@ -169,26 +222,29 @@ def month_color(month: int) -> Color:
     return hue((month - 1) / 12 + 0.55)
 
 
+QUIET_DAY: Color = (96, 100, 128)
 WIN_COLORS: dict[str, Color] = {"workout": GOLD, "sleep": VIOLET, "book": TEAL}
 
 
-def _draw_wins(frame: Frame, x: int, y: int, wins: tuple[str, ...]) -> None:
-    """A past day that earned something, in the wins' own colours (the sparkle icons'): gold
-    across the top half for a workout, violet across the bottom half for sleep in its band,
-    a teal block at the right edge for a finished book; an unearned half is left black."""
+def _draw_wins(frame: Frame, x: int, y: int, wins: tuple[str, ...], quiet: Color) -> None:
+    """A day gone, always a whole cell so the grid holds (display audit, 2026-11-15): gold
+    for a workout, violet for sleep in its band, gold over violet for both, `quiet` for a day
+    that earned neither; a finished book is a teal square set in the cell's lower right
+    corner. The wins' colours are the sparkle icons'."""
     half = CELL // 2
-    if "workout" in wins:
-        fill_rect(frame, x, y, x + CELL - 1, y + half - 1, WIN_COLORS["workout"])
-    if "sleep" in wins:
-        fill_rect(frame, x, y + half, x + CELL - 1, y + CELL - 1, WIN_COLORS["sleep"])
+    top = WIN_COLORS["workout"] if "workout" in wins else None
+    bottom = WIN_COLORS["sleep"] if "sleep" in wins else None
+    fill_rect(frame, x, y, x + CELL - 1, y + half - 1, top or bottom or quiet)
+    fill_rect(frame, x, y + half, x + CELL - 1, y + CELL - 1, bottom or top or quiet)
     if "book" in wins:
-        fill_rect(frame, x + CELL - 2, y + 1, x + CELL - 1, y + CELL - 2, WIN_COLORS["book"])
+        fill_rect(frame, x + CELL - 3, y + CELL - 3, x + CELL - 1, y + CELL - 1, WIN_COLORS["book"])
 
 
 def _calendar_frame(
     day_local: str,
     theme: MonthTheme = STOCK,
     month_wins: tuple[tuple[int, tuple[str, ...]], ...] = (),
+    ground: Color = BLACK,
 ) -> Frame:
     """With a month theme (a stored feature), the month's name and the days gone take its
     accent and the days to come its tinted track (Max, 2026-11-09: "calibrate the calendar
@@ -197,38 +253,34 @@ def _calendar_frame(
     at 1x and the palette's lighter hues went to mud, and at full strength a pale accent hides
     today's white. A day gone that earned a win is drawn in the win's colours instead
     (`_draw_wins`, style B, 2026-11-15) and, once any day's wins are known, a day with
-    none is a small dot of the past shade: shown plainly, and never mistaken for a win when
+    none is a whole cell of one quiet grey: shown plainly, and never mistaken for a win when
     the month's accent sits near gold or violet. With no wins known the days gone are whole
     cells of the past shade, as before."""
-    frame = new_frame()
+    frame = new_frame(ground)
     day = date.fromisoformat(day_local)
     color = theme.accent or month_color(day.month)
     name, year = MONTH_NAMES[day.month - 1], f"{day.year:04d}"
     if text_width(f"{name} {year}") > TEXT_WIDTH:
         name = name[:3]
     x = (SIZE - text_width(f"{name} {year}")) // 2
-    after = draw_text(frame, x, TITLE_Y, name, legible(color))
+    after = draw_text(frame, x, TITLE_Y, name, legible_on(legible(color), ground))
     draw_text(frame, after + text_width(" ") + SMALL.spacing, TITLE_Y, year, TEXT)
 
     header_y, cells = calendar_layout(day_local)
     for column, letter in enumerate(WEEKDAY_LETTERS):
         x = GRID_X + column * CELL_PITCH + (CELL - text_width(letter)) // 2
-        draw_text(frame, x, header_y, letter, LABEL)
-    earned = {n: wins for n, wins in month_wins if wins}
+        draw_text(frame, x, header_y, letter, legible_on(LABEL, ground))
+    known = dict(month_wins)
     for n, (x, y) in cells.items():
-        if n < day.day and n in earned:
-            _draw_wins(frame, x, y, earned[n])
-            continue
         if n < day.day and month_wins:
-            mid = CELL // 2 - 1
-            fill_rect(frame, x + mid, y + mid, x + mid + 1, y + mid + 1, dim(color, PAST_SHADE))
+            _draw_wins(frame, x, y, known.get(n, ()), QUIET_DAY)
             continue
         if n == day.day:
             shade = WHITE
         elif n < day.day:
             shade = dim(color, PAST_SHADE)
         else:
-            shade = theme.track
+            shade = slot(ground, theme.track)
         fill_rect(frame, x, y, x + CELL - 1, y + CELL - 1, shade)
     return frame
 
@@ -239,9 +291,10 @@ def render_month(view: DayView, now: datetime | None = None) -> Clip:
     for that month, the calendar alone. `now` is unused; the screen is drawn from the day
     alone."""
     found = plate_for(view)
+    ground = page_ground(view)
     if found is None:
-        return still(_calendar_frame(view.day_local, month_wins=view.month_wins))
+        return still(_calendar_frame(view.day_local, month_wins=view.month_wins, ground=ground))
     feature, plate = found
-    plate_page = _plate_frame(feature, plate)
-    frames = (plate_page, _calendar_frame(view.day_local, theme_for(view), view.month_wins))
-    return Clip(frames, (PLATE_MS, CALENDAR_MS))
+    plate_page = _plate_frame(feature, plate, view.day_local)
+    calendar_page = _calendar_frame(view.day_local, theme_for(view), view.month_wins, ground)
+    return Clip((plate_page, calendar_page), (PLATE_MS, CALENDAR_MS))

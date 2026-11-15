@@ -26,7 +26,7 @@ def test_run_prints_title_theme_source_and_spend_and_is_idempotent(db, fake, cap
     assert "theme: A walk through a wood" in out
     assert "source: model (claude-" in out
     assert "2026-10 [generated] model calls: 1; usd 0.3096" in out
-    assert "spend: " in out and "1 call(s), month-to-date $0.3096 of cap $3.00" in out
+    assert "spend: " in out and "1 call(s), month-to-date $0.3096 of cap $5.00" in out
 
     assert cli.main(["--month", MONTH]) == 0
     assert "2026-10 [stored] model calls: 0; usd 0.0000" in capsys.readouterr().out
@@ -55,8 +55,8 @@ def test_dry_run_prices_the_request_and_calls_nothing(db, fake, capsys):
     assert cli.main(["--month", MONTH, "--dry-run"]) == 0
     out = capsys.readouterr().out
     assert "The month is October 2026" in out
-    assert "max_tokens 32000" in out
-    assert "worst case: $0.66" in out and "for a run of 2 calls" in out
+    assert "max_tokens 64000" in out
+    assert "worst case: $1.30" in out and "for a run of 2 calls" in out
     assert "call allowed" in out
     assert "2026-10: not stored; guard: an automatic run may call; api key: absent" in out
     assert fake.requests == []
@@ -76,3 +76,46 @@ def test_the_default_month_is_the_home_timezone_month(db, fake, capsys, monkeypa
     monkeypatch.setattr(cli, "now_utc", lambda: datetime(2026, 11, 1, 3, 30, tzinfo=UTC))
     assert cli.main(["--show"]) == 1
     assert "2026-10: no stored feature" in capsys.readouterr().out
+
+
+# --install: a feature drafted by hand goes through the same checks as a model reply
+
+
+def test_install_stores_a_drafted_feature_without_any_model_call(db, fake, capsys, tmp_path):
+    import json
+
+    path = tmp_path / "draft.json"
+    path.write_text(json.dumps(feature_object("2027-01") | {"title": "Quilt Weather"}))
+    assert cli.main(["--install", str(path)]) == 0
+    out = capsys.readouterr().out
+    assert "2027-01  QUILT WEATHER" in out and "source: drafted (no model)" in out
+    assert "2027-01 [installed] 31 days, each with a fact; no model call" in out
+    assert fake.requests == [] and count(db, "model_spend") == 0
+    assert store.feature_source(db, "2027-01") == ("drafted", None)
+    stored = store.load_feature(db, "2027-01")
+    assert stored.title == "Quilt Weather" and all(plate.fact for plate in stored.days)
+    assert cli.main(["--install", str(path)]) == 0, "installing again replaces, it does not fail"
+    assert count(db, "month_features") == 1
+
+
+def test_install_refuses_what_a_model_reply_would_be_rejected_for(db, fake, capsys, tmp_path):
+    import json
+
+    no_facts = feature_object("2027-01")
+    for day in no_facts["days"]:
+        del day["fact"]
+    shouting = feature_object("2027-01")
+    shouting["days"][3]["fact"] = "Do not break the chain"
+    cases = {
+        "nofacts.json": (json.dumps(no_facts), "day 1 fact: not a string"),
+        "voice.json": (json.dumps(shouting), "day 4 fact: ban"),
+        "nomonth.json": (json.dumps({"title": "x"}), "is not YYYY-MM"),
+        "garbage.json": ("{not json", "refusing"),
+    }
+    for name, (text, reason) in cases.items():
+        path = tmp_path / name
+        path.write_text(text)
+        assert cli.main(["--install", str(path)]) == 2, name
+        assert reason in capsys.readouterr().err, name
+    assert cli.main(["--install", str(tmp_path / "missing.json")]) == 2
+    assert count(db, "month_features") == 0 and fake.requests == []

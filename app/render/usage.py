@@ -154,7 +154,8 @@ def draw_usage(frame: Frame, state: UsageState, track: Color = TRACK) -> None:
         for offset in range(BAR_WIDTH):
             x = BAR_LEFT + offset
             if not state.has_data:
-                pixels[x, y] = track if offset % 4 < 2 else (0, 0, 0)
+                if offset % 4 < 2:  # a dashed track: the gaps stay whatever the page is
+                    pixels[x, y] = track
             else:
                 pixels[x, y] = state.color if offset < state.fill_px else track
 

@@ -219,6 +219,7 @@ def test_cap_check_blocks_the_call_before_it_is_made(db, settings):
 
 
 def test_cap_counts_this_month_only(db, settings):
+    settings = replace(settings, summary=replace(settings.summary, monthly_cap_usd=3.0))
     seed(db, case())
     spend.record(
         db,
@@ -238,6 +239,7 @@ def test_cap_counts_this_month_only(db, settings):
 
 
 def test_cap_counts_month_to_date_including_earlier_calls_this_month(db, settings):
+    settings = replace(settings, summary=replace(settings.summary, monthly_cap_usd=3.0))
     seed(db, case())
     spend.record(db, settings, "2026-10-01", "req_a", spend.Usage(1, 1), "end_turn", NOW)
     db.execute("UPDATE model_spend SET usd = 2.995")

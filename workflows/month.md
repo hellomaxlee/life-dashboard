@@ -7,8 +7,11 @@ Code: `app/month/` (`spec.py` the contract, `prompt.py` the brief, `generate.py`
 
 Once a month the model authors one JSON object: a title, a theme, a palette of 2 to 8 bright
 colours, and for every day of the month a 16x16 plate in palette indices and a caption
-(no note since 2026-10-09: the feature is one page; a stored feature's notes are never
-drawn). `spec.parse_feature` is the only judge of what is stored; the renderer draws day N's
+and, since 2026-11-15, one fact (Max: the feature "should be educational in some way"): a
+true, specific statement about the day's subject, drawn under the caption on up to three lines.
+No digits. A fact is the author's claim from memory; nothing checks it beyond the voice gate, so
+a drafted month is read by Max before it is installed. (No `note` since 2026-10-09: a stored
+feature's notes are never drawn.) `spec.parse_feature` is the only judge of what is stored; the renderer draws day N's
 plate, then the month's calendar as the last page; while no feature is stored the
 calendar is the whole screen.
 
@@ -23,6 +26,7 @@ bans digits in the feature's text.
 ## Commands
 
 ```sh
+uv run python -m tools.month --install FILE     # store a feature drafted by hand; same checks, no model call
 uv run python -m tools.month                    # this month; one run if nothing is stored
 uv run python -m tools.month --month 2026-11    # another month
 uv run python -m tools.month --show             # stored title, theme, palette, day captions
@@ -40,7 +44,7 @@ minutes after a service start when the month has no feature. A stored feature me
 
 ## Spend and the guard
 
-- Model: `[summary] model` in `config.toml`. `max_tokens` 32000 (thinking counts against
+- Model: `[summary] model` in `config.toml`. `max_tokens` 64000 (thinking counts against
   it), streamed. Each call passes the summary's monthly cap check first and is recorded in
   `model_spend`; over the cap means no call.
 - A run makes at most 2 calls: the second only after a rejection, with the reason.
@@ -53,8 +57,9 @@ minutes after a service start when the month has no feature. A stored feature me
 ## Rejections
 
 A reply is rejected when it holds no JSON object, fails `spec.parse_feature` (day count,
-16x16 art, palette index, dark colour, caption or note length, digits, undrawable
-characters, too few lit cells, repeated art), or fails the voice check: the daily summary's
+16x16 art, palette index, dark colour, caption or note length, a missing or over-long fact or
+one that does not fit three lines of capitals, digits, undrawable characters, too few lit cells,
+repeated art), or fails the voice check: the daily summary's
 ban list (`app/summary/gate.check_ban`) on the title, theme and every caption and note,
 words attributed to a person, digits in the theme.
 

@@ -27,6 +27,9 @@ BAR_X = range(2, 62)
 STALE_DOT = (60, 49)
 
 
+pytestmark = pytest.mark.usefixtures("no_scenery")
+
+
 def bar_row(frame: Image.Image, y: int) -> list[tuple[int, int, int]]:
     return [frame.getpixel((x, y)) for x in range(64)]
 
@@ -38,7 +41,6 @@ def filled_columns(frame: Image.Image, color: tuple[int, int, int]) -> list[int]
     return columns
 
 
-@pytest.mark.usefixtures("no_scenery")
 def test_41_2_percent_fills_24_of_60_pixels(settings):
     view, now = load(WEEK_41, settings)
     assert view.claude.used_pct == 41.2

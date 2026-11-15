@@ -25,6 +25,7 @@ from app.render.month import (
     PLATE_SCALE,
     PLATE_X,
     PLATE_Y,
+    QUIET_DAY,
     calendar_cells,
     calendar_layout,
     legible,
@@ -41,6 +42,9 @@ from tests.render import DAYS, MONTHS, SAMPLE_FEATURE, STALE, WEEK_41, load, rec
 
 NOW = from_utc_iso("2026-10-02T16:00:00Z")
 BLACK = (0, 0, 0)
+
+
+pytestmark = pytest.mark.usefixtures("no_scenery")
 
 
 def sample_raw() -> dict:
@@ -454,7 +458,7 @@ def test_month_wins_are_the_stored_wins_of_the_days_before_today(db, settings):
     assert view_from_db(db, settings, "2026-11-01").month_wins == ()
 
 
-def test_a_day_gone_is_drawn_in_what_it_earned_and_a_day_without_is_a_dot():
+def test_a_day_gone_is_a_whole_cell_in_what_it_earned():
     from app.render.palette import GOLD, TEAL, VIOLET, dim
 
     wins = ((1, ()), (2, ("workout", "sleep")), (3, ("book",)), (4, ("sleep",)), (5, ("workout",)))
@@ -467,17 +471,17 @@ def test_a_day_gone_is_drawn_in_what_it_earned_and_a_day_without_is_a_dot():
         x, y = cells[n]
         return [[frame.getpixel((x + dx, y + dy)) for dx in range(CELL)] for dy in range(CELL)]
 
-    black = (0, 0, 0)
+    del past
     assert cell(2)[:3] == [[GOLD] * CELL] * 3 and cell(2)[3:] == [[VIOLET] * CELL] * 3
-    assert cell(4)[:3] == [[black] * CELL] * 3 and cell(4)[3:] == [[VIOLET] * CELL] * 3
-    assert cell(5)[:3] == [[GOLD] * CELL] * 3 and cell(5)[3:] == [[black] * CELL] * 3
+    assert cell(4) == [[VIOLET] * CELL] * CELL, "sleep alone fills the cell"
+    assert cell(5) == [[GOLD] * CELL] * CELL, "a workout alone fills the cell"
     book = cell(3)
-    assert {book[dy][dx] for dy in range(1, 5) for dx in (4, 5)} == {TEAL}
-    assert {book[dy][dx] for dy in range(CELL) for dx in range(4)} == {black}
+    assert {book[dy][dx] for dy in range(3, 6) for dx in range(3, 6)} == {TEAL}
+    assert {book[dy][dx] for dy in range(3) for dx in range(CELL)} == {QUIET_DAY}
     for n in (1, 6, 7):
-        lit = [(dx, dy) for dy in range(CELL) for dx in range(CELL) if cell(n)[dy][dx] != black]
-        assert lit == [(2, 2), (3, 2), (2, 3), (3, 3)], (n, "a day with no win is a small dot")
-        assert cell(n)[2][2] == past
+        assert cell(n) == [[QUIET_DAY] * CELL] * CELL, (n, "no win, or no row: one quiet grey")
+    for n in range(1, 8):
+        assert all(pixel != (0, 0, 0) for row in cell(n) for pixel in row), "the grid holds"
     assert cell(8) == [[WHITE] * CELL] * CELL, "today stays white"
     assert cell(9) == [[TRACK] * CELL] * CELL, "days to come are untouched"
 

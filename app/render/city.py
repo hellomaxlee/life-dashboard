@@ -3,16 +3,19 @@
 Drawn from the view's `city` (app/city/model.py), which is always the requested day's, never
 `day_shown`. Pages, in order:
 
-- weather: the condition icon, the current temperature large, high and low, one line of
-  notice (the first National Weather Service alert in amber, else the condition in words), and
-  the day in six 3-hour steps: temperature, a small condition icon, a rain-probability gauge
-  and the hour ("6P", "12A"). Steps past midnight are in the as-of colour behind a dotted rule.
-- lines: one row per line: a badge in its MTA colour (a disc for a subway, a blue pill for a
-  bus), its name in white beside it, and its status as a word in a colour: green "OK", amber
-  "WORK" (with a clock mark when it starts later today), red "DELAYS", red "NO SVC". The word
-  carries the status; the colour only repeats it. The name sits beside the badge, not inside
-  it: a 3x5 letter on a lit disc does not read at 1x under LED gamma, the same letter on
-  black does. Seven lines get the body face; eight need a tighter row and the small face.
+- weather: the page is its sky, in the condition's tone, over a deeper floor. On the sky: the
+  current temperature large, the condition drawn as the page's one picture, high and low. An
+  active National Weather Service alert takes a band across the foot of the sky, in amber on
+  one or two lines, and the hero above it shrinks to its compact form (small icon, high and
+  low stacked). On the floor: the day in six 3-hour steps: temperature, a small condition
+  icon, a rain-probability gauge and the hour ("6P", "12A"). Steps past midnight are in the
+  as-of colour behind a dotted rule. An alert never takes the steps' temperatures.
+- lines: one row per line: its sign in its MTA colour with the name INSIDE it (a nine-wide
+  oval for a subway letter, a pill for a bus route; Max, 2026-11-15: "like true NYC subway
+  artistic style", which overrides the earlier ruling that a letter on a lit disc does not
+  read at 1x), and its status as a word on the status board: green "OK", amber "WORK" (with a
+  clock mark when it starts later today), red "DELAYS", red "NO SVC". The word carries the
+  status; the colour only repeats it. Seven rows at most; more lines end in "+N MORE".
 - detail pages for up to DETAIL_PAGES lines that are delayed or suspended (planned work gets
   none), most severe first, then what is in effect now before what starts later: that
   line's row as the header, and the alert's own headline under it, whole, over as many
@@ -52,6 +55,7 @@ from app.render.frame import SIZE, Clip, Color, Frame, new_frame, still
 from app.render.palette import (
     AMBER,
     BLACK,
+    BULLET_INK,
     BUS_BLUE,
     CLOUD,
     CLOUD_DARK,
@@ -75,16 +79,20 @@ from app.render.palette import (
     WHITE,
     day_accent,
     dim,
+    legible_on,
 )
 from app.render.screens import (
     LEFT,
     RIGHT,
+    band,
     clean_summary,
     draw_disc,
     fill_rect,
-    paint_behind,
-    scatter_stars,
-    wrap_lines,
+    page_ground,
+    slot,
+)
+from app.render.screens import (
+    _glue_numbers as glue_numbers,
 )
 from app.render.theme import STOCK, MonthTheme, theme_for
 from app.render.view import DayView
@@ -102,8 +110,9 @@ NO_DATA = "NO DATA"
 AGE_UNKNOWN = "AGE UNKNOWN"
 MISSING = "--"
 
-ICON_X, ICON_Y = 39, 7
-ICON_SCALE = 2
+ICON_X, ICON_Y = 38, 9
+COMPACT_ICON_X = 31
+STACK_YS = (10, 17)
 TEMP_X, TEMP_Y = 2, 9
 HIGH_LOW_Y = 25
 NOTICE_Y = 31
@@ -119,17 +128,13 @@ STEP_LABEL_Y = 57
 NIGHT_FROM, DAY_FROM = 19, 6
 
 ROWS_TOP = 8
-MAX_ROWS = 8
+MAX_ROWS = 7
 ROOMY_ROWS = 7
 ROW_PITCH = 8
-TIGHT_PITCH = 7
 BADGE = 7
-TIGHT_BADGE = 5
 NAME_X = 11
-TIGHT_NAME_X = 9
 NAME_GAP = 4
 STATUS_X = 38
-TIGHT_STATUS_X = 28
 MARK_GAP = 2
 
 DETAIL_TOP = 11
@@ -143,11 +148,13 @@ ELLIPSIS = "..."
 NO_DETAILS = "No details given."
 
 CLEAR, CLEAR_NIGHT, PARTLY, OVERCAST, FOG = "clear", "clear-night", "partly", "overcast", "fog"
+PARTLY_NIGHT = "partly-night"
 RAINY, HEAVY_RAIN, SNOW, THUNDER, UNKNOWN = "rain", "heavy-rain", "snow", "thunder", "unknown"
 CONDITIONS = (
     CLEAR,
     CLEAR_NIGHT,
     PARTLY,
+    PARTLY_NIGHT,
     OVERCAST,
     FOG,
     RAINY,
@@ -160,6 +167,7 @@ CONDITION_WORDS = {
     CLEAR: "CLEAR",
     CLEAR_NIGHT: "CLEAR",
     PARTLY: "PARTLY CLOUDY",
+    PARTLY_NIGHT: "PARTLY CLOUDY",
     OVERCAST: "OVERCAST",
     FOG: "FOG",
     RAINY: "RAIN",
@@ -235,6 +243,20 @@ ICONS: dict[str, tuple[str, ...]] = {
         "..ggggggggg.",
         _BLANK,
     ),
+    PARTLY_NIGHT: (
+        "...mmm......",
+        "..mmm.......",
+        ".mmm........",
+        ".mmm........",
+        ".mmmm.www...",
+        "..mmmwwwww..",
+        "...wwwwwwwww",
+        "..wwwwwwwwww",
+        ".wwwwwwwwwww",
+        ".gwwwwwwwwwg",
+        "..ggggggggg.",
+        _BLANK,
+    ),
     OVERCAST: (_BLANK, _BLANK, *_CLOUD, _BLANK, _BLANK, _BLANK),
     FOG: (
         _BLANK,
@@ -279,6 +301,7 @@ MINI_ICONS: dict[str, tuple[str, ...]] = {
     CLEAR: ("...y...", ".y.y.y.", "..yyy..", ".y.y.y.", "...y...", _MINI_BLANK),
     CLEAR_NIGHT: ("..mmm..", ".mm....", ".mm....", ".mmm.m.", "..mmm..", _MINI_BLANK),
     PARTLY: (".y.y...", "..yyy..", ".yywww.", "..wwwww", ".wwwwww", ".gggggg"),
+    PARTLY_NIGHT: ("..mm...", ".mm....", ".mmwww.", "..wwwww", ".wwwwww", ".gggggg"),
     OVERCAST: (_MINI_BLANK, "..www..", ".wwwww.", "wwwwwww", "ggggggg", _MINI_BLANK),
     FOG: (_MINI_BLANK, ".ggggg.", _MINI_BLANK, "wwwwwww", _MINI_BLANK, ".ggggg."),
     RAINY: (*_MINI_CLOUD, _MINI_BLANK, "..b..b.", ".b..b.."),
@@ -343,7 +366,7 @@ def condition(code: object, hour: object = None) -> str:
     if code == 0:
         return CLEAR_NIGHT if is_night(hour) else CLEAR
     if code in (1, 2):
-        return PARTLY
+        return PARTLY_NIGHT if is_night(hour) else PARTLY
     if code == 3:
         return OVERCAST
     if code in (45, 48):
@@ -422,10 +445,13 @@ def as_of_label(
 def _header(
     frame: Frame, title: str, right: str, stale: str | None = None, accent: Color = LABEL
 ) -> None:
-    """The one header row every city page shares; a stale page's row is its amber as-of. The
-    title wears `accent`: the weekday's colour on a page that has data."""
+    """The one header row every city page shares; a stale page's row is its amber as-of, on a
+    band a shade deeper than the page so the amber is drawn as itself. The title wears
+    `accent`: the weekday's colour on a page that has data."""
     if stale is not None:
-        draw_text(frame, LEFT, HEADER_Y, stale, AMBER, SMALL)
+        ground = frame.getpixel((0, 0))
+        fill_rect(frame, 0, 0, SIZE - 1, HEADER_Y + SMALL.height + 1, band(ground))
+        draw_text(frame, LEFT, HEADER_Y, stale, AMBER, SMALL, exact=True)
         return
     draw_text(frame, LEFT, HEADER_Y, title, accent, SMALL)
     draw_text_right(frame, RIGHT, HEADER_Y, right, TEXT, SMALL)
@@ -536,20 +562,27 @@ def bar_box(step: Step) -> tuple[int, int, int, int]:
     return x0, BAR_TOP, x0 + BAR_WIDTH - 1, BAR_TOP + BAR_HEIGHT - 1
 
 
-def _draw_strip(frame: Frame, steps: list[Step], temps: bool, theme: MonthTheme = STOCK) -> None:
+def _draw_strip(
+    frame: Frame,
+    steps: list[Step],
+    temps: bool,
+    theme: MonthTheme = STOCK,
+    ground: Color = BLACK,
+) -> None:
     pixels = frame.load()
     was_tomorrow = False
+    later = legible_on(SECONDARY, ground)
     for index, step in enumerate(steps):
-        ink = SECONDARY if step.tomorrow else TEXT
+        ink = later if step.tomorrow else TEXT
         if step.tomorrow and not was_tomorrow and index:
             for y in range(STEP_ICON_Y, BAR_TOP + BAR_HEIGHT, 2):
-                pixels[step.x - 1, y] = theme.ring
+                pixels[step.x - 1, y] = theme.ring if ground == BLACK else later
         was_tomorrow = step.tomorrow
         if temps and step.temp is not None:
             _draw_compact(frame, step.x, STEP_TEMP_Y, step.temp, ink)
         draw_icon(frame, step.x + 1, STEP_ICON_Y, MINI_ICONS[step.kind])
         x0, y0, x1, y1 = bar_box(step)
-        fill_rect(frame, x0, y0, x1, y1, theme.track)
+        fill_rect(frame, x0, y0, x1, y1, slot(ground, theme.track))
         if step.fill_px:
             fill_rect(frame, x0, y1 - step.fill_px + 1, x1, y1, RAIN)
         _draw_compact(frame, step.x, STEP_LABEL_Y, step.label, ink)
@@ -584,118 +617,171 @@ def _draw_temperature(frame: Frame, text: str, room_right: int) -> None:
     _draw_mark(frame, after, TEMP_Y + 4, SMALL_DEGREE, WHITE)
 
 
-def _draw_high_low(frame: Frame, weather: Weather) -> None:
+def _draw_high_low(frame: Frame, weather: Weather, label: Color = LABEL) -> None:
     """ "H 62  L 51" on one line under the temperature."""
     x = LEFT
     for letter, value in (("H", weather.high_f), ("L", weather.low_f)):
-        after = draw_text(frame, x, HIGH_LOW_Y, letter, LABEL, SMALL)
+        after = draw_text(frame, x, HIGH_LOW_Y, letter, label, SMALL)
         after = draw_text(frame, after + 1, HIGH_LOW_Y, degrees(value) or MISSING, TEXT, SMALL)
         x = after + 3
+
+
+def _draw_high_low_stacked(frame: Frame, weather: Weather, label: Color = LABEL) -> None:
+    """ "H 62" over "L 51" at the right edge: the compact hero's form, beside the small icon."""
+    values = [degrees(weather.high_f) or MISSING, degrees(weather.low_f) or MISSING]
+    letter_x = RIGHT + 1 - max(text_width(v) for v in values) - 3 - text_width("H")
+    for letter, value, y in zip("HL", values, STACK_YS, strict=True):
+        draw_text(frame, letter_x, y, letter, label, SMALL)
+        draw_text_right(frame, RIGHT, y, value, TEXT, SMALL)
 
 
 def _local_hour(now: datetime | None, home_tz: str) -> int | None:
     return None if now is None else now.astimezone(ZoneInfo(home_tz)).hour
 
 
-SKY_ROWS = (8, 36)
-SKYLINE_BASE = 36
-# The sky, by condition: one channel at or near zero so the panel keeps it a colour and does
-# not wash it to grey. None is an open sky: black, with stars at night.
+FLOOR_TOP = 37
+FLOOR_SHADE = 0.5
+NIGHT_SKY = 0.5
+OPEN_NIGHT: Color = (0, 8, 36)
+# The weather page's ground is its sky, by condition, edge to edge; under the hero band it
+# deepens to a floor the hour-by-hour strip stands on. One channel at or near zero so the
+# panel keeps each a colour. None is an open sky: OPEN_NIGHT, with stars at night.
 SKY_TONES: dict[str, Color | None] = {
-    CLEAR: (0, 80, 190),
+    CLEAR: (0, 60, 150),
     CLEAR_NIGHT: None,
-    PARTLY: (0, 70, 160),
-    OVERCAST: (45, 55, 80),
-    FOG: (60, 65, 75),
-    RAINY: (0, 35, 150),
-    HEAVY_RAIN: (25, 0, 130),
-    SNOW: (50, 90, 140),
-    THUNDER: (60, 0, 120),
+    PARTLY: (0, 54, 130),
+    PARTLY_NIGHT: None,
+    OVERCAST: (38, 46, 66),
+    FOG: (50, 54, 62),
+    RAINY: (0, 30, 110),
+    HEAVY_RAIN: (18, 0, 96),
+    SNOW: (36, 66, 104),
+    THUNDER: (44, 0, 90),
     UNKNOWN: None,
 }
-STARRY = (CLEAR_NIGHT, PARTLY)
-SKY_STAR_COUNT = 5
-NIGHT_SKY = 0.45
-# The skyline along the foot of the sky: (x0, width, height) of each building, the same
-# city every day. Windows are lit at night.
-SKYLINE: tuple[tuple[int, int, int], ...] = (
-    (0, 5, 4),
-    (6, 4, 6),
-    (11, 6, 3),
-    (18, 3, 5),
-    (22, 5, 4),
-    (28, 4, 3),
-    (33, 5, 5),
-    (39, 3, 3),
-    (43, 6, 4),
-    (50, 4, 6),
-    (55, 5, 3),
-    (61, 3, 5),
-)
-WINDOW: Color = GOLD
+DROP: Color = (150, 200, 255)
 
 
-def in_skyline(x: int, y: int) -> bool:
-    return any(x0 <= x < x0 + w and SKYLINE_BASE - h < y <= SKYLINE_BASE for x0, w, h in SKYLINE)
-
-
-def window_lit(x: int, y: int) -> bool:
-    """A lit window: every other column and row inside a building, about half of them on."""
-    grid = x % 2 == 1 and y % 2 == 0 and y < SKYLINE_BASE
-    return grid and in_skyline(x, y) and (x * 5 + y * 3) % 7 < 4
-
-
-def draw_scene(
-    frame: Frame, kind: str, night: bool, day_local: str, accent: Color, skyline: bool
-) -> None:
-    """The weather page's scene (style B, 2026-11-15), drawn after the words so it keeps a
-    pixel off them (`paint_behind`): the sky in the condition's tone over the whole upper
-    half, dimmer at night, open and starred on a clear or partly clear night; and, unless an
-    alert has taken its row, a low skyline cut out of the sky at its foot, its windows lit at
-    night. The hour-by-hour strip below stays on black."""
+def weather_grounds(kind: str, night: bool) -> tuple[Color, Color]:
+    """(sky, floor) for a condition and hour: the page's two tones, the floor a deeper shade
+    of the sky. Night halves the sky; a clear or partly clear night is the open night."""
     tone = SKY_TONES.get(kind)
-    top, bottom = SKY_ROWS
-    starry = night and kind in STARRY
-    if starry:
-        tone = None
-        scatter_stars(frame, day_local, (WHITE, accent), count=SKY_STAR_COUNT, rows=(top, 30))
-    elif tone is not None and night:
+    if tone is None:
+        tone = OPEN_NIGHT
+    elif night:
         tone = dim(tone, NIGHT_SKY)
-    built = in_skyline if skyline else (lambda x, y: False)
-    layers = []
-    if tone is not None:
-        layers.append((lambda x, y: top <= y <= bottom and not built(x, y), tone))
-    if skyline and tone is None:
-        layers.append((built, dim(accent, 0.25)))
-    if skyline and night:
-        layers.append((window_lit, WINDOW))
-    paint_behind(frame, tuple(layers))
+    return tone, dim(tone, FLOOR_SHADE)
+
+
+def _cloud(frame: Frame, cx: int, cy: int, body: Color, shade: Color) -> None:
+    """A cloud about 20 wide and 11 tall centred on (cx, cy): three overlapping discs on a
+    flat base, its underside one row of `shade`."""
+    for dx, dy, radius in ((-6, 1, 3), (-1, -2, 5), (5, 0, 4)):
+        draw_disc(frame, cx + dx, cy + dy, radius, body)
+    fill_rect(frame, cx - 8, cy + 1, cx + 8, cy + 4, body)
+    fill_rect(frame, cx - 7, cy + 5, cx + 7, cy + 5, shade)
+
+
+def _sun(frame: Frame, cx: int, cy: int, radius: int) -> None:
+    """A sun: a gold disc and eight short rays set one pixel off it."""
+    draw_disc(frame, cx, cy, radius, GOLD)
+    reach = radius + 2
+    for dx, dy in ((0, -1), (0, 1), (-1, 0), (1, 0)):
+        for step in (0, 1):
+            frame.putpixel((cx + dx * (reach + step), cy + dy * (reach + step)), GOLD)
+    slant = round(reach * 0.72)
+    for dx, dy in ((-1, -1), (1, -1), (-1, 1), (1, 1)):
+        frame.putpixel((cx + dx * slant, cy + dy * slant), GOLD)
+        frame.putpixel((cx + dx * (slant + 1), cy + dy * (slant + 1)), GOLD)
+
+
+def draw_hero_icon(frame: Frame, kind: str, sky: Color) -> None:
+    """The condition as the page's one picture, drawn at the panel's own resolution in the
+    box ICON_X..RIGHT, ICON_Y..ICON_Y+23 (a doubled small icon looked blocky; Max,
+    2026-11-15: "the sun also kinda looks weird")."""
+    cx, cy = ICON_X + 11, ICON_Y + 11
+    if kind == CLEAR:
+        _sun(frame, cx, cy, 6)
+    elif kind == CLEAR_NIGHT:
+        draw_disc(frame, cx, cy, 8, MOONLIGHT)
+        draw_disc(frame, cx + 4, cy - 3, 7, sky)
+    elif kind == PARTLY:
+        _sun(frame, cx + 4, cy - 4, 4)
+        _cloud(frame, cx - 1, cy + 4, CLOUD, CLOUD_DARK)
+    elif kind == PARTLY_NIGHT:
+        draw_disc(frame, cx + 4, cy - 4, 5, MOONLIGHT)
+        draw_disc(frame, cx + 7, cy - 6, 4, sky)
+        _cloud(frame, cx - 1, cy + 4, CLOUD, CLOUD_DARK)
+    elif kind == FOG:
+        for row, (x0, x1) in enumerate(((-9, 5), (-5, 9), (-9, 3), (-3, 9))):
+            fill_rect(frame, cx + x0, cy - 7 + row * 4, cx + x1, cy - 6 + row * 4, CLOUD)
+    else:
+        dark = kind in (HEAVY_RAIN, THUNDER, UNKNOWN)
+        if kind == OVERCAST:
+            _cloud(frame, cx + 2, cy - 4, CLOUD_DARK, CLOUD_DARK)
+        _cloud(
+            frame, cx, cy if kind == OVERCAST else cy - 3, CLOUD_DARK if dark else CLOUD, CLOUD_DARK
+        )
+        if kind in (RAINY, HEAVY_RAIN):
+            drops = (-6, -2, 2, 6) if kind == HEAVY_RAIN else (-5, 0, 5)
+            for dx in drops:
+                for step in range(3 if kind == HEAVY_RAIN else 2):
+                    frame.putpixel((cx + dx - step, cy + 5 + step * 2), DROP)
+                    frame.putpixel((cx + dx - step, cy + 6 + step * 2), DROP)
+        elif kind == SNOW:
+            for dx, dy in ((-6, 6), (0, 8), (6, 6), (-3, 10), (3, 10)):
+                frame.putpixel((cx + dx, cy + dy), WHITE)
+        elif kind == THUNDER:
+            for dx, dy in (
+                (1, 4),
+                (0, 5),
+                (-1, 6),
+                (0, 6),
+                (1, 6),
+                (2, 6),
+                (1, 7),
+                (0, 8),
+                (-1, 9),
+            ):
+                frame.putpixel((cx + dx, cy + dy), GOLD)
 
 
 def _weather_frame(view: DayView, city: CityStatus, now: datetime | None) -> Frame:
-    frame = new_frame()
     weather = city.weather
     if not isinstance(weather, Weather):
-        _header(frame, "WEATHER", NO_DATA)
+        frame = new_frame(page_ground(view))
+        _header(frame, "WEATHER", NO_DATA, accent=day_accent(view.day_local))
         draw_text(frame, TEMP_X, TEMP_Y, MISSING, TEXT, BODY, scale=2)
         return frame
-    stale = as_of_label(weather.fetched_at_utc, now, view.home_tz, view.city_stale_minutes)
-    accent = day_accent(view.day_local)
-    _header(frame, "WEATHER", day_stamp(view.day_local), stale, accent)
     hour = _local_hour(now, view.home_tz)
     kind = condition(weather.code, hour)
-    draw_icon(frame, ICON_X, ICON_Y, ICONS[kind], ICON_SCALE)
-    _draw_temperature(frame, degrees(weather.temp_f) or MISSING, ICON_X - 2)
-    _draw_high_low(frame, weather)
-
+    night = is_night(hour)
+    sky, floor = weather_grounds(kind, night)
+    frame = new_frame(sky)
+    if floor != sky:
+        fill_rect(frame, 0, FLOOR_TOP, SIZE - 1, SIZE - 1, floor)
+    stale = as_of_label(weather.fetched_at_utc, now, view.home_tz, view.city_stale_minutes)
+    accent = legible_on(day_accent(view.day_local), sky)
+    _header(frame, "WEATHER", day_stamp(view.day_local), stale, accent)
     alerts = [a for a in weather.alerts if isinstance(a, str) and a.strip()]
     notice = alert_lines(alerts[0]) if alerts else []
+    label = legible_on(LABEL, sky)
+    temp = degrees(weather.temp_f) or MISSING
     if notice:
-        draw_text(frame, LEFT, NOTICE_Y, notice[0], AMBER, SMALL)
-        if len(notice) > 1:
-            draw_text(frame, LEFT, STEP_TEMP_Y, notice[1], AMBER, SMALL)
-    _draw_strip(frame, strip_steps(weather), temps=len(notice) < 2, theme=theme_for(view))
-    draw_scene(frame, kind, is_night(hour), view.day_local, accent, skyline=not notice)
+        # an alert is a band across the foot of the sky, a shade deeper so its amber is
+        # drawn as itself; the hero above it shrinks to the compact form to stay clear
+        rows = (HIGH_LOW_Y, NOTICE_Y)[2 - len(notice) :]
+        fill_rect(frame, 0, rows[0] - 2, SIZE - 1, FLOOR_TOP - 1, band(sky))
+        draw_icon(frame, COMPACT_ICON_X, ICON_Y + 1, ICONS[kind])
+        _draw_temperature(frame, temp, COMPACT_ICON_X - 2)
+        _draw_high_low_stacked(frame, weather, label)
+        for line, y in zip(notice, rows, strict=True):
+            draw_text(frame, LEFT, y, line, AMBER, SMALL, exact=True)
+    else:
+        draw_hero_icon(frame, kind, sky)
+        _draw_temperature(frame, temp, ICON_X - 2)
+        _draw_high_low(frame, weather, label)
+    _draw_strip(frame, strip_steps(weather), True, theme_for(view), floor)
     return frame
 
 
@@ -711,25 +797,13 @@ def line_color(line: LineStatus) -> Color:
     return SUBWAY_COLORS.get(name) or SUBWAY_COLORS.get(name[:1], MTA_GREY)
 
 
+BULLET_W = 9
+
+
 def badge_box(y: int, tight: bool = False) -> tuple[int, int, int, int]:
-    """(x0, y0, x1, y1) of the square a row's badge sits in, inclusive, for a row at `y`."""
-    size = TIGHT_BADGE if tight else BADGE
-    return LEFT, y, LEFT + size - 1, y + size - 1
-
-
-def draw_badge(frame: Frame, y: int, line: LineStatus, tight: bool = False) -> None:
-    """The line's colour as a shape of its own: a disc for a subway, a pill (two rows
-    shorter) for a bus."""
-    x0, y0, x1, y1 = badge_box(y, tight)
-    color = line_color(line)
-    if line.kind == "bus":
-        fill_rect(frame, x0, y0 + 1, x1, y1 - 1, color)
-        if not tight:
-            for x, y in ((x0, y0 + 1), (x1, y0 + 1), (x0, y1 - 1), (x1, y1 - 1)):
-                frame.putpixel((x, y), BLACK)
-        return
-    radius = (x1 - x0) // 2
-    draw_disc(frame, x0 + radius, y0 + radius, radius, color)
+    """(x0, y0, x1, y1) of a subway bullet for a row at `y`, inclusive. `tight` is accepted
+    and ignored: there is one row form (the five-pixel form had no room for a letter)."""
+    return LEFT, y, LEFT + BULLET_W - 1, y + BADGE - 1
 
 
 def status_word(line: LineStatus) -> str:
@@ -744,62 +818,131 @@ def starts_later(line: LineStatus) -> bool:
     return line.status != "ok" and not line.now
 
 
-def name_font(line: LineStatus, tight: bool = False) -> Font:
-    """The body face while the name leaves the status its column; else the small face."""
-    roomy = NAME_X + text_width(str(line.line), BODY) + NAME_GAP <= STATUS_X
-    return BODY if roomy and not tight else SMALL
+def _pill(frame: Frame, x0: int, y: int, x1: int, color: Color) -> None:
+    """A rounded bar seven rows tall: its four corner pixels stay whatever the page is."""
+    corners = [(x, cy) for x in (x0, x1) for cy in (y, y + BADGE - 1)]
+    corners = [(x, cy) for x, cy in corners if 0 <= x < SIZE and 0 <= cy < SIZE]
+    under = [frame.getpixel(at) for at in corners]
+    fill_rect(frame, x0, y, x1, y + BADGE - 1, color)
+    for at, was in zip(corners, under, strict=True):
+        frame.putpixel(at, was)
+
+
+BULLET_STATUS_X = 24
+PILL_PAD = 2
+# A subway bullet is an oval nine wide and seven tall: wide enough for a five-column capital
+# with a clear rim all round (in a seven-wide disc N sat off centre and W read as H; display
+# audit, 2026-11-15). M and W are the small face's own five-column forms; N gets one too, so
+# all three sit centred.
+BULLET_ROWS = ((2, 6), (1, 7), (0, 8), (0, 8), (0, 8), (1, 7), (2, 6))
+BULLET_GLYPHS: dict[str, tuple[str, ...]] = {
+    "N": ("#...#", "##..#", "#.#.#", "#..##", "#...#"),
+}
+
+
+def _oval(frame: Frame, x: int, y: int, color: Color) -> None:
+    for row, (first, last) in enumerate(BULLET_ROWS):
+        fill_rect(frame, x + first, y + row, x + last, y + row, color)
+
+
+def draw_bullet_name(frame: Frame, x: int, y: int, name: str, ink: Color) -> None:
+    """A one-letter line name centred in the bullet whose left column is `x`."""
+    if name in BULLET_GLYPHS:
+        rows = BULLET_GLYPHS[name]
+        _draw_mark(frame, x + (BULLET_W - len(rows[0])) // 2, y + 1, rows, ink)
+        return
+    at = x + (BULLET_W - text_width(name, SMALL)) // 2
+    draw_text(frame, at, y + 1, name, ink, SMALL, exact=True)
+
+
+def fits_a_bullet(name: str) -> bool:
+    return len(name) == 1 and text_width(name, SMALL) <= BULLET_W - 4
+
+
+def bullet_ink(color: Color) -> Color:
+    """The letter's colour inside a bullet, as the MTA prints it: black on the yellow lines,
+    white on every other."""
+    return BULLET_INK if color == MTA_YELLOW else WHITE
+
+
+def draw_bullet(frame: Frame, y: int, line: LineStatus) -> int:
+    """The line as its own sign, the name INSIDE it (Max, 2026-11-15: "like true NYC subway
+    artistic style"): a subway letter in an oval of the line's colour, a bus route (or a
+    subway name longer than a letter) in a pill. Seven rows tall from `y`. Returns the x of
+    its last column."""
+    name = str(line.line).upper()
+    color = line_color(line)
+    ink = bullet_ink(color)
+    if line.kind != "bus" and fits_a_bullet(name):
+        _oval(frame, LEFT, y, color)
+        draw_bullet_name(frame, LEFT, y, name, ink)
+        return LEFT + BULLET_W - 1
+    right = min(LEFT + text_width(name, SMALL) + 2 * PILL_PAD - 1, RIGHT)
+    _pill(frame, LEFT, y, right, color)
+    shown = ellipsize(name, right - LEFT + 1 - 2 * PILL_PAD)
+    draw_text(frame, LEFT + PILL_PAD, y + 1, shown, ink, SMALL, exact=True)
+    return right
+
+
+BOARD_X = BULLET_STATUS_X - 2
+
+
+def draw_board(frame: Frame) -> None:
+    """The lines page's status board: the right-hand column a shade deeper than the page,
+    from under the header to the foot. The status words sit on it, so green, amber and red
+    are drawn as themselves (a red lightened to read on the page drifted toward coral; code
+    audit, 2026-11-15)."""
+    ground = frame.getpixel((0, 0))
+    fill_rect(frame, BOARD_X, ROWS_TOP - 1, SIZE - 1, SIZE - 1, band(ground))
 
 
 def draw_row(frame: Frame, y: int, line: LineStatus, tight: bool = False) -> None:
-    """One line: its badge, its name in white beside it, then its status as a word in the
-    status colour, with a clock mark when the alert starts later today (the word moves left
-    to make room for it; a name so long that it still cannot fit goes without). `y` is the
-    row's top; a tight row (the eight-line form) is five pixels tall, any other seven."""
-    draw_badge(frame, y, line, tight)
-    font = name_font(line, tight)
-    text_y = y if tight or font is BODY else y + 1
-    name_x = TIGHT_NAME_X if tight else NAME_X
-    after = draw_text(frame, name_x, text_y, str(line.line), WHITE, font)
-    column = TIGHT_STATUS_X if tight else STATUS_X
-    status_y = y if tight else y + 1
+    """One line: its bullet with the name inside (`draw_bullet`), then its status as a word
+    in the status colour, exactly, with a clock mark when the alert starts later today. The
+    word starts at the board's column, later if a long pill needs the room, and is pulled
+    left again so it (and its mark) end inside the right margin. `y` is the row's top;
+    `tight` is accepted and ignored."""
+    first = draw_bullet(frame, y, line) + NAME_GAP
+    status_y = y + 1
     word, color = status_word(line), status_color(line)
-    marked = text_width(word) + MARK_GAP + len(CLOCK[0])
-    first = after - 1 + NAME_GAP
-    clock = starts_later(line) and first + marked - 1 <= RIGHT
-    x = max(first, min(column, RIGHT + 1 - marked)) if clock else max(first, column)
-    after = draw_text(frame, x, status_y, word, color, SMALL)
+    clock = starts_later(line)
+    width = text_width(word) + (MARK_GAP + len(CLOCK[0]) if clock else 0)
+    x = max(first, min(BULLET_STATUS_X, RIGHT + 1 - width))
+    if x + width - 1 > RIGHT and clock:
+        clock, width = False, text_width(word)
+    x = max(first, min(x, RIGHT + 1 - width))
+    after = draw_text(frame, x, status_y, word, color, SMALL, exact=True)
     if clock:
         _draw_mark(frame, after - 1 + MARK_GAP, status_y, CLOCK, color)
 
 
 def line_rows(count: int) -> tuple[bool, list[int]]:
-    """(tight, the top y of each row). Up to ROOMY_ROWS lines get the seven-pixel row with the
-    name in the body face; MAX_ROWS need the tighter pitch and the small face."""
-    shown = min(count, MAX_ROWS)
-    if shown <= ROOMY_ROWS:
-        return False, [ROWS_TOP + index * ROW_PITCH for index in range(shown)]
-    return True, [ROWS_TOP + 1 + index * TIGHT_PITCH for index in range(shown)]
+    """(False, the top y of each row): at most ROOMY_ROWS seven-pixel rows. There is no
+    tighter form; more lines than rows end in a count (`_lines_frame`)."""
+    shown = min(count, ROOMY_ROWS)
+    return False, [ROWS_TOP + index * ROW_PITCH for index in range(shown)]
 
 
 def _lines_frame(view: DayView, city: CityStatus, now: datetime | None) -> Frame:
-    frame = new_frame()
+    frame = new_frame(page_ground(view))
     lines = [line for line in city.lines if isinstance(line, LineStatus)]
     if city.transit_fetched_at_utc is None:
-        _header(frame, "TRANSIT", NO_DATA)
+        _header(frame, "TRANSIT", NO_DATA, accent=day_accent(view.day_local))
         return frame
     stale = as_of_label(city.transit_fetched_at_utc, now, view.home_tz, view.city_stale_minutes)
     _header(frame, "TRANSIT", day_stamp(view.day_local), stale, day_accent(view.day_local))
     if not lines:
         draw_text(frame, LEFT, ROWS_TOP + 1, "NO LINES", TEXT, SMALL)
         return frame
-    tight, rows = line_rows(len(lines))
+    draw_board(frame)
+    _, rows = line_rows(len(lines))
     hidden = len(lines) - len(rows)
     if hidden > 0:
         rows = rows[:-1]
     for line, y in zip(lines, rows, strict=False):
-        draw_row(frame, y, line, tight)
+        draw_row(frame, y, line)
     if hidden > 0:
-        y = ROWS_TOP + 1 + (MAX_ROWS - 1) * TIGHT_PITCH
+        y = ROWS_TOP + (ROOMY_ROWS - 1) * ROW_PITCH + 1
         draw_text(frame, LEFT, y, f"+{hidden + 1} MORE", SECONDARY, SMALL)
     return frame
 
@@ -827,50 +970,208 @@ def detail_lines(city: CityStatus) -> list[LineStatus]:
     return [line for line in affected_lines(city) if line.status in DETAIL_STATUSES]
 
 
+LINE_NAMES = frozenset("1234567ABCDEFGJLMNQRSWZ") | {"SIR"}
+_NOUNS = frozenset({"train", "trains", "service", "line", "lines", "shuttle"})
+_JOINERS = frozenset({"or", "and"})
+# A capital or a digit before or after one of these is an address, a count or a time, not a
+# line: "Avenue C", "Track 1", "3 of 4", "7 Av", "E 180 St", "5 minutes", "3 AM".
+_NOT_A_LINE_AFTER = frozenset({"avenue", "av", "ave", "track", "tracks", "platform", "exit"})
+_NOT_A_LINE_AFTER |= frozenset({"plan", "of", "gate", "level", "lot", "terminal", "pier"})
+_NOT_A_LINE_BEFORE = frozenset({"av", "ave", "avenue", "st", "street", "pl", "rd", "blvd"})
+_NOT_A_LINE_BEFORE |= frozenset({"am", "pm", "min", "mins", "minute", "minutes", "hour", "hours"})
+_NOT_A_LINE_BEFORE |= frozenset({"pct", "percent", "stops", "stop", "cars", "car", "days", "day"})
+_BUS_ROUTE = re.compile(r"^(?:BXM|BX|BM|QM|SIM|X|[BMQS])\d{1,3}[A-Z]?(?:-SBS)?$")
+_EDGES = ".,;:!?()\"'"
+_MARKED = re.compile(r"^(\W*)\[([A-Za-z0-9]{1,4})\](\W*)$")
+_ADJACENT = re.compile(r"\]\s*\[")
+_GLUED = re.compile(r"^[A-Z0-9]{1,3}(?:[/,][A-Z0-9]{1,3})+$")
+
+
+def _core(word: str) -> str:
+    return word.strip(_EDGES)
+
+
+def _line_parts(core: str) -> list[str]:
+    """The line names a word stands for: itself, or the members of "4/5/6" and "N,W"; an
+    empty list when it is not made of line names only."""
+    parts = re.split(r"[/,]", core) if _GLUED.match(core) else [core]
+    return parts if all(part in LINE_NAMES for part in parts) else []
+
+
+def mark_lines(text: str, buses: frozenset[str] = frozenset()) -> str:
+    """The headline with every line it names written as the feed's own bullet, "[N]", each
+    its own word, so it can be drawn as a sign (Max, 2026-11-15). The feed brackets some
+    lines and not others, and runs brackets together ("[E][F][R]"): those are split apart.
+
+    A bare capital or digit is taken for a line only where the sentence says so. Words are
+    read in runs of line names joined by "or", "and", commas, slashes or nothing ("the A, C
+    and E trains", "the 4 5 6", "N/W trains"). A run is a list of lines when it is followed
+    by "train(s)", "service", "line(s)" or "shuttle", or follows "the"; a run of two or more
+    letters is one without either ("Take the N or R instead"). It never is next to a word
+    that makes it an address, a count or a time ("Avenue C", "E 180 St", "7 Av", "Track 1",
+    "3 of 4 trains", "5 or 10 minutes"). A lone "A" is the article unless "trains" follows.
+    A configured bus route is marked wherever it stands, and any route-shaped word before
+    "bus" or "buses"."""
+    words = _ADJACENT.sub("] [", text).split()
+    cores = [_core(word) for word in words]
+    lower = [core.lower() for core in cores]
+    parts = [_line_parts(core) for core in cores]
+    named = [False] * len(words)
+    index = 0
+    while index < len(words):
+        if not parts[index]:
+            index += 1
+            continue
+        end = index
+        while True:
+            after_joiner = end + 2 < len(words) and lower[end + 1] in _JOINERS and parts[end + 2]
+            if end + 1 < len(words) and parts[end + 1]:
+                end += 1
+            elif after_joiner:
+                end += 2
+            else:
+                break
+        members = [k for k in range(index, end + 1) if parts[k]]
+        before = lower[index - 1] if index else ""
+        after = lower[end + 1] if end + 1 < len(words) else ""
+        names = [name for k in members for name in parts[k]]
+        blocked = (
+            before in _NOT_A_LINE_AFTER
+            or after in _NOT_A_LINE_BEFORE
+            or (after[:1].isdigit() and not _line_parts(cores[end + 1]))
+        )
+        said = after in _NOUNS or before == "the"
+        letters = all(not name.isdigit() for name in names)
+        if names == ["A"]:
+            is_list = after == "trains"
+        elif len(names) > 1 and letters:
+            is_list = True
+        else:
+            is_list = said
+        if is_list and not blocked:
+            for k in members:
+                named[k] = True
+        index = end + 1
+    out = []
+    for position, (word, core) in enumerate(zip(words, cores, strict=True)):
+        following = lower[position + 1] if position + 1 < len(words) else ""
+        bus = core.upper() in buses or (
+            bool(_BUS_ROUTE.match(core.upper())) and following.startswith("bus")
+        )
+        if core and (named[position] or bus):
+            at = word.index(core)
+            signs = " ".join(f"[{name}]" for name in (parts[position] or [core]))
+            word = f"{word[:at]}{signs}{word[at + len(core) :]}"
+        out.append(word)
+    return " ".join(out)
+
+
+def sign_color(name: str) -> Color:
+    """A sign's fill in running text: the bus blue for a route-shaped name, else the line's
+    own colour as the lines page draws it (a subway name the table lacks is the grey)."""
+    name = name.upper()
+    if name not in SUBWAY_COLORS and _BUS_ROUTE.match(name):
+        return BUS_BLUE
+    return SUBWAY_COLORS.get(name) or SUBWAY_COLORS.get(name[:1], MTA_GREY)
+
+
+def sign_width(name: str) -> int:
+    """Pixels a line's sign takes in running text: a disc for a letter, a pill for a route."""
+    name = name.upper()
+    return BULLET_W if fits_a_bullet(name) else text_width(name, SMALL) + 2 * PILL_PAD
+
+
+GLUE = "\u00a0"
+
+
+def word_width(word: str, font: Font) -> int:
+    marked = _MARKED.match(word)
+    if marked is None:
+        return text_width(word.replace(GLUE, " "), font)
+    lead, name, tail = marked.groups()
+    extra = sum(text_width(part, font) + font.spacing for part in (lead, tail) if part)
+    return sign_width(name) + extra
+
+
 def _soften(text: str, font: Font, width: int) -> str:
     """Let a word too wide for a line break after its hyphens and slashes
-    ("Astoria-Ditmars") instead of mid-syllable, and write the feed's bracketed line
-    bullets ("[F] trains") as the bare line ("F trains"): the small face has no brackets."""
+    ("Astoria-Ditmars") instead of mid-syllable. A marked line ("[F]") is left whole."""
     words = []
-    for word in BULLET.sub(r"\1", text).split():
-        if text_width(word, font) > width:
+    for word in text.split():
+        if _MARKED.match(word) is None and text_width(word, font) > width:
             word = word.replace("-", "- ").replace("/", "/ ").strip()
         words.append(word)
     return " ".join(words)
 
 
-def _wrap_small(text: str, width: int) -> list[str]:
+def wrap_headline(text: str, font: Font, width: int) -> list[str]:
+    """Greedy wrap by drawn width, a line's sign counted at its own width; a plain word wider
+    than a line is cut to fit."""
+    gap = text_width("a a", font) - 2 * text_width("a", font)
     lines: list[str] = []
-    current = ""
-    for word in text.split():
-        candidate = f"{current} {word}" if current else word
-        if text_width(candidate, SMALL) <= width:
-            current = candidate
+    current, used = "", 0
+    for word in glue_numbers(text.split(" ")):
+        size = word_width(word, font)
+        if current and used + gap + size <= width:
+            current, used = f"{current} {word}", used + gap + size
             continue
         if current:
             lines.append(current)
-        while text_width(word, SMALL) > width:
+        while _MARKED.match(word) is None and text_width(word, font) > width:
             cut = len(word) - 1
-            while cut > 1 and text_width(word[:cut], SMALL) > width:
+            while cut > 1 and text_width(word[:cut], font) > width:
                 cut -= 1
             lines.append(word[:cut])
             word = word[cut:]
-        current = word
+        current, used = word, word_width(word, font)
     if current:
         lines.append(current)
-    return lines
+    return [line.replace(GLUE, " ") for line in lines]
 
 
-def headline_pages(headline: str, room: int) -> tuple[Font, int, list[list[str]]]:
+def draw_sign(frame: Frame, x: int, y: int, name: str) -> int:
+    """A line's sign in running text, seven rows tall from `y`. Returns its last column."""
+    name = name.upper()
+    color = sign_color(name)
+    ink = bullet_ink(color)
+    if fits_a_bullet(name):
+        _oval(frame, x, y, color)
+        draw_bullet_name(frame, x, y, name, ink)
+        return x + BULLET_W - 1
+    right = x + sign_width(name) - 1
+    _pill(frame, x, y, right, color)
+    draw_text(frame, x + PILL_PAD, y + 1, name, ink, SMALL, exact=True)
+    return right
+
+
+def draw_headline_line(frame: Frame, x: int, y: int, line: str, font: Font) -> None:
+    """One wrapped line, word by word, each marked line as its sign."""
+    gap = text_width("a a", font) - 2 * text_width("a", font)
+    sign_y = y if font is BODY else y - 1
+    for word in line.split():
+        marked = _MARKED.match(word)
+        if marked is None:
+            x = draw_text(frame, x, y, word, TEXT, font) - font.spacing + gap
+            continue
+        lead, name, tail = marked.groups()
+        if lead:
+            x = draw_text(frame, x, y, lead, TEXT, font)
+        x = draw_sign(frame, x, sign_y, name) + 1 + font.spacing
+        if tail:
+            x = draw_text(frame, x, y, tail, TEXT, font)
+        x += gap - font.spacing
+
+
+def headline_pages(
+    headline: str, room: int, buses: frozenset[str] = frozenset()
+) -> tuple[Font, int, list[list[str]]]:
     """(face, line pitch, pages of lines) for a whole headline in `room` pixel rows a page.
-    Nothing is cut: the text runs over as many pages as it needs, in the body face with the
-    Books wrap while that takes at most BODY_PAGES pages, else in the small face."""
-    text = clean_summary(headline)
+    Nothing is cut: the text runs over as many pages as it needs, in the body face while that
+    takes at most BODY_PAGES pages, else in the small face. Lines it names are marked
+    (`mark_lines`) and wrapped at their signs' width."""
+    text = mark_lines(clean_summary(headline), buses)
     for font, pitch in HEADLINE_FACES:
-        if font is BODY:
-            lines = wrap_lines(_soften(text, BODY, WIDTH))
-        else:
-            lines = _wrap_small(_soften(text, SMALL, WIDTH), WIDTH)
+        lines = wrap_headline(_soften(text, font, WIDTH), font, WIDTH)
         per_page = max(1, (room - font.height) // pitch + 1)
         pages = [lines[i : i + per_page] for i in range(0, len(lines), per_page)] or [[]]
         if font is SMALL or len(pages) <= BODY_PAGES:
@@ -878,16 +1179,23 @@ def headline_pages(headline: str, room: int) -> tuple[Font, int, list[list[str]]
     return font, pitch, pages
 
 
-def _detail_frames(line: LineStatus, more: int, stale: str | None) -> list[Frame]:
+def _detail_frames(
+    line: LineStatus,
+    more: int,
+    stale: str | None,
+    ground: Color = BLACK,
+    buses: frozenset[str] = frozenset(),
+) -> list[Frame]:
     """The line's whole headline, on as many pages as it takes; "+N MORE" on its last."""
     headline = line.headline if isinstance(line.headline, str) and line.headline.strip() else ""
     room = DETAIL_BOTTOM - (FOOTER_PITCH if stale is not None else 0) - DETAIL_TOP + 1
     if more > 0:
         room -= FOOTER_PITCH
-    font, pitch, pages = headline_pages(headline or NO_DETAILS, room)
+    font, pitch, pages = headline_pages(headline or NO_DETAILS, room, buses)
     frames = []
     for number, lines in enumerate(pages):
-        frame = new_frame()
+        frame = new_frame(ground)
+        fill_rect(frame, 0, 0, SIZE - 1, HEADER_Y + BADGE, band(ground))
         draw_row(frame, HEADER_Y - 1, line)
         footers: list[tuple[str, Color]] = []
         if stale is not None:
@@ -898,7 +1206,7 @@ def _detail_frames(line: LineStatus, more: int, stale: str | None) -> list[Frame
             y = DETAIL_BOTTOM - SMALL.height + 1 - (len(footers) - 1 - index) * FOOTER_PITCH
             draw_text(frame, LEFT, y, text, color, SMALL)
         for index, text in enumerate(lines):
-            draw_text(frame, LEFT, DETAIL_TOP + index * pitch, text, TEXT, font)
+            draw_headline_line(frame, LEFT, DETAIL_TOP + index * pitch, text, font)
         frames.append(frame)
     return frames
 
@@ -907,8 +1215,8 @@ def _detail_frames(line: LineStatus, more: int, stale: str | None) -> list[Frame
 
 
 def _no_data_frame(view: DayView) -> Frame:
-    frame = new_frame()
-    _header(frame, "CITY", day_stamp(view.day_local))
+    frame = new_frame(page_ground(view))
+    _header(frame, "CITY", day_stamp(view.day_local), accent=day_accent(view.day_local))
     draw_text(frame, LEFT, TEMP_Y, MISSING, TEXT, BODY, scale=2)
     draw_text(frame, LEFT, NOTICE_Y, NO_DATA, TEXT, SMALL)
     return frame
@@ -937,8 +1245,13 @@ def render_city(view: DayView, now: datetime | None = None) -> Clip:
     affected = detail_lines(city)
     stale = as_of_label(city.transit_fetched_at_utc, now, view.home_tz, view.city_stale_minutes)
     shown = affected[:DETAIL_PAGES]
+    buses = frozenset(
+        str(line.line).upper()
+        for line in city.lines
+        if isinstance(line, LineStatus) and line.kind == "bus"
+    )
     for index, line in enumerate(shown):
         more = len(affected) - len(shown) if index == len(shown) - 1 else 0
-        frames.extend(_detail_frames(line, more, stale))
+        frames.extend(_detail_frames(line, more, stale, page_ground(view), buses))
     durations = (WEATHER_MS, LINES_MS, *(DETAIL_MS,) * (len(frames) - 2))
     return Clip(tuple(frames), durations)

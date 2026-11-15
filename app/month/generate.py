@@ -136,6 +136,7 @@ def voice_problem(feature: MonthFeature) -> str | None:
     for plate in feature.days:
         texts.append((f"day {plate.day} caption", plate.caption, True))
         texts.append((f"day {plate.day} note", plate.note, False))
+        texts.append((f"day {plate.day} fact", plate.fact, True))
     for where, text, in_capitals in texts:
         if not text:
             continue
@@ -155,7 +156,7 @@ def judge(text: str, month: str) -> tuple[dict, MonthFeature] | str:
     if raw is None:
         return "the reply holds no JSON object"
     try:
-        feature = parse_feature(raw, month)
+        feature = parse_feature(raw, month, facts=True)
     except SpecError as exc:
         return str(exc)
     problem = voice_problem(feature)

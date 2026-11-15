@@ -39,6 +39,7 @@ def feature_object(month: str) -> dict:
                 "day": day,
                 "caption": f"The {WORDS[day - 1]}",
                 "note": f"A {WORDS[day - 1]} keeps its own slow calendar.",
+                "fact": f"{WORDS[day - 1]} grows slow in shade",
                 "art": plate_art(day),
             }
             for day in range(1, days_in(month) + 1)

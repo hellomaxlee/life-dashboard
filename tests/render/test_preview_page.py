@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 from datetime import UTC, datetime
 
+import pytest
 from PIL import Image, ImageChops
 
 from app.render.gamma import led_gamma
@@ -12,6 +13,9 @@ from tests.render import STALE, WEEK_41, load, rotation
 from tools.render import main as render_main
 
 NAMES = ("today", "city", "week", "month", "books", "sparkle", "party")
+
+
+pytestmark = pytest.mark.usefixtures("no_scenery")
 
 
 def test_preview_page_shows_every_screen_four_ways(client):

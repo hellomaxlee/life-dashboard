@@ -48,6 +48,9 @@ from tests.render import (
 NOW = from_utc_iso("2026-10-02T16:00:00Z")
 
 
+pytestmark = pytest.mark.usefixtures("no_scenery")
+
+
 def lit(frame: Image.Image) -> int:
     return sum(1 for pixel in frame.get_flattened_data() if pixel != (0, 0, 0))
 
@@ -322,7 +325,6 @@ def parked_views(settings) -> list[tuple[str, DayView, object]]:
     return cases
 
 
-@pytest.mark.usefixtures("no_scenery")
 def test_the_parked_zz_never_touches_the_as_of_line(settings):
     """The mark's own pixels are SECONDARY, the rest of its box and two columns before
     it are black, and the as-of row says the time Today said, with AS OF dropped only when

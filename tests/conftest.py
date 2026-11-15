@@ -75,10 +75,16 @@ def count(conn: sqlite3.Connection, table: str) -> int:
 
 @pytest.fixture
 def no_scenery(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Render the screens' words and marks on black, without their scenes: for a test that is
-    about where a word sits or what colour a mark is, not about the picture behind it."""
-    from app.render import city, screens
+    """Render the screens on black, without grounds, hills, skies or stars: for a test that
+    is about where a word sits or what colour a mark is, not about the page behind it. On
+    black a structural tone is itself (`screens.slot`), as it was before the pages had
+    grounds."""
+    from app.render import city, month, screens
 
-    for module in (screens, city):
-        monkeypatch.setattr(module, "paint_behind", lambda *args, **kwargs: None)
-        monkeypatch.setattr(module, "scatter_stars", lambda *args, **kwargs: None)
+    black = (0, 0, 0)
+    monkeypatch.setattr(screens, "page_ground", lambda view: black)
+    monkeypatch.setattr(city, "page_ground", lambda view: black)
+    monkeypatch.setattr(month, "page_ground", lambda view: black)
+    monkeypatch.setattr(month, "day_ground", lambda day_local: black)
+    monkeypatch.setattr(city, "weather_grounds", lambda kind, night: (black, black))
+    monkeypatch.setattr(screens, "draw_hills", lambda frame: None)

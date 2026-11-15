@@ -526,7 +526,7 @@ grep -n "summary .* model unavailable" data/logs/life-dashboard.err.log | tail  
 
 Model: `summary.model` in `config.toml` (`claude-opus-5-5`), key `ANTHROPIC_API_KEY`
 in `.env`. No key → every day is rule-based copy and no call is attempted. Cap:
-`summary.monthly_cap_usd` (3). Before each call, month-to-date plus the worst
+`summary.monthly_cap_usd` (5; raised from 3 on 2026-11-15). Before each call, month-to-date plus the worst
 case for that call (about $0.022) must stay under the cap; otherwise the day
 falls back and the attempt is recorded as `cap: ...` in `summary_lines.attempts_json`.
 Read `--spend` before and after any round that calls the model.

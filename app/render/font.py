@@ -12,6 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from app.render.frame import Color, Frame
+from app.render.palette import legible_on
 
 _BODY_COLUMNS: dict[str, tuple[int, int, int, int, int]] = {
     "!": (0x00, 0x00, 0x5F, 0x00, 0x00),
@@ -128,7 +129,7 @@ _SMALL_ROWS: dict[str, str] = {
     "N": "#..# ##.# #.## #..# #..#",
     "O": ".#. #.# #.# #.# .#.",
     "P": "##. #.# ##. #.. #..",
-    "Q": ".#. #.# #.# ### .##",
+    "Q": ".##. #..# #..# #.#. .#.#",
     "R": "##. #.# ##. #.# #.#",
     "S": ".## #.. .#. ..# ##.",
     "T": "### .#. .#. .#. .#.",
@@ -150,6 +151,12 @@ _SMALL_ROWS: dict[str, str] = {
     "9": "### #.# ### ..# ###",
     " ": ".. .. .. .. ..",
     ":": ". # . # .",
+    ";": ".# .. .# .# #.",
+    "(": ".# #. #. #. .#",
+    "[": "## #. #. #. ##",
+    "]": "## .# .# .# ##",
+    ")": "#. .# .# .# #.",
+    '"': "#.# #.# ... ... ...",
     ".": ". . . . #",
     ",": ".. .. .. .# #.",
     "'": "# # . . .",
@@ -232,11 +239,25 @@ def text_width(text: str, font: Font = SMALL, scale: int = 1) -> int:
 
 
 def draw_text(
-    frame: Frame, x: int, y: int, text: str, color: Color, font: Font = SMALL, scale: int = 1
+    frame: Frame,
+    x: int,
+    y: int,
+    text: str,
+    color: Color,
+    font: Font = SMALL,
+    scale: int = 1,
+    exact: bool = False,
 ) -> int:
-    """Draw text with its top-left at (x, y), clipped to the frame. Returns the x after it."""
+    """Draw text with its top-left at (x, y), clipped to the frame. Returns the x after it.
+    The colour is made legible on what the text starts on (`palette.legible_on`, read from
+    the pixel under its top-left corner): unchanged on black, lightened on a deep ground.
+    `exact` draws `color` as given: for a colour that is itself the message (a status red, an
+    alert amber), which the caller lays on a surface dark enough to carry it."""
     pixels = frame.load()
     width, height = frame.size
+    if not exact:
+        under = pixels[min(max(x, 0), width - 1), min(max(y, 0), height - 1)]
+        color = legible_on(color, under)
     cursor = x
     for char in normalize(text):
         rows = font.glyph(char)

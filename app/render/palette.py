@@ -1,4 +1,6 @@
-"""Colours chosen for LEDs: saturated, on true black, told apart by hue rather than by dimness.
+"""Colours chosen for LEDs: saturated, told apart by hue rather than by dimness. Since
+2026-11-15 a page is laid on a deep ground (DAY_GROUNDS, city.SKY_TONES), not on true black;
+`legible_on` keeps a word readable on whatever it is laid on.
 
 A linear-PWM panel lifts dark tones (see gamma.py), so two greys that differ on a monitor can
 look the same on the device. Hierarchy here comes from hue; dim tones are used only for
@@ -53,10 +55,12 @@ RAIN: Color = (40, 120, 255)
 CLOUD: Color = (205, 210, 225)
 CLOUD_DARK: Color = (120, 126, 150)
 MOONLIGHT: Color = (235, 225, 160)
-# MTA bullet colours. The brown (#996633) is lifted so it reads on LEDs; the rest are the
-# standard values. The bus blue is brighter than the A/C/E blue so a bus is never an A train.
+# MTA bullet colours. The brown (#996633) is lifted so it reads on LEDs and the orange
+# (#FF6319) deepened so a white letter inside the bullet reaches contrast 2 (2026-11-15); the
+# rest are the standard values. The bus blue is brighter than the A/C/E blue so a bus is never
+# an A train, and deep enough for a white route name.
 MTA_BLUE: Color = (0, 57, 166)
-MTA_ORANGE: Color = (255, 99, 25)
+MTA_ORANGE: Color = (232, 82, 0)
 MTA_LIGHT_GREEN: Color = (108, 190, 69)
 MTA_BROWN: Color = (190, 128, 64)
 MTA_GREY: Color = (167, 169, 172)
@@ -64,7 +68,7 @@ MTA_YELLOW: Color = (252, 204, 10)
 MTA_RED: Color = (238, 53, 46)
 MTA_GREEN: Color = (0, 147, 60)
 MTA_PURPLE: Color = (185, 51, 173)
-BUS_BLUE: Color = (20, 110, 235)
+BUS_BLUE: Color = (0, 84, 204)
 BULLET_INK: Color = (0, 0, 0)
 
 DOTS: tuple[Color, ...] = (CORAL, GOLD, TEAL)
@@ -81,18 +85,21 @@ WHEEL: tuple[Color, ...] = (CORAL, AMBER, GOLD, GREEN, TEAL, SKY, VIOLET, PINK)
 DAY_ACCENTS: tuple[Color, ...] = (CORAL, AMBER, GOLD, GREEN, TEAL, SKY, VIOLET)
 
 
-# The same seven as scenery: the sky or wall behind a scene, deep enough to sit behind white
-# words and with its weakest channel at or near zero so the panel keeps it a colour. Chosen by
+# The same seven as a page's ground: deep enough that every word colour reads on it without
+# an outline (contrast at least CONTRAST_FLOOR against LABEL and SECONDARY, gated), with its
+# weakest channel at or near zero so the panel keeps it a colour. Chosen by
 # eye, not scaled from the accents: a dimmed coral or amber is brown.
 DAY_GROUNDS: tuple[Color, ...] = (
-    (90, 12, 28),
-    (95, 40, 0),
-    (78, 62, 0),
-    (0, 78, 30),
-    (0, 72, 66),
-    (0, 46, 96),
-    (52, 18, 98),
+    (66, 8, 22),
+    (70, 24, 0),
+    (42, 34, 0),
+    (0, 40, 10),
+    (0, 34, 46),
+    (0, 24, 80),
+    (40, 14, 78),
 )
+SLOT_SHADE = 0.4
+CONTRAST_FLOOR = 3.0
 
 
 def day_ground(day_local: str) -> Color:
@@ -101,6 +108,36 @@ def day_ground(day_local: str) -> Color:
         return DAY_GROUNDS[date.fromisoformat(day_local).weekday()]
     except ValueError:
         return DAY_GROUNDS[0]
+
+
+def luminance(color: Color) -> float:
+    """Relative luminance as the panel emits it: linear in the channel value (gamma.py)."""
+    return (0.2126 * color[0] + 0.7152 * color[1] + 0.0722 * color[2]) / 255
+
+
+def contrast(a: Color, b: Color) -> float:
+    """The contrast ratio of two colours on the panel, 1 (none) to 21."""
+    high, low = sorted((luminance(a), luminance(b)), reverse=True)
+    return (high + 0.05) / (low + 0.05)
+
+
+def legible_on(color: Color, ground: Color, floor: float = CONTRAST_FLOOR) -> Color:
+    """`color` as a word can wear it on `ground`: itself when it reads (contrast at least
+    `floor`), else lightened toward white a tenth at a time until it does, keeping its hue
+    (a pure red on a deep ground becomes a light red, still red); if even that fails (a white
+    letter in an orange subway bullet), whichever of itself, TEXT and WHITE reads best.
+    A word never sinks into what it is laid on. `font.draw_text` applies it to every word."""
+    if contrast(color, ground) >= floor:
+        return color
+    for tenth in range(1, 8):
+        lighter = (
+            color[0] + (255 - color[0]) * tenth // 10,
+            color[1] + (255 - color[1]) * tenth // 10,
+            color[2] + (255 - color[2]) * tenth // 10,
+        )
+        if contrast(lighter, ground) >= floor:
+            return lighter
+    return max((color, TEXT, WHITE), key=lambda ink: contrast(ink, ground))
 
 
 def day_accent(day_local: str) -> Color:

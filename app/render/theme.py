@@ -6,6 +6,9 @@ the monthly feature". So the Month screen stays the loud change and the other sc
 one accent from the stored feature's palette on the tones that may fade without loss
 (palette.py): the sleep bar's track, the empty rings, the inactive page pip, the rain gauges,
 plus one more colour in the confetti. Text, headers, numbers and the plate are untouched.
+On a page's ground (2026-11-15) a track or pip is a recess of that ground (`screens.slot`),
+which mixes the tinted tone in at a quarter, so the theme still shows there, more quietly;
+the rings carry it as before.
 
 The accent is the first palette entry with a hue worth naming (HSV saturation at least
 MIN_ACCENT_SATURATION), so it is the title's colour unless the title is near-white. A tinted

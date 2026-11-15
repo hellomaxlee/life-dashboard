@@ -63,7 +63,7 @@ def test_request_follows_the_api_contract_and_streams(db, keyed):
     [request] = client.requests
 
     assert request["model"] == keyed.summary.model
-    assert request["max_tokens"] == MAX_TOKENS == 32000
+    assert request["max_tokens"] == MAX_TOKENS == 64000
     assert request["output_config"] == {"effort": EFFORT}
     assert "thinking" not in request and "temperature" not in request
     assert request["system"] == [
@@ -160,12 +160,13 @@ def test_over_the_cap_makes_no_call_even_when_forced(db, keyed):
     for force in (False, True):
         result = ensure_month_feature(db, capped, MONTH, client=client, now=NOW, force=force)
         assert (result.status, result.calls) == (FAILED, 0)
-        assert result.reason.startswith("cap: 2026-10: month-to-date $0.0000 + worst case $0.6")
+        assert result.reason.startswith("cap: 2026-10: month-to-date $0.0000 + worst case $1.3")
     assert client.requests == []
     assert count(db, "model_spend") == count(db, "month_feature_attempts") == 0
 
 
 def test_the_cap_counts_what_the_month_already_spent(db, keyed):
+    keyed = replace(keyed, summary=replace(keyed.summary, monthly_cap_usd=3.0))
     spend.record(db, keyed, "2026-10-02", "req_old", spend.Usage(output_tokens=120_000), "x", NOW)
     assert spend.month_to_date(db, MONTH) == pytest.approx(2.4)
     client = FakeClient(reply(GOOD))
@@ -175,7 +176,7 @@ def test_the_cap_counts_what_the_month_already_spent(db, keyed):
 
 
 def test_the_cap_stops_the_retry_too(db, keyed):
-    tight = replace(keyed, summary=replace(keyed.summary, monthly_cap_usd=0.9))
+    tight = replace(keyed, summary=replace(keyed.summary, monthly_cap_usd=1.5))
     client = FakeClient(reply(SHORT_A_DAY), reply(GOOD))
     result = ensure_month_feature(db, tight, MONTH, client=client, now=NOW)
     assert (result.status, result.calls) == (FAILED, 1)
@@ -457,3 +458,57 @@ def test_the_brief_offers_many_month_shapes_and_bars_a_third_build_running():
         assert phrase in prompt.SYSTEM_PROMPT, phrase
     assert "THE THREAD" not in prompt.SYSTEM_PROMPT
     assert "the month itself filling up" not in prompt.SYSTEM_PROMPT
+
+
+# the day's fact (Max, 2026-11-15: the feature "should be educational in some way")
+
+
+def with_fact(day: int, fact: object) -> str:
+    raw = feature_object(MONTH)
+    if fact is None:
+        del raw["days"][day - 1]["fact"]
+    else:
+        raw["days"][day - 1]["fact"] = fact
+    return json.dumps(raw)
+
+
+def test_an_authored_feature_must_carry_a_fact_that_fits_for_every_day():
+    from app.month.spec import FACT_LINES, FACT_MAX, fact_lines, parse_feature
+
+    good = parse_feature(feature_object(MONTH), MONTH, facts=True)
+    assert all(plate.fact and fact_lines(plate.fact) for plate in good.days)
+    assert max(len(fact_lines(plate.fact)) for plate in good.days) <= FACT_LINES
+    assert generate.judge(with_fact(4, None), MONTH) == "day 4 fact: not a string"
+    assert generate.judge(with_fact(4, ""), MONTH).startswith("day 4 fact: 0 characters")
+    assert generate.judge(with_fact(4, "x" * (FACT_MAX + 1)), MONTH).startswith("day 4 fact: ")
+    assert generate.judge(with_fact(4, "Planted in 1879"), MONTH) == (
+        "day 4 fact: digits are not allowed"
+    )
+    wide = "Uncharacteristically long words overflow"
+    assert fact_lines(wide) is None
+    both = json.loads(with_fact(4, wide))
+    both["days"][8]["fact"] = "Mammoth mammoth mammoth mammoth mammoth"
+    assert fact_lines(both["days"][8]["fact"]) is None
+    reason = generate.judge(json.dumps(both), MONTH)
+    assert reason.startswith("fact: the facts of day(s) 4, 9 do not fit"), reason
+    assert generate.judge(with_fact(4, "Do not break the chain"), MONTH).startswith(
+        "day 4 fact: ban"
+    )
+
+
+def test_a_feature_stored_before_facts_still_loads_and_has_none():
+    from app.month.spec import parse_feature
+
+    old = feature_object(MONTH)
+    for day in old["days"]:
+        del day["fact"]
+    assert {plate.fact for plate in parse_feature(old, MONTH).days} == {""}
+    with pytest.raises(generate.SpecError, match="day 1 fact"):
+        parse_feature(old, MONTH, facts=True)
+
+
+def test_the_brief_asks_for_a_fact_that_teaches():
+    from app.month import prompt
+
+    for phrase in ('"fact": "..."', "This is where the piece teaches", "a fact that"):
+        assert phrase in prompt.SYSTEM_PROMPT, phrase

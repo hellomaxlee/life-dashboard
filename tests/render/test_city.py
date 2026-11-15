@@ -4,10 +4,12 @@ objects made here; the store is a stub, so nothing depends on app/city's fetch o
 
 from __future__ import annotations
 
+import json
 import sqlite3
 import sys
 from dataclasses import replace
 from datetime import timedelta
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -17,6 +19,7 @@ from app.render import city as city_screen
 from app.render.city import (
     BAR_HEIGHT,
     BAR_WIDTH,
+    BULLET_STATUS_X,
     CONDITIONS,
     DETAIL_BOTTOM,
     DETAIL_MS,
@@ -44,6 +47,7 @@ from app.render.city import (
     as_of_label,
     badge_box,
     bar_box,
+    bullet_ink,
     condition,
     degrees,
     detail_lines,
@@ -51,9 +55,13 @@ from app.render.city import (
     hour_label,
     line_color,
     line_rows,
+    mark_lines,
     precip_px,
     render_city,
+    sign_width,
     strip_steps,
+    word_width,
+    wrap_headline,
 )
 from app.render.font import BODY, SMALL, text_width
 from app.render.frame import SIZE
@@ -74,7 +82,7 @@ from app.render.palette import (
     dim,
 )
 from app.render.rotation import device_parts, hold_ms, rotation_sequence, sequence_names
-from app.render.screens import LEFT, RIGHT, clean_summary, wrap_lines
+from app.render.screens import LEFT, RIGHT, clean_summary
 from app.render.view import DayView, city_stale_minutes, fixture_city
 from app.render.view_db import view_from_db
 from app.timeutil import from_utc_iso, to_utc_iso
@@ -88,6 +96,9 @@ HOURS = ((18, 57.2, 20, 3), (21, 55.1, 45, 61), (0, 53.4, 70, 63), (3, 52.0, 60,
 HOURS += ((6, 50.6, 30, 3), (9, 54.3, 10, 2))
 SEVEN = (("N", "subway"), ("W", "subway"), ("M", "subway"))
 SEVEN += (("Q103", "bus"), ("Q66", "bus"), ("Q69", "bus"), ("B62", "bus"))
+
+
+pytestmark = pytest.mark.usefixtures("no_scenery")
 
 
 def steps(rows=HOURS) -> tuple[HourWeather, ...]:
@@ -425,10 +436,13 @@ def test_a_long_alert_wraps_over_the_step_temperatures_and_is_cut_safely(monkeyp
     pages = Pages(monkeypatch)
     page = render_city(view_of(status(weather=weather(alerts=(long,)))), NOW).frames[0]
     recorded = pages[0]
-    assert texts(recorded, NOTICE_Y) == [cut[0]] and texts(recorded, STEP_TEMP_Y) == [cut[1]]
+    assert texts(recorded, HIGH_LOW_Y) == [cut[0]] and texts(recorded, NOTICE_Y) == [cut[1]]
+    assert len([r for r in recorded if r[2] == STEP_TEMP_Y]) == 6, "the hourly temperatures stay"
+    rows = range(HIGH_LOW_Y, NOTICE_Y + SMALL.height)
+    left = {page.getpixel((x, y)) for x in range(LEFT, ICON_X - 8) for y in rows}
+    assert left == {BLACK, AMBER}, "both lines in one colour, and nothing else beside them"
     for text, x, _, font_name, _ in recorded:
         assert font_name != SMALL.name or (0 <= x and x + text_width(text) <= SIZE), text
-    assert page.getpixel((LEFT, STEP_TEMP_Y)) in (AMBER, BLACK)
     blank = render_city(view_of(status(weather=weather(alerts=("", 7, None)))), NOW)
     assert blank.frames[0].tobytes() == render_city(view_of(status()), NOW).frames[0].tobytes()
 
@@ -464,21 +478,23 @@ def test_the_lines_page_shows_every_line_with_its_badge_and_a_matching_word(monk
     words = {"ok": "OK", "planned": "WORK", "delays": "DELAYS", "suspended": "NO SVC"}
     assert words == STATUS_WORDS and set(words) == set(STATUS_ORDER)
     colours = {"ok": GREEN, "planned": AMBER, "delays": RED, "suspended": RED}
-    for index, (line, y) in enumerate(zip(marked, rows, strict=True)):
-        name, word = drawn[2 * index], drawn[2 * index + 1]
-        assert (name[0], name[1], name[2], name[3]) == (line.line, 11, y, BODY.name)
-        assert (word[0], word[1], word[2], word[3]) == (words[line.status], 38, y + 1, SMALL.name)
-        x0, y0, x1, y1 = badge_box(y)
-        assert page.getpixel(((x0 + x1) // 2, (y0 + y1) // 2)) == line_color(line)
-        band = {page.getpixel((x, yy)) for x in range(38, SIZE) for yy in range(y, y + 7)}
+    statuses = [r for r in drawn if r[0] in words.values()]
+    assert len(statuses) == len(marked)
+    for line, y, word in zip(marked, rows, statuses, strict=True):
+        assert (word[0], word[2], word[3]) == (words[line.status], y + 1, SMALL.name)
+        assert word[1] >= BULLET_STATUS_X, "one status column, pushed right only by a long pill"
+        colour, ink = line_color(line), bullet_ink(line_color(line))
+        assert page.getpixel((LEFT + 3, y)) == colour, "the bullet is the line's colour"
+        sign = {page.getpixel((x, yy)) for x in range(LEFT, word[1] - 2) for yy in range(y, y + 7)}
+        assert sign == {BLACK, colour, ink}, (line.line, "the name sits INSIDE its bullet")
+        assert not [r for r in drawn if r[0] == line.line and r[3] == BODY.name], "none beside it"
+        band = {page.getpixel((x, yy)) for x in range(word[1], SIZE) for yy in range(y, y + 7)}
         assert band == {BLACK, colours[line.status]}, line.line
-        assert name[1] + text_width(line.line, BODY) - 1 < word[1] - 2
-    assert len(drawn) == 14
 
 
 def test_bullets_use_the_mta_colours_and_a_bus_is_never_a_train():
     assert SUBWAY_COLORS["N"] == SUBWAY_COLORS["W"] == MTA_YELLOW == (252, 204, 10)
-    assert SUBWAY_COLORS["F"] == SUBWAY_COLORS["M"] == MTA_ORANGE == (255, 99, 25)
+    assert SUBWAY_COLORS["F"] == SUBWAY_COLORS["M"] == MTA_ORANGE == (232, 82, 0)
     assert set(SUBWAY_COLORS) == set("ACEBDFMGJZLNQRW1234567S")
     groups = ("ACE", "BDFM", "G", "JZ", "L", "NQRW", "123", "456", "7")
     assert len({SUBWAY_COLORS[group[0]] for group in groups}) == 9
@@ -504,7 +520,7 @@ def test_status_is_never_conveyed_by_colour_alone():
         only = (LineStatus("N", "subway", state, "x", now, 1),)
         return render_city(view_of(status(lines=only)), NOW).frames[1]
 
-    box = (38, 8, SIZE - 1, 14)
+    box = (BULLET_STATUS_X, 8, SIZE - 1, 14)
     masks = {
         (state, now): lit_mask(page_for(state, now), box)
         for state in STATUS_ORDER
@@ -529,21 +545,21 @@ def test_one_seven_and_eight_lines_all_fit_the_canvas(monkeypatch, count):
     pages = Pages(monkeypatch)
     page = render_city(view_of(status(lines=worst)), NOW).frames[1]
     drawn = pages[1][2:]
-    assert len(drawn) == 2 * count
-    assert [r[0] for r in drawn[::2]] == [name for name, _ in names]
-    assert [r[0] for r in drawn[1::2]] == ["WORK"] * count
+    statuses = [r for r in drawn if r[0] == "WORK"]
     tight, rows = line_rows(count)
-    assert tight == (count == 8) and len(rows) == count
-    height = 5 if tight else 7
+    assert not tight and len(rows) == min(count, 7), "one row form, the name always inside"
+    if count == 8:
+        assert len(statuses) == 6 and texts(drawn)[-1] == "+2 MORE"
+        names, rows = names[:6], rows[:6]
+    assert len(statuses) == len(rows)
+    height = 7
     assert rows[0] > HEADER_Y + SMALL.height and rows[-1] + height <= SIZE
     assert all(b - a > height - 1 for a, b in zip(rows, rows[1:], strict=False)), "rows apart"
     clock_px = sum(row.count("#") for row in city_screen.CLOCK)
-    for (name, x, y, font_name, _), (word, wx, wy, _, _), top in zip(
-        drawn[::2], drawn[1::2], rows, strict=True
-    ):
-        font = BODY if font_name == BODY.name else SMALL
-        assert top <= y and y + font.height <= top + height
-        assert x + text_width(name, font) + 2 < wx, "the name never touches its status"
+    for (name, _kind), (word, wx, wy, _, _), top in zip(names, statuses, rows, strict=True):
+        assert top <= wy and wy + SMALL.height <= top + height
+        sign = lit_mask(page, (LEFT, top, wx - 3, top + height - 1))
+        assert sign and max(px for px, _ in sign) + 2 < wx, f"{name}: sign clear of its status"
         after = wx + text_width(word) + 1
         mark = lit_mask(page, (after, wy, SIZE - 1, wy + 4))
         assert len(mark) == clock_px and max(px for px, _ in mark) <= RIGHT + 1, name
@@ -555,7 +571,7 @@ def test_more_than_eight_lines_ends_with_a_count_instead_of_overflowing(monkeypa
     pages = Pages(monkeypatch)
     page = render_city(view_of(status(lines=many)), NOW).frames[1]
     drawn = texts(pages[1][2:])
-    assert drawn == [t for n in "1234567" for t in (n, "OK")] + ["+7 MORE"]
+    assert drawn == [t for n in "123456" for t in (n, "OK")] + ["+8 MORE"]
     assert page.crop((0, 63, SIZE, SIZE)).getbbox() is None
 
 
@@ -581,14 +597,16 @@ def test_detail_pages_are_most_severe_first_then_now_before_later(monkeypatch):
     clip = render_city(view_of(city), NOW)
     assert clip.durations_ms == (WEATHER_MS, LINES_MS, DETAIL_MS, DETAIL_MS, DETAIL_MS)
     assert clip.durations_ms == (6000, 6000, 5000, 5000, 5000)
-    headers = [r for r in recorded if r[2] == HEADER_Y - 1 and r[3] == BODY.name]
-    assert [r[0] for r in headers] == ["M", "W", "Q103"], "at most three, in that order"
+    for frame, name in zip(clip.frames[2:], ("M", "W", "Q103"), strict=True):
+        line = next(item for item in city.lines if item.line == name)
+        assert frame.getpixel((LEFT + 3, HEADER_Y - 1)) == line_color(line), "three, in that order"
+    headers = [r for r in recorded if r[2] == HEADER_Y and r[0] in STATUS_WORDS.values()][-3:]
     assert [r[0] for r in recorded if r[0].endswith("MORE")] == ["+1 MORE"]
     more = next(r for r in recorded if r[0] == "+1 MORE")
     last_body = [r for r in recorded[recorded.index(headers[-1]) :] if r[2] >= DETAIL_TOP]
     assert last_body[-1][2] + 7 <= more[2] or last_body[0] == more, "the count has its own line"
     assert more[2] + SMALL.height - 1 <= DETAIL_BOTTOM
-    words = [r[0] for r in recorded if r[2] == HEADER_Y and r[3] == SMALL.name]
+    words = [r[0] for r in recorded if r[2] == HEADER_Y and r[0] in STATUS_WORDS.values()]
     assert words[-3:] == ["NO SVC", "DELAYS", "DELAYS"]
     assert len({frame.tobytes() for frame in clip.frames}) == 5
 
@@ -608,11 +626,12 @@ def test_a_headline_is_shown_whole_over_as_many_pages_as_it_needs(monkeypatch):
     room = DETAIL_BOTTOM - DETAIL_TOP + 1
     short = "Delays of 9.8 min on the N – expect a wait."
     font, pitch, pages = headline_pages(short, room)
-    assert (font, pitch) == (BODY, 9) and sum(pages, []) == wrap_lines(clean_summary(short))
+    assert (font, pitch) == (BODY, 9)
+    assert " ".join(sum(pages, [])) == mark_lines(clean_summary(short)), "whole, lines marked"
     assert any("9.8 min" in line for line in sum(pages, [])), "a number stays with its unit"
     two = "Southbound M trains are delayed while we address a signal problem at Queens Plaza."
     font, pitch, pages = headline_pages(two, room)
-    assert font is BODY and len(pages) == 2 and " ".join(sum(pages, [])) == two
+    assert font is BODY and len(pages) == 2 and " ".join(sum(pages, [])) == mark_lines(two)
     hyphen = "No W trains between Astoria-Ditmars Blvd and Queensboro Plaza."
     assert "Astoria-" in sum(headline_pages(hyphen, room)[2], [])
     endless = "Trains are rerouted in both directions. " * 12
@@ -627,9 +646,9 @@ def test_a_headline_is_shown_whole_over_as_many_pages_as_it_needs(monkeypatch):
     only = (LineStatus("M", "subway", "delays", endless, True, 1),)
     clip = render_city(view_of(status(lines=only)), NOW)
     assert len(clip.frames) == 2 + len(pages) and set(clip.durations_ms[2:]) == {5000}
-    wrapped = sum(pages, [])
+    wrapped = " ".join(sum(pages, [])).split()
     body = [r for r in recorded if r[2] >= DETAIL_TOP and r[0] in wrapped]
-    assert [r[0] for r in body[-len(wrapped) :]] == wrapped
+    assert [r[0] for r in body[-len(wrapped) :]] == wrapped, "drawn word by word, in order"
     assert max(r[2] for r in body) + SMALL.height - 1 <= DETAIL_BOTTOM
     for page in clip.frames[2:]:
         assert page.crop((0, DETAIL_BOTTOM + 1, SIZE, SIZE)).getbbox() is None
@@ -870,11 +889,83 @@ def test_city_sits_between_today_and_week_and_holds_one_pass():
     assert [part.frames[0].tobytes() for part in parts] == [f.tobytes() for f in clip.frames]
 
 
-def test_the_feeds_bracketed_line_bullets_are_written_bare():
-    soften = city_screen._soften
-    text = "[F] trains are running with delays; take the [N] or [SIR]. See [note below]."
+def test_lines_named_in_a_headline_are_marked_and_drawn_as_their_signs(monkeypatch):
+    """Max, 2026-11-15: line letters and numbers in the feed's text go in pills as well."""
+    marks = {
+        "[F] trains are late; take the [N].": "[F] trains are late; take the [N].",
+        "No W trains after 9:45 PM. Take the N instead.": (
+            "No [W] trains after 9:45 PM. Take the [N] instead."
+        ),
+        "N, Q and R trains skip 7 Av": "[N], [Q] and [R] trains skip 7 Av",
+        "A signal problem delays A trains at 36 St": "A signal problem delays [A] trains at 36 St",
+        "A shuttle bus runs. Take the Q69.": "A shuttle bus runs. Take the [Q69].",
+        "Plan B is to walk to Avenue C": "Plan B is to walk to Avenue C",
+        # the code audit's cases, 2026-11-15: addresses, counts and times are not lines
+        "between Dyre Av and E 180 St": "between Dyre Av and E 180 St",
+        "7 Av or 5 Av": "7 Av or 5 Av",
+        "Avenue C or Avenue D and 1 Av": "Avenue C or Avenue D and 1 Av",
+        "Wait 5 or 10 minutes": "Wait 5 or 10 minutes",
+        "delays of 1 and 2 hours": "delays of 1 and 2 hours",
+        "between 1 and 3 AM": "between 1 and 3 AM",
+        "3 of 4 trains": "3 of 4 trains",
+        "Track 1 service": "Track 1 service",
+        "A train was removed from service": "A train was removed from service",
+        # and its misses: lists, runs, glued names, a three-letter line, a bus before "buses"
+        "Take the A or C": "Take the [A] or [C]",
+        "the A, C and E trains": "the [A], [C] and [E] trains",
+        "the 4 5 6": "the [4] [5] [6]",
+        "4/5/6 trains": "[4] [5] [6] trains",
+        "N/W trains": "[N] [W] trains",
+        "SIR trains": "[SIR] trains",
+        "M15 buses": "[M15] buses",
+        "n trains are delayed": "n trains are delayed",
+        # the feed runs its own bullets together; each becomes a word of its own
+        "74 St [E][F][R][7] Station": "74 St [E] [F] [R] [7] Station",
+        "Manhattan-bound [N][W] skip 39 Av": "Manhattan-bound [N] [W] skip 39 Av",
+    }
+    for text, want in marks.items():
+        assert mark_lines(text, frozenset({"Q69"})) == want
+    assert mark_lines("Take the Q69", frozenset()) == "Take the Q69", "only a configured bus"
+    assert city_screen.sign_color("SIR") == line_color(LineStatus("SIR", "subway"))
+    assert city_screen.sign_color("Q69") == city_screen.sign_color("M15") != SUBWAY_COLORS["M"]
+    real = json.loads((Path(__file__).parents[2] / "fixtures/city/real/subway.json").read_text())
+    headers = [
+        t["text"]
+        for e in real["entity"]
+        for t in e.get("alert", {}).get("header_text", {}).get("translation", [])
+        if t.get("language", "en") == "en" and "][" in t.get("text", "")
+    ]
+    assert headers, "the real feed runs bullets together"
+    for header in headers:
+        for font_ in (BODY, SMALL):
+            lines_ = sum(headline_pages(header, DETAIL_BOTTOM - DETAIL_TOP + 1)[2], [])
+            assert "][" not in " ".join(lines_), header
+            for row in wrap_headline(mark_lines(clean_summary(header)), font_, WIDTH):
+                assert sum(word_width(w, font_) for w in row.split()) <= WIDTH
+    run_together = LineStatus("N", "subway", "delays", headers[0], True, 1)
+    page = render_city(view_of(status(lines=(run_together,))), NOW).frames[2]
+    recorded = record_text(monkeypatch)
+    render_city(view_of(status(lines=(run_together,))), NOW)
+    assert not [r for r in recorded if "[" in r[0] or "?" in r[0]], "no bracket is ever spelled out"
+    assert page.getbbox() is not None
+    assert sign_width("N") == sign_width("F") == 9 and sign_width("Q69") > 9 < sign_width("SIR")
+    line = LineStatus(
+        "W", "subway", "suspended", "W service is suspended. Take the N or R.", True, 1
+    )
+    page = render_city(view_of(status(lines=(line,))), NOW).frames[2]
+    body = {page.getpixel((x, y)) for x in range(SIZE) for y in range(DETAIL_TOP, SIZE)}
+    assert SUBWAY_COLORS["N"] in body and BLACK in body, "yellow bullets with black letters"
+    wide = "Take the " + " ".join(["N"] * 12) + " trains"
     for font in (BODY, SMALL):
-        out = soften(text, font, 60)
-        assert out.startswith("F trains") and "the N or SIR." in out
-        assert "[note below]" in out, "only a line's bullet is unwrapped"
-    assert all(ch.upper() in SMALL.glyphs for ch in soften("[F] and [7] trains", SMALL, 60))
+        for row in wrap_headline(mark_lines(wide), font, WIDTH):
+            assert sum(word_width(w, font) for w in row.split()) <= WIDTH, "signs fit the line"
+    assert bullet_ink(SUBWAY_COLORS["N"]) == BLACK and bullet_ink(SUBWAY_COLORS["F"]) != BLACK
+    capital_n = ("#...#", "##..#", "#.#.#", "#..##", "#...#")
+    assert city_screen.BULLET_GLYPHS["N"] == capital_n, "a capital N, centred in its bullet"
+    bullet = render_city(view_of(status(lines=(LineStatus("N", "subway"),))), NOW).frames[1]
+    span = range(LEFT + 13)
+    yellow = [x for x in span for y in range(8, 15) if bullet.getpixel((x, y)) != BLACK]
+    full_rows = range(10, 13)  # where the oval spans all nine columns
+    ink = [x for x in range(LEFT, LEFT + 9) for y in full_rows if bullet.getpixel((x, y)) == BLACK]
+    assert (min(yellow), max(yellow)) == (LEFT, LEFT + 8), "a nine-wide bullet"
+    assert (min(ink), max(ink)) == (LEFT + 2, LEFT + 6), "the N sits centred, a rim each side"

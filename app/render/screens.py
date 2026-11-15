@@ -11,8 +11,10 @@ colour: a quotation in VOICE, its "- Author" in ATTRIBUTION, Max's own words in 
 
 Each screen's header word wears the weekday's accent (palette.day_accent), so the panel is
 not one colour seven days running; the stamp on the right and the field labels keep TEXT and
-LABEL. Week is a small scene: each earned workout is a planet in a night sky whose stars are
-seeded by the day, and a star never lands within a pixel of anything else (nothing bleeds).
+LABEL. Every page is laid on one ground from edge to edge, the weekday's colour
+(`page_ground`), with words directly on it; `font.draw_text` keeps each word legible on what
+it sits on and `slot` turns a structural tone into a recess of the page. On Week each earned
+workout is a planet; on Today two hills run along the foot; Books is a two-shelf bookcase.
 The structural tones (the sleep bar's track, the empty rings, the inactive page pip) come
 from the month's theme (theme.py): the stock palette tones unless the month has a feature.
 """
@@ -20,11 +22,8 @@ from the month's theme (theme.py): the stock palette tones unless the month has 
 from __future__ import annotations
 
 import math
-import random
 import re
 import unicodedata
-import zlib
-from collections.abc import Callable
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
@@ -42,6 +41,7 @@ from app.render.frame import SIZE, Clip, Color, Frame, new_frame, still
 from app.render.palette import (
     ATTRIBUTION,
     BLACK,
+    CONTRAST_FLOOR,
     CORAL,
     DOTS,
     GOLD,
@@ -50,6 +50,7 @@ from app.render.palette import (
     RING,
     SECONDARY,
     SKY,
+    SLOT_SHADE,
     SPINES,
     TEXT,
     VIOLET,
@@ -61,6 +62,7 @@ from app.render.palette import (
     day_accent,
     day_ground,
     dim,
+    legible_on,
 )
 from app.render.theme import theme_for
 from app.render.usage import draw_usage, usage_state
@@ -137,108 +139,75 @@ def draw_ring(
 
 
 PLANET_MIN_RADIUS = 5
-SKY_TOP = 9
-SKY_BOTTOM = 39
-SKY_STARS = 5
 PLANET_GROW = 1
+PLANET_GAP = 4
 
 
 def draw_planet(frame: Frame, cx: int, cy: int, radius: int, color: Color, index: int) -> None:
     """A weekly dot as a small world: the dot's own colour, a night side to the lower right,
-    a glint to the upper left, and either two bands in the next colour of the family or (every
-    second planet) a ring. Under PLANET_MIN_RADIUS it is the plain disc: no room for detail."""
+    a glint to the upper left, and two bands in the next colour of the family, set a row
+    lower on every second planet so neighbours differ. No ring: beside its neighbours it read
+    as stray white dashes (display audit, 2026-11-15). Under PLANET_MIN_RADIUS it is the plain
+    disc: no room for detail."""
     draw_disc(frame, cx, cy, radius, color)
     if radius < PLANET_MIN_RADIUS:
         return
     pixels = frame.load()
     band = WHEEL[(WHEEL.index(color) + 1) % len(WHEEL)] if color in WHEEL else WHITE
-    ringed = index % 2 == 1
+    rows = (-2, 2) if index % 2 == 0 else (-3, 1)
     for dy in range(-radius, radius + 1):
         for dx in range(-radius, radius + 1):
             x, y = cx + dx, cy + dy
             if not _in_disc(dx, dy, radius) or not (0 <= x < SIZE and 0 <= y < SIZE):
                 continue
-            tone = band if not ringed and dy in (-2, 2) else color
+            tone = band if dy in rows else color
             if dx * 0.8 + dy > radius * 0.55:
                 tone = dim(tone, 0.5)
             pixels[x, y] = tone
     glint = radius // 2
     for dx in (0, 1):
         pixels[cx - glint + dx, cy - glint] = WHITE
-    if ringed:
-        for dx in range(-radius - 2, radius + 3):
-            x, y = cx + dx, cy + round(dx * 0.25)
-            behind = _in_disc(dx, y - cy, radius) and y <= cy
-            if not behind and 0 <= x < SIZE and 0 <= y < SIZE:
-                pixels[x, y] = TEXT
 
 
-def scatter_stars(
-    frame: Frame,
-    seed: str,
-    colors: tuple[Color, ...],
-    keep_out: tuple[tuple[int, int, int], ...] = (),
-    count: int = SKY_STARS,
-    rows: tuple[int, int] = (SKY_TOP, SKY_BOTTOM),
-) -> None:
-    """Plus-shaped stars (`draw_star`) between `rows` (SKY_TOP to SKY_BOTTOM unless given),
-    placed from `seed` so each day has its own sky. A star is drawn only where the 7x7 block
-    around it is unlit, so none crowds a word, a planet or another star, and never inside a
-    `keep_out` disc (cx, cy, radius): an empty orbit stays empty."""
-    rng = random.Random(zlib.crc32(seed.encode()))
-    pixels = frame.load()
-    placed = 0
-    for _ in range(count * 12):
-        if placed == count:
-            break
-        x, y = rng.randrange(3, SIZE - 3), rng.randrange(rows[0] + 2, rows[1] - 1)
-        color = colors[rng.randrange(len(colors))]
-        clear = all(
-            pixels[x + dx, y + dy] == BLACK
-            for dy in range(-3, 4)
-            for dx in range(-3, 4)
-            if 0 <= x + dx < SIZE and 0 <= y + dy < SIZE
-        ) and not any(_in_disc(x - cx, y - cy, radius + 3) for cx, cy, radius in keep_out)
-        if clear:
-            draw_star(frame, x, y, color)
-            placed += 1
+def page_ground(view: DayView) -> Color:
+    """The one colour a page is laid on, edge to edge: the weekday's ground (Max and Mei-Lin,
+    2026-11-15: a page that is part coloured and part black looks unfinished, and a black
+    outline cut round every word looks busy). Words sit directly on it; black is ink only."""
+    return day_ground(view.day_local)
 
 
-Layer = tuple[Callable[[int, int], bool], Color]
+MARK_FLOOR = 2.5
+BAND_SHADE = 0.55
 
 
-def paint_behind(frame: Frame, layers: tuple[Layer, ...]) -> None:
-    """Scenery behind what is already drawn. Call it last. Each layer is (covers(x, y), tone);
-    a later layer paints over an earlier one. A pixel is lit only where nothing drawn before
-    the call is within one pixel of it, so every word, number and mark keeps a black edge and
-    none touches the scenery (Max, 2026-11-15: nothing bleeds)."""
-    pixels = frame.load()
-    drawn = {(x, y) for y in range(SIZE) for x in range(SIZE) if pixels[x, y] != BLACK}
-    for y in range(SIZE):
-        for x in range(SIZE):
-            if any((x + dx, y + dy) in drawn for dy in (-1, 0, 1) for dx in (-1, 0, 1)):
-                continue
-            for covers, tone in layers:
-                if covers(x, y):
-                    pixels[x, y] = tone
+def band(ground: Color) -> Color:
+    """A wide recessed surface on `ground` (the transit status board, an alert's band, a
+    stale header): the ground itself a little deeper, clearly the same page. Wider than a
+    `slot`, so lighter than one: a column of near-black would be a hole in the page."""
+    return ground if ground == BLACK else dim(ground, BAND_SHADE)
 
 
-def rows_between(top: int, bottom: int) -> Callable[[int, int], bool]:
-    return lambda x, y: top <= y <= bottom
+def on_page(frame: Frame, x: int, y: int, color: Color, floor: float = MARK_FLOOR) -> Color:
+    """A mark's colour (an empty ring, the parked "zz") as it can be seen where it is drawn:
+    `palette.legible_on` against the pixel at (x, y). Text gets this from `font.draw_text`;
+    marks are drawn by other means and ask for it here."""
+    return legible_on(color, frame.getpixel((x, y)), floor)
 
 
-def draw_field(frame: Frame, rows: tuple[int, int], tone: Color) -> None:
-    """A flat field of `tone` over `rows`, inclusive, behind what is already drawn."""
-    paint_behind(frame, ((rows_between(*rows), tone),))
-
-
-def draw_star(frame: Frame, x: int, y: int, color: Color) -> None:
-    """A star as a small plus: a white core with four arms in `color`."""
-    pixels = frame.load()
-    for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
-        if 0 <= x + dx < SIZE and 0 <= y + dy < SIZE:
-            pixels[x + dx, y + dy] = color
-    pixels[x, y] = WHITE
+def slot(ground: Color, tone: Color) -> Color:
+    """A structural tone (a bar's track, an inactive pip, a day to come) as it sits on
+    `ground`: the tone itself on black; on a coloured ground a recess in the page, the mean
+    of a deeper shade of that ground and half the tone, so it is never a hole of bare black
+    (display audit, 2026-11-15) and the month theme's tint of the tone still shows through
+    (theme.py; code audit, 2026-11-15)."""
+    if ground == BLACK:
+        return tone
+    deep = dim(ground, SLOT_SHADE)
+    return (
+        (deep[0] * 2 + tone[0]) // 4,
+        (deep[1] * 2 + tone[1]) // 4,
+        (deep[2] * 2 + tone[2]) // 4,
+    )
 
 
 def draw_bitmap(frame: Frame, x: int, y: int, rows: tuple[str, ...], color: Color) -> None:
@@ -289,7 +258,8 @@ def _draw_streak(frame: Frame, streak: int) -> None:
 
 
 def _week_frame(view: DayView, now: datetime) -> Frame:
-    frame = new_frame()
+    ground = page_ground(view)
+    frame = new_frame(ground)
     theme = theme_for(view)
     draw_text(frame, LEFT, 2, "WEEK", day_accent(view.day_local), SMALL)
     centres, radius = dot_layout(view.week_target)
@@ -299,33 +269,30 @@ def _week_frame(view: DayView, now: datetime) -> Frame:
         draw_text_right(frame, RIGHT, 2, "NO DATA", TEXT, SMALL)
     else:
         draw_text_right(frame, RIGHT, 2, f"{dots} OF {view.week_target}", TEXT, SMALL)
-    world = radius + PLANET_GROW if radius >= PLANET_MIN_RADIUS else radius
+    pitch = SIZE // max(view.week_target, 1)
+    world = min(radius + PLANET_GROW, (pitch - PLANET_GAP) // 2)
+    world = world if radius >= PLANET_MIN_RADIUS else radius
     for index, cx in enumerate(centres):
         if dots is None:
-            draw_ring(frame, cx, DOT_ROW_Y, world, theme.ring, dashed=True)
+            draw_ring(frame, cx, DOT_ROW_Y, world, on_page(frame, cx, DOT_ROW_Y, theme.ring), True)
         elif index < dots:
             draw_planet(frame, cx, DOT_ROW_Y, world, dot_color(index), index)
         else:
-            draw_ring(frame, cx, DOT_ROW_Y, world, theme.ring)
+            draw_ring(frame, cx, DOT_ROW_Y, world, on_page(frame, cx, DOT_ROW_Y, theme.ring))
 
     if streak is None:
         draw_text_centered(frame, STREAK_Y + 2, "STREAK NO DATA", TEXT, SMALL)
     else:
         _draw_streak(frame, streak)
 
-    accent = day_accent(view.day_local)
-    orbits = tuple((cx, DOT_ROW_Y, world) for cx in centres)
-    scatter_stars(frame, view.day_local, (WHITE, accent), orbits)
-    draw_usage(frame, usage_state(view.claude, now, view.stale_hours), theme.track)
-    inside = lambda x, y: any(_in_disc(x - cx, y - DOT_ROW_Y, world) for cx in centres)  # noqa: E731
-    sky = lambda x, y: SKY_TOP - 1 <= y <= SKY_BOTTOM + 1 and not inside(x, y)  # noqa: E731
-    paint_behind(frame, ((sky, day_ground(view.day_local)),))
+    draw_usage(frame, usage_state(view.claude, now, view.stale_hours), slot(ground, theme.track))
     return frame
 
 
 def render_week(view: DayView, now: datetime) -> Clip:
-    """Three planets in the day's sky (an unearned one is an empty orbit), the weeks-hit
-    streak under them, the Claude usage bar at the bottom.
+    """Three planets on the weekday's ground (an unearned one is an empty orbit), the weeks-hit
+    streak under them, the Claude usage bar at the bottom. No stars: beside the streak line
+    they read as stray marks (Max, 2026-11-15).
     A still even when the usage reading is stale: amber dot, amber age line."""
     return still(_week_frame(view, now))
 
@@ -427,9 +394,9 @@ def no_dot_label(view: DayView) -> str:
     return "NO DOT YET"
 
 
-TODAY_SKY = (8, 37)
-HILL_BACK: Color = (0, 95, 40)
-HILL_FRONT: Color = (20, 150, 45)
+HILL_BACK: Color = (0, 40, 20)
+HILL_FRONT: Color = (0, 50, 24)
+HILL_CREST: Color = (4, 58, 27)
 
 
 def hill_back(x: int) -> int:
@@ -440,33 +407,34 @@ def hill_front(x: int) -> int:
     return 49 + round(3 * math.sin(x / 6 + 4.0))
 
 
-def _today_scene(frame: Frame, view: DayView) -> None:
-    """Style B (2026-11-15): last night's sky in the weekday's colour behind the moon and the
-    sleep number, and two grassy hills under the day's facts, a black line along their crest
-    so a green Thursday sky does not run into them. No stars: beside a number they
-    read as stray dots (Max, 2026-11-15).
-    Drawn last, a pixel off every word."""
-    paint_behind(
-        frame,
-        (
-            (lambda x, y: TODAY_SKY[0] <= y < hill_back(x) - 1, day_ground(view.day_local)),
-            (lambda x, y: y >= hill_back(x), HILL_BACK),
-            (lambda x, y: y >= hill_front(x), HILL_FRONT),
-        ),
-    )
+def draw_hills(frame: Frame) -> None:
+    """Two grassy hills along the foot of Today, drawn before the words that sit on them.
+    Deep greens, so LABEL and SECONDARY read on them unlifted and the label/value hierarchy
+    holds (code audit, 2026-11-15), each with one lighter row along its crest so the hills
+    keep their line against a green Thursday ground."""
+    pixels = frame.load()
+    for x in range(SIZE):
+        back, front = hill_back(x), hill_front(x)
+        for y in range(back, SIZE):
+            pixels[x, y] = HILL_FRONT if y >= front else HILL_BACK
+        pixels[x, back] = HILL_CREST
+        if front < SIZE:
+            pixels[x, front] = HILL_CREST
 
 
 def render_today(view: DayView, now: datetime | None = None) -> Clip:
     """Last night's sleep against the target, today's dot, steps, and when the data is from,
     in the day's scene."""
-    frame = today_facts(view, now)
-    _today_scene(frame, view)
-    return still(frame)
+    return still(today_facts(view, now))
 
 
-def today_facts(view: DayView, now: datetime | None = None) -> Frame:
-    """The Today screen's words, numbers and marks on black, before its scene."""
-    frame = new_frame()
+def today_facts(view: DayView, now: datetime | None = None, as_of_text: str | None = None) -> Frame:
+    """The Today screen: the weekday's ground, the hills, then the words, numbers and marks
+    laid directly on them. `as_of_text` replaces the as-of line (the parked screen's short
+    form)."""
+    ground = page_ground(view)
+    frame = new_frame(ground)
+    draw_hills(frame)
     theme = theme_for(view)
     day = date.fromisoformat(view.day_shown or view.day_local)
     title = "TODAY" if view.day_shown in (None, view.day_local) else "YESTERDAY"
@@ -479,7 +447,7 @@ def today_facts(view: DayView, now: datetime | None = None) -> Frame:
 
     draw_bitmap(frame, LEFT, 11, MOON, VIOLET)
     target_x = LEFT + int(view.sleep_target_hours / SLEEP_BAR_HOURS * 60)
-    fill_rect(frame, LEFT, 26, RIGHT, 28, theme.track)
+    fill_rect(frame, LEFT, 26, RIGHT, 28, slot(ground, theme.track))
     if not valid_sleep_hours(view.sleep_hours):
         draw_text(frame, 16, 9, "--", TEXT, BODY, scale=2)
         draw_text(frame, LEFT, 32, "SLEEP", LABEL, SMALL)
@@ -502,19 +470,19 @@ def today_facts(view: DayView, now: datetime | None = None) -> Frame:
         fill_rect(frame, max_x, 25, max_x, 29, WHITE)
 
     if view.today_dot is None:
-        draw_ring(frame, 6, 44, 4, theme.ring, dashed=True)
+        draw_ring(frame, 6, 44, 4, on_page(frame, 6, 44, theme.ring), dashed=True)
         draw_text(frame, 13, 42, "DOT NO DATA", TEXT, SMALL)
     elif view.today_dot:
         draw_disc(frame, 6, 44, 4, GOLD)
         draw_text(frame, 13, 42, "WORKOUT DONE", GOLD, SMALL)
     else:
-        draw_ring(frame, 6, 44, 4, theme.ring)
+        draw_ring(frame, 6, 44, 4, on_page(frame, 6, 44, theme.ring))
         draw_text(frame, DOT_LABEL_X, 42, no_dot_label(view), TEXT, SMALL)
 
     draw_text(frame, LEFT, 51, "STEPS", LABEL, SMALL)
     steps = "NO DATA" if _count(view.steps) is None else str(view.steps)
     draw_text_right(frame, RIGHT, 51, steps, TEXT, SMALL)
-    as_of = as_of_label(view, now)
+    as_of = as_of_label(view, now) if as_of_text is None else as_of_text
     if as_of is not None:
         draw_text(frame, LEFT, AS_OF_Y, as_of, SECONDARY, SMALL)
     return frame
@@ -535,14 +503,9 @@ def render_parked(view: DayView, now: datetime | None = None) -> Clip:
     A complete screen with its as-of time, so nothing half-shown is left up, and the mark is
     the as-of line's own colour, so it reads as a note, not an alarm. A long as-of line is
     reprinted without AS OF (`parked_as_of`) so the mark never sits on the time."""
-    frame = today_facts(view, now)
-    as_of = as_of_label(view, now)
-    short = parked_as_of(as_of)
-    if short != as_of:
-        fill_rect(frame, 0, AS_OF_Y, SIZE - 1, SIZE - 1, BLACK)
-        draw_text(frame, LEFT, AS_OF_Y, short, SECONDARY, SMALL)
-    draw_bitmap(frame, ZZ_X, AS_OF_Y, ZZ, SECONDARY)
-    _today_scene(frame, view)
+    short = parked_as_of(as_of_label(view, now))
+    frame = today_facts(view, now, as_of_text=short)
+    draw_bitmap(frame, ZZ_X, AS_OF_Y, ZZ, on_page(frame, ZZ_X, AS_OF_Y, SECONDARY, CONTRAST_FLOOR))
     return still(frame)
 
 
@@ -551,7 +514,6 @@ TIER_HEIGHTS = (13, 11, 14, 12, 13, 10, 12, 14, 11, 13, 10, 14)
 TIER_WIDTH_SWING = (0, -1, 1, 0, 1, -1)
 SHELF_RIGHT = 46
 DECOR_X = 54
-BOOKS_WALL = (8, 42)
 PLANT = (
     "..g.g..",
     ".g.g.g.",
@@ -622,9 +584,9 @@ def _draw_decor(frame: Frame, tier: int, rows: tuple[str, ...]) -> None:
 def _books_base(view: DayView) -> Frame:
     """A two-shelf bookcase (style B, 2026-11-15): a read book is its lit spine with a band,
     an unread slot the outline of the book to come in the month theme's ring (one quiet tone
-    for every slot; Max, 2026-11-09), a plant on the top shelf and a lamp on the lower, and
-    behind them a wall in the weekday's colour. The count is the header's stamp."""
-    frame = new_frame()
+    for every slot; Max, 2026-11-09), a plant on the top shelf and a lamp on the lower, all
+    on the page's one ground, which the summary below shares. The count is the header's stamp."""
+    frame = new_frame(page_ground(view))
     theme = theme_for(view)
     draw_text(frame, LEFT, 2, "BOOKS", day_accent(view.day_local), SMALL)
     draw_text_right(frame, RIGHT, 2, books_stamp(view), TEXT, SMALL)
@@ -648,7 +610,6 @@ def _books_base(view: DayView) -> Frame:
         fill_rect(frame, 0, board, SIZE - 1, board + 1, WOOD)
     _draw_decor(frame, 0, PLANT)
     _draw_decor(frame, 1, LAMP)
-    draw_field(frame, BOOKS_WALL, day_ground(view.day_local))
     return frame
 
 
@@ -860,7 +821,7 @@ def _draw_page_pips(frame: Frame, page: int, pages: int, pip: Color = RING) -> N
 def render_books(view: DayView) -> Clip:
     """Books this year on a shelf, and the day's one-line summary in pages underneath."""
     base = _books_base(view)
-    pip = theme_for(view).pip
+    pip = slot(page_ground(view), theme_for(view).pip)
     pages = wrap_pages(view.summary_line or NO_SUMMARY) or wrap_pages(NO_SUMMARY)
     colors = iter(line_colors([line for page in pages for line in page]))
     frames: list[Frame] = []

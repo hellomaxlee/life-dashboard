@@ -27,6 +27,9 @@ LINE_109 = (
 )
 
 
+pytestmark = pytest.mark.usefixtures("no_scenery")
+
+
 def lit_columns(frame, top: int, bottom: int) -> list[int]:
     box = frame.crop((0, top, 64, bottom + 1)).getbbox()
     return [] if box is None else [box[0], box[2] - 1]

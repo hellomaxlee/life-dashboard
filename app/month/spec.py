@@ -15,8 +15,12 @@ Shape, as JSON:
   of a palette colour, "1" being the first. Every colour must be bright enough for LEDs.
 - days: exactly one entry per day of that month, in order.
   - caption: 1 to CAPTION_MAX characters, drawn in capitals under the plate.
+  - fact: one true, specific thing about the day's subject, up to FACT_MAX characters, that
+    fits FACT_LINES lines of the small face in capitals (Max, 2026-11-15: the feature
+    "should be educational in some way"). Asked for and required when a feature is authored
+    (`parse_feature(..., facts=True)`), drawn under the caption on the same one page.
   - note: optional, up to NOTE_MAX characters. Features stored before 2026-10-09 carry one;
-    it is checked like any text but never drawn or asked for (the feature is one page).
+    it is checked like any text but never drawn or asked for.
   - art: ART_SIZE rows of ART_SIZE cells, at least ART_MIN_LIT of them lit.
 Text may use only characters the panel's faces can draw, and no digits: the feature is given
 none of Max's data, so a number in it could only be invented.
@@ -28,13 +32,16 @@ import calendar
 import re
 from dataclasses import dataclass
 
-from app.render.font import BODY, SMALL, normalize
+from app.render.font import BODY, SMALL, normalize, text_width
 from app.render.frame import Color
 
 TITLE_MAX = 15
 THEME_MAX = 300
 CAPTION_MAX = 15
 NOTE_MAX = 60
+FACT_MAX = 44
+FACT_LINES = 3
+FACT_WIDTH = 60
 ART_SIZE = 16
 ART_MIN_LIT = 12
 PALETTE_MIN = 2
@@ -55,6 +62,7 @@ class DayPlate:
     caption: str
     note: str
     art: tuple[str, ...]
+    fact: str = ""
 
 
 @dataclass(frozen=True)
@@ -92,6 +100,33 @@ def _text(where: str, value: object, low: int, high: int, face: str) -> str:
     return text
 
 
+def fact_lines(text: str) -> list[str] | None:
+    """A fact as the panel draws it: capitals in the small face, wrapped on words to
+    FACT_WIDTH pixels. None when it is empty, needs more than FACT_LINES lines, holds a word
+    wider than a line, or uses a character the small face cannot draw."""
+    shown = " ".join(normalize(text).upper().split())
+    if not shown or any(ch not in SMALL.glyphs for ch in shown):
+        return None
+    lines: list[str] = []
+    for word in shown.split():
+        candidate = f"{lines[-1]} {word}" if lines else word
+        if lines and text_width(candidate, SMALL) <= FACT_WIDTH:
+            lines[-1] = candidate
+        elif text_width(word, SMALL) <= FACT_WIDTH:
+            lines.append(word)
+        else:
+            return None
+    return lines if len(lines) <= FACT_LINES else None
+
+
+def _fact(where: str, entry: dict, required: bool) -> str:
+    """The day's fact: required when a feature is authored, optional when one is read back
+    (a feature stored before 2026-11-15 has none)."""
+    if not required and "fact" not in entry:
+        return ""
+    return _text(f"{where} fact", entry.get("fact"), 1, FACT_MAX, "small")
+
+
 def _color(where: str, value: object) -> Color:
     if not isinstance(value, str) or not HEX.match(value):
         raise SpecError(f"{where}: not a #rrggbb colour")
@@ -115,8 +150,9 @@ def _art(where: str, value: object, colours: int) -> tuple[str, ...]:
     return tuple(value)
 
 
-def parse_feature(raw: object, month: str) -> MonthFeature:
-    """Validate a decoded JSON object as the feature for `month` (YYYY-MM)."""
+def parse_feature(raw: object, month: str, facts: bool = False) -> MonthFeature:
+    """Validate a decoded JSON object as the feature for `month` (YYYY-MM). With `facts`,
+    every day must carry a fact that fits the panel: the rule for a feature being authored."""
     if not MONTH.match(month):
         raise SpecError(f"month {month!r} is not YYYY-MM")
     if not isinstance(raw, dict):
@@ -145,8 +181,17 @@ def parse_feature(raw: object, month: str) -> MonthFeature:
                 _text(f"{where} caption", entry.get("caption"), 1, CAPTION_MAX, "small"),
                 _text(f"{where} note", entry.get("note", ""), 0, NOTE_MAX, "body"),
                 _art(f"{where} art", entry.get("art"), len(palette)),
+                _fact(where, entry, facts),
             )
         )
+    if facts:
+        long = [plate.day for plate in plates if fact_lines(plate.fact) is None]
+        if long:
+            listed = ", ".join(str(day) for day in long)
+            raise SpecError(
+                f"fact: the facts of day(s) {listed} do not fit {FACT_LINES} lines of about "
+                "eleven capitals broken between words; shorten each of them"
+            )
     if len({plate.art for plate in plates}) < len(plates) // 2:
         raise SpecError("days: more than half the plates repeat another day's art")
     return MonthFeature(month, title, theme.strip(), palette, tuple(plates))

@@ -54,6 +54,9 @@ TEXT_TONES = (TEXT, LABEL, SECONDARY)
 TEXT_HEADROOM = 0.8
 
 
+pytestmark = pytest.mark.usefixtures("no_scenery")
+
+
 def feature_combos(settings) -> list[str]:
     return [combo for combo in COMBOS if load(combo, settings)[0].month_feature is not None]
 
@@ -145,7 +148,6 @@ def test_a_feature_recolours_exactly_the_track_ring_and_pip_pixels(screen, setti
             assert changed_any, (combo, screen)
 
 
-@pytest.mark.usefixtures("no_scenery")
 def test_the_parked_zz_is_untouched_by_the_theme(settings):
     """The parked mark and the as-of row it may reprint are SECONDARY whatever the month's
     accent, and nothing above the as-of row differs from Today."""

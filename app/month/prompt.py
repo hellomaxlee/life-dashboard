@@ -11,6 +11,8 @@ from app.month.spec import (
     ART_MIN_LIT,
     ART_SIZE,
     CAPTION_MAX,
+    FACT_LINES,
+    FACT_MAX,
     MIN_BRIGHT_CHANNEL,
     PALETTE_MAX,
     PALETTE_MIN,
@@ -20,8 +22,11 @@ from app.month.spec import (
 )
 
 # Thinking is always on for the pinned model and counts against max_tokens (CHANGELOG
-# 2026-10-03). A 31-day feature is roughly 12-16k output tokens of JSON; the rest is headroom.
-MAX_TOKENS = 32000
+# 2026-10-03). A 31-day feature without facts was 21-28k output tokens of JSON and thinking;
+# with a fact a day both runs on 2026-11-15 stopped at the old 32,000 ceiling and stored
+# nothing. 64,000 is the streaming default for the pinned model (its limit is 128k, checked
+# against the claude-api reference 2026-11-15); the request is streamed, so the size is safe.
+MAX_TOKENS = 64000
 EFFORT = "medium"
 
 _ROW = "." * ART_SIZE
@@ -31,8 +36,8 @@ SYSTEM_PROMPT = (
     "in one person's home. Most of the time it shows practical things. Once a month it gets "
     "one screen that is yours alone, the month feature. You author the whole month in one "
     "go, as a single JSON object; a program then shows one small picture (a plate) a day "
-    "with a caption under it, so the piece unfolds a day at a time and is glanced at from "
-    "across a room.\n"
+    "with a caption and one short fact under it, so the piece unfolds a day at a time and "
+    "is glanced at from across a room.\n"
     "\n"
     "You are told nothing about the person who owns the panel, on purpose: no data, no "
     "habits, no numbers. Do not guess at any and do not address his life. The piece is about "
@@ -126,6 +131,15 @@ SYSTEM_PROMPT = (
     f"- caption: at most {CAPTION_MAX} characters, spaces included, never empty. Shown in "
     "capitals under the plate, so word it to read well in capitals. It is the day's name or "
     "its punchline. Count the characters: one over and the month is rejected.\n"
+    f"- fact: one true, specific thing worth knowing about the day's subject, at most "
+    f"{FACT_MAX} characters, spaces included, never empty. This is where the piece teaches: "
+    "what the thing is, where it is found, why it happens or how it works. Shown in capitals "
+    f"under the caption on {FACT_LINES} short lines of about eleven characters each (M, N and "
+    "W take more room), broken between words, so use short words and no word longer than "
+    "eleven letters; a fact that "
+    "needs another line is rejected. A plain statement, not a slogan and not a repeat of the "
+    "caption. Someone who reads only the facts for a month should come away knowing the "
+    "subject.\n"
     "- No digits in any text, anywhere. Do not number the days in words either; the panel "
     "already shows the date.\n"
     "- Plain ASCII only: no accents, curly quotes, long dashes or emoji. In the title and "
@@ -148,7 +162,7 @@ SYSTEM_PROMPT = (
     "number of days taken from the request:\n"
     '{"month": "YYYY-MM", "title": "...", "theme": "...", '
     '"palette": ["#rrggbb", "#rrggbb", "..."], '
-    '"days": [{"day": 1, "caption": "...", '
+    '"days": [{"day": 1, "caption": "...", "fact": "...", '
     f'"art": ["{_ROW}", "... {ART_SIZE} rows of {ART_SIZE} ..."]}}, '
     '{"day": 2, "...": "..."}]}\n'
     '"days" holds exactly one entry for every day of the month, in order, "day" counting up '
