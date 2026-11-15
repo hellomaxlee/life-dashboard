@@ -115,6 +115,9 @@ class DayView:
     month_feature: MonthFeature | None = None
     city: CityStatus | None = None
     city_stale_minutes: int = CITY_STALE_MINUTES
+    # (day of month, that day's stored wins) for the days of day_local's month before it:
+    # the calendar colours a past day by what it earned. Empty when nothing is stored.
+    month_wins: tuple[tuple[int, tuple[str, ...]], ...] = ()
 
 
 def _number(value: Any) -> float | None:

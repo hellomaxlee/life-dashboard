@@ -128,6 +128,32 @@ def city_for(conn: sqlite3.Connection, day_local: str) -> CityStatus | None:
     return status if isinstance(status, CityStatus) else None
 
 
+WIN_NAMES = ("workout", "sleep", "book")
+
+
+def month_wins_for(
+    conn: sqlite3.Connection, day_local: str
+) -> tuple[tuple[int, tuple[str, ...]], ...]:
+    """The stored `wins` of every day of `day_local`'s month before it, as (day of month,
+    wins), read from `daily_metrics` as written: the calendar draws what the metrics row
+    says and computes nothing. A day with no row, or a row that does not parse, is left out."""
+    rows = conn.execute(
+        "SELECT day_local, metrics_json FROM daily_metrics "
+        "WHERE day_local >= ? AND day_local < ? ORDER BY day_local",
+        (day_local[:8] + "01", day_local),
+    ).fetchall()
+    out = []
+    for row in rows:
+        try:
+            wins = json.loads(row["metrics_json"]).get("wins")
+            number = date.fromisoformat(row["day_local"]).day
+        except (ValueError, TypeError, AttributeError):
+            continue
+        if isinstance(wins, list):
+            out.append((number, tuple(name for name in WIN_NAMES if name in wins)))
+    return tuple(out)
+
+
 def view_from_db(conn: sqlite3.Connection, settings: Settings, day_local: str) -> DayView:
     """Build the view from what is stored for a home-timezone day. ValueError if not a date.
 
@@ -141,7 +167,10 @@ def view_from_db(conn: sqlite3.Connection, settings: Settings, day_local: str) -
     day_local = date.fromisoformat(day_local).isoformat()
     view = _view_for(conn, settings, day_local)
     view = replace(
-        view, month_feature=month_feature_for(conn, day_local), city=city_for(conn, day_local)
+        view,
+        month_feature=month_feature_for(conn, day_local),
+        city=city_for(conn, day_local),
+        month_wins=month_wins_for(conn, day_local),
     )
     if has_health_data(view):
         return view

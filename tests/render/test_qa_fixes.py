@@ -13,12 +13,12 @@ import pytest
 
 from app.render.font import BODY, text_width
 from app.render.frame import Clip, new_frame
-from app.render.palette import AMBER
-from app.render.screens import render_books, render_today, render_week
+from app.render.palette import AMBER, day_accent
+from app.render.screens import ground_tone, render_books, render_today, render_week
 from app.render.theme import theme_for
 from app.render.view import ClaudeUsage, DayView, view_from_metrics
 from app.timeutil import from_utc_iso, to_utc_iso
-from tests.render import COMBOS, WEEK_41, load
+from tests.render import COMBOS, WEEK_41, load, without
 
 TRACK = (34, 36, 54)
 LINE_109 = (
@@ -238,11 +238,12 @@ def test_sleep_bar_fill_is_floored(settings):
 @pytest.mark.parametrize("count", [0, 9, 12, 99, 100, 365, 999, 1000, 12345])
 def test_book_count_stays_inside_the_frame(count, settings):
     view, _ = load(WEEK_41, settings)
-    frame = render_books(replace(view, books_ytd=count)).poster
+    wall = {ground_tone(day_accent(view.day_local))}
+    frame = without(render_books(replace(view, books_ytd=count)).poster, wall)
     left, right = lit_columns(frame, 8, 23)
     assert left >= 2 and right <= 61, (count, left, right)
     wide = render_books(replace(view, books_ytd=count, books_target=120)).poster
-    assert lit_columns(wide, 8, 23)[1] <= 61
+    assert lit_columns(without(wide, wall), 8, 23)[1] <= 61
 
 
 # 9. celebrations are samples unless the day earned them

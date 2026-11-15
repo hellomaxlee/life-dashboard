@@ -174,18 +174,19 @@ def scatter_stars(
     colors: tuple[Color, ...],
     keep_out: tuple[tuple[int, int, int], ...] = (),
     count: int = SKY_STARS,
+    rows: tuple[int, int] = (SKY_TOP, SKY_BOTTOM),
 ) -> None:
-    """Single-pixel stars between SKY_TOP and SKY_BOTTOM, placed from `seed` so each day has
-    its own sky. A star is drawn only where the 5x5 block around it is unlit, so none touches
-    a word, a planet or another star, and never inside a `keep_out` disc (cx, cy, radius): an
-    empty orbit stays empty."""
+    """Single-pixel stars between `rows` (SKY_TOP to SKY_BOTTOM unless given), placed from
+    `seed` so each day has its own sky. A star is drawn only where the 5x5 block around it
+    is unlit, so none touches a word, a planet or another star, and never inside a `keep_out`
+    disc (cx, cy, radius): an empty orbit stays empty."""
     rng = random.Random(zlib.crc32(seed.encode()))
     pixels = frame.load()
     placed = 0
     for _ in range(count * 12):
         if placed == count:
             break
-        x, y = rng.randrange(2, SIZE - 2), rng.randrange(SKY_TOP + 2, SKY_BOTTOM - 1)
+        x, y = rng.randrange(2, SIZE - 2), rng.randrange(rows[0] + 2, rows[1] - 1)
         color = colors[rng.randrange(len(colors))]
         clear = all(
             pixels[x + dx, y + dy] == BLACK for dy in range(-2, 3) for dx in range(-2, 3)
@@ -193,6 +194,38 @@ def scatter_stars(
         if clear:
             pixels[x, y] = color
             placed += 1
+
+
+GROUND_LEVEL = 45
+
+
+def ground_tone(color: Color, level: int = GROUND_LEVEL) -> Color:
+    """A colour as scenery: its hue at a low level with its weakest channel at zero, so the
+    panel's curve keeps it a colour and does not wash it to grey (notes.txt § Design)."""
+    top = max(color) or 1
+    scaled = [channel * level // top for channel in color]
+    scaled[scaled.index(min(scaled))] = 0
+    return (scaled[0], scaled[1], scaled[2])
+
+
+def draw_field(frame: Frame, rows: tuple[int, int], tone: Color) -> None:
+    """Scenery behind what is already drawn: a flat field of `tone` over `rows`, inclusive.
+    Call it last. A pixel is lit only where nothing drawn before it is within one pixel, so
+    every word, number and mark keeps a black edge and none touches the scenery (Max,
+    2026-11-15: nothing bleeds). Flat, not dithered: a dither behind small text read as noise
+    at 1x."""
+    top, bottom = rows
+    pixels = frame.load()
+    drawn = {
+        (x, y)
+        for y in range(max(top - 1, 0), min(bottom + 2, SIZE))
+        for x in range(SIZE)
+        if pixels[x, y] != BLACK
+    }
+    for y in range(top, bottom + 1):
+        for x in range(SIZE):
+            if not any((x + dx, y + dy) in drawn for dy in (-1, 0, 1) for dx in (-1, 0, 1)):
+                pixels[x, y] = tone
 
 
 def draw_bitmap(frame: Frame, x: int, y: int, rows: tuple[str, ...], color: Color) -> None:
@@ -377,8 +410,28 @@ def no_dot_label(view: DayView) -> str:
     return "NO DOT YET"
 
 
+TODAY_SKY = (8, 24)
+TODAY_STARS = 10
+
+
+def _today_scene(frame: Frame, view: DayView) -> None:
+    """Style B (2026-11-15): last night's sky around the moon and the sleep number, its stars
+    seeded by the day. The facts below stay on black: a ground behind three lines of small
+    text was tried and read as noise at 1x. Drawn last."""
+    accent = day_accent(view.day_local)
+    scatter_stars(frame, view.day_local, (WHITE, TEXT, accent), count=TODAY_STARS, rows=TODAY_SKY)
+
+
 def render_today(view: DayView, now: datetime | None = None) -> Clip:
-    """Last night's sleep against the target, today's dot, steps, and when the data is from."""
+    """Last night's sleep against the target, today's dot, steps, and when the data is from,
+    in the day's scene."""
+    frame = today_facts(view, now)
+    _today_scene(frame, view)
+    return still(frame)
+
+
+def today_facts(view: DayView, now: datetime | None = None) -> Frame:
+    """The Today screen's words, numbers and marks on black, before its scene."""
     frame = new_frame()
     theme = theme_for(view)
     day = date.fromisoformat(view.day_shown or view.day_local)
@@ -430,7 +483,7 @@ def render_today(view: DayView, now: datetime | None = None) -> Clip:
     as_of = as_of_label(view, now)
     if as_of is not None:
         draw_text(frame, LEFT, AS_OF_Y, as_of, SECONDARY, SMALL)
-    return still(frame)
+    return frame
 
 
 def parked_as_of(as_of: str | None) -> str | None:
@@ -448,13 +501,14 @@ def render_parked(view: DayView, now: datetime | None = None) -> Clip:
     A complete screen with its as-of time, so nothing half-shown is left up, and the mark is
     the as-of line's own colour, so it reads as a note, not an alarm. A long as-of line is
     reprinted without AS OF (`parked_as_of`) so the mark never sits on the time."""
-    frame = render_today(view, now).poster.copy()
+    frame = today_facts(view, now)
     as_of = as_of_label(view, now)
     short = parked_as_of(as_of)
     if short != as_of:
         fill_rect(frame, 0, AS_OF_Y, SIZE - 1, SIZE - 1, BLACK)
         draw_text(frame, LEFT, AS_OF_Y, short, SECONDARY, SMALL)
     draw_bitmap(frame, ZZ_X, AS_OF_Y, ZZ, SECONDARY)
+    _today_scene(frame, view)
     return still(frame)
 
 
@@ -476,10 +530,14 @@ def _draw_book_count(frame: Frame, count: int, target: int) -> None:
         draw_text(frame, LEFT, 16, "MANY", GOLD, BODY)
 
 
+BOOKS_WALL = (8, 40)
+
+
 def _books_base(view: DayView) -> Frame:
     """The count over the shelf. A read book is its lit spine; an unread slot is the month
     theme's track, one quiet tone for every slot (Max, 2026-11-09, on Mei-Lin's proposal: the
-    ten dim tints of the spines-to-be read as olive, maroon and slate on the panel)."""
+    ten dim tints of the spines-to-be read as olive, maroon and slate on the panel). Behind
+    them the wall is a flat field in the weekday's colour (style B, 2026-11-15)."""
     frame = new_frame()
     theme = theme_for(view)
     draw_text(frame, LEFT, 2, "BOOKS", day_accent(view.day_local), SMALL)
@@ -505,6 +563,7 @@ def _books_base(view: DayView) -> Frame:
         else:
             fill_rect(frame, x0, top, x0 + spine - 1, 40, theme.track)
     fill_rect(frame, LEFT, 41, RIGHT, 42, WOOD)
+    draw_field(frame, BOOKS_WALL, ground_tone(day_accent(view.day_local)))
     return frame
 
 

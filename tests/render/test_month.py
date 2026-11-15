@@ -20,6 +20,7 @@ from app.render.gamma import led_gamma, led_lut
 from app.render.month import (
     CALENDAR_MS,
     CELL,
+    PAST_SHADE,
     PLATE_MS,
     PLATE_SCALE,
     PLATE_X,
@@ -27,6 +28,7 @@ from app.render.month import (
     calendar_cells,
     calendar_layout,
     legible,
+    month_color,
     rail_pips,
     render_month,
 )
@@ -434,3 +436,57 @@ def test_the_sequence_is_day_week_month_year_then_the_wins_then_the_party():
     }
     party = slots[-1][1]
     assert len(party.frames) == 6 and len(device_parts(party)) == 6, "six stills, one pass"
+
+
+# the calendar shows what each day gone earned (style B, 2026-11-15)
+
+
+def test_month_wins_are_the_stored_wins_of_the_days_before_today(db, settings):
+    put_daily(db, "2026-10-31", {"wins": ["workout"]})
+    put_daily(db, "2026-11-01", {"wins": []})
+    put_daily(db, "2026-11-02", {"wins": ["sleep", "workout"]})
+    put_daily(db, "2026-11-03", {"wins": ["book", "nonsense"]})
+    put_daily(db, "2026-11-04", {"sleep_hours": 7.2})
+    put_daily(db, "2026-11-06", {"wins": ["sleep"]})
+    put_daily(db, "2026-11-07", {"wins": ["workout"]})
+    view = view_from_db(db, settings, "2026-11-06")
+    assert view.month_wins == ((1, ()), (2, ("workout", "sleep")), (3, ("book",)))
+    assert view_from_db(db, settings, "2026-11-01").month_wins == ()
+
+
+def test_a_day_gone_is_drawn_in_what_it_earned_and_a_day_without_is_a_dot():
+    from app.render.palette import GOLD, TEAL, VIOLET, dim
+
+    wins = ((1, ()), (2, ("workout", "sleep")), (3, ("book",)), (4, ("sleep",)), (5, ("workout",)))
+    day = "2026-11-08"
+    frame = render_month(DayView(day_local=day, month_wins=wins)).poster
+    _, cells = calendar_layout(day)
+    past = dim(month_color(11), PAST_SHADE)
+
+    def cell(n: int) -> list[list[tuple]]:
+        x, y = cells[n]
+        return [[frame.getpixel((x + dx, y + dy)) for dx in range(CELL)] for dy in range(CELL)]
+
+    black = (0, 0, 0)
+    assert cell(2)[:3] == [[GOLD] * CELL] * 3 and cell(2)[3:] == [[VIOLET] * CELL] * 3
+    assert cell(4)[:3] == [[black] * CELL] * 3 and cell(4)[3:] == [[VIOLET] * CELL] * 3
+    assert cell(5)[:3] == [[GOLD] * CELL] * 3 and cell(5)[3:] == [[black] * CELL] * 3
+    book = cell(3)
+    assert {book[dy][dx] for dy in range(1, 5) for dx in (4, 5)} == {TEAL}
+    assert {book[dy][dx] for dy in range(CELL) for dx in range(4)} == {black}
+    for n in (1, 6, 7):
+        lit = [(dx, dy) for dy in range(CELL) for dx in range(CELL) if cell(n)[dy][dx] != black]
+        assert lit == [(2, 2), (3, 2), (2, 3), (3, 3)], (n, "a day with no win is a small dot")
+        assert cell(n)[2][2] == past
+    assert cell(8) == [[WHITE] * CELL] * CELL, "today stays white"
+    assert cell(9) == [[TRACK] * CELL] * CELL, "days to come are untouched"
+
+
+def test_with_no_wins_known_the_calendar_is_the_calendar_of_old():
+    day = "2026-11-08"
+    plain = render_month(DayView(day_local=day)).poster
+    none_known = render_month(DayView(day_local=day, month_wins=())).poster
+    assert plain.tobytes() == none_known.tobytes()
+    _, cells = calendar_layout(day)
+    x, y = cells[3]
+    assert plain.getpixel((x, y)) == plain.getpixel((x + CELL - 1, y + CELL - 1)) != (0, 0, 0)

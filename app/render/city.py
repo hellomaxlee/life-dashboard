@@ -73,8 +73,19 @@ from app.render.palette import (
     SECONDARY,
     TEXT,
     WHITE,
+    day_accent,
+    dim,
 )
-from app.render.screens import LEFT, RIGHT, clean_summary, draw_disc, fill_rect, wrap_lines
+from app.render.screens import (
+    LEFT,
+    RIGHT,
+    clean_summary,
+    draw_disc,
+    draw_field,
+    fill_rect,
+    scatter_stars,
+    wrap_lines,
+)
 from app.render.theme import STOCK, MonthTheme, theme_for
 from app.render.view import DayView
 from app.timeutil import clock_12h, from_utc_iso
@@ -402,12 +413,15 @@ def as_of_label(
     return f"AS OF {days_back}D AGO"
 
 
-def _header(frame: Frame, title: str, right: str, stale: str | None = None) -> None:
-    """The one header row every city page shares; a stale page's row is its amber as-of."""
+def _header(
+    frame: Frame, title: str, right: str, stale: str | None = None, accent: Color = LABEL
+) -> None:
+    """The one header row every city page shares; a stale page's row is its amber as-of. The
+    title wears `accent`: the weekday's colour on a page that has data."""
     if stale is not None:
         draw_text(frame, LEFT, HEADER_Y, stale, AMBER, SMALL)
         return
-    draw_text(frame, LEFT, HEADER_Y, title, LABEL, SMALL)
+    draw_text(frame, LEFT, HEADER_Y, title, accent, SMALL)
     draw_text_right(frame, RIGHT, HEADER_Y, right, TEXT, SMALL)
 
 
@@ -578,6 +592,40 @@ def _local_hour(now: datetime | None, home_tz: str) -> int | None:
     return None if now is None else now.astimezone(ZoneInfo(home_tz)).hour
 
 
+SKY_ROWS = (8, 30)
+# The sky behind the hero band, by condition: one channel at or near zero so the panel keeps
+# it a colour and does not wash it to grey. None is an open sky: black, with stars at night.
+SKY_TONES: dict[str, Color | None] = {
+    CLEAR: (0, 35, 80),
+    CLEAR_NIGHT: None,
+    PARTLY: (0, 30, 68),
+    OVERCAST: (15, 20, 35),
+    FOG: (22, 25, 30),
+    RAINY: (0, 12, 65),
+    HEAVY_RAIN: (8, 0, 58),
+    SNOW: (20, 35, 55),
+    THUNDER: (28, 0, 52),
+    UNKNOWN: None,
+}
+STARRY = (CLEAR_NIGHT, PARTLY)
+SKY_STAR_COUNT = 12
+NIGHT_SKY = 0.6
+
+
+def draw_sky(frame: Frame, kind: str, night: bool, day_local: str, accent: Color) -> None:
+    """The scene behind the weather page's hero band (style B, 2026-11-15), drawn after the
+    words so it keeps a pixel off them (`draw_field`): a flat sky in the condition's tone,
+    dimmer at night, and on a clear or partly clear night a few stars seeded by the day. The
+    day strip below stays on black."""
+    tone = SKY_TONES.get(kind)
+    if night and kind in STARRY:
+        top, bottom = SKY_ROWS
+        stars = (WHITE, TEXT, accent)
+        scatter_stars(frame, day_local, stars, count=SKY_STAR_COUNT, rows=(top - 1, bottom + 2))
+    elif tone is not None:
+        draw_field(frame, SKY_ROWS, dim(tone, NIGHT_SKY) if night else tone)
+
+
 def _weather_frame(view: DayView, city: CityStatus, now: datetime | None) -> Frame:
     frame = new_frame()
     weather = city.weather
@@ -586,8 +634,10 @@ def _weather_frame(view: DayView, city: CityStatus, now: datetime | None) -> Fra
         draw_text(frame, TEMP_X, TEMP_Y, MISSING, TEXT, BODY, scale=2)
         return frame
     stale = as_of_label(weather.fetched_at_utc, now, view.home_tz, view.city_stale_minutes)
-    _header(frame, "WEATHER", day_stamp(view.day_local), stale)
-    kind = condition(weather.code, _local_hour(now, view.home_tz))
+    accent = day_accent(view.day_local)
+    _header(frame, "WEATHER", day_stamp(view.day_local), stale, accent)
+    hour = _local_hour(now, view.home_tz)
+    kind = condition(weather.code, hour)
     draw_icon(frame, ICON_X, ICON_Y, ICONS[kind])
     room_right = _draw_high_low(frame, weather)
     _draw_temperature(frame, degrees(weather.temp_f) or MISSING, room_right - 2)
@@ -601,6 +651,7 @@ def _weather_frame(view: DayView, city: CityStatus, now: datetime | None) -> Fra
     elif CONDITION_WORDS[kind]:
         draw_text(frame, LEFT, NOTICE_Y, CONDITION_WORDS[kind], SECONDARY, SMALL)
     _draw_strip(frame, strip_steps(weather), temps=len(notice) < 2, theme=theme_for(view))
+    draw_sky(frame, kind, is_night(hour), view.day_local, accent)
     return frame
 
 
@@ -693,7 +744,7 @@ def _lines_frame(view: DayView, city: CityStatus, now: datetime | None) -> Frame
         _header(frame, "TRANSIT", NO_DATA)
         return frame
     stale = as_of_label(city.transit_fetched_at_utc, now, view.home_tz, view.city_stale_minutes)
-    _header(frame, "TRANSIT", day_stamp(view.day_local), stale)
+    _header(frame, "TRANSIT", day_stamp(view.day_local), stale, day_accent(view.day_local))
     if not lines:
         draw_text(frame, LEFT, ROWS_TOP + 1, "NO LINES", TEXT, SMALL)
         return frame

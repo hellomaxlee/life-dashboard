@@ -120,3 +120,87 @@ def test_each_day_has_its_own_sky_and_a_day_keeps_it(settings):
 def test_any_week_target_draws_inside_the_frame(target, settings):
     view = replace(load(COMBOS[0], settings)[0], week_target=target, week_dots=target)
     assert render_week(view, NOW).poster.size == (SIZE, SIZE)
+
+
+# every scene: the scenery is whatever a render without it lacks, and none of it may sit
+# within a pixel of anything else on the frame
+
+
+def scenes(view: DayView, now) -> dict[str, list[Frame]]:
+    from app.render.city import render_city
+    from app.render.screens import render_books, render_parked, render_today
+
+    return {
+        "today": list(render_today(view, now).frames),
+        "parked": list(render_parked(view, now).frames),
+        "week": list(render_week(view, now).frames),
+        "books": list(render_books(view).frames),
+        "city": list(render_city(view, now).frames),
+    }
+
+
+def bare_scenes(view: DayView, now, monkeypatch) -> dict[str, list[Frame]]:
+    from app.render import city, screens
+
+    with monkeypatch.context() as patch:
+        for module in (screens, city):
+            patch.setattr(module, "draw_field", lambda *args, **kwargs: None)
+            patch.setattr(module, "scatter_stars", lambda *args, **kwargs: None)
+        return scenes(view, now)
+
+
+def scenery_touching(frame: Frame, bare: Frame) -> list[tuple[int, int]]:
+    lit = {(x, y) for y in range(SIZE) for x in range(SIZE) if bare.getpixel((x, y)) != (0, 0, 0)}
+    found = []
+    for y in range(SIZE):
+        for x in range(SIZE):
+            if (x, y) in lit or frame.getpixel((x, y)) == bare.getpixel((x, y)):
+                continue
+            if any((x + dx, y + dy) in lit for dy in (-1, 0, 1) for dx in (-1, 0, 1)):
+                found.append((x, y))
+    return found
+
+
+@pytest.mark.parametrize("combo", COMBOS)
+def test_no_scenery_touches_anything_on_any_screen(combo, settings, monkeypatch):
+    view, now = load(combo, settings)
+    seen = 0
+    for offset in range(7):
+        day = replace(view, day_local=f"2026-11-{9 + offset:02d}")
+        full, bare = scenes(day, now), bare_scenes(day, now, monkeypatch)
+        for screen, frames in full.items():
+            assert len(frames) == len(bare[screen]), screen
+            for frame, plain in zip(frames, bare[screen], strict=True):
+                for x in range(SIZE):
+                    for y in range(SIZE):
+                        if plain.getpixel((x, y)) != (0, 0, 0):
+                            assert frame.getpixel((x, y)) == plain.getpixel((x, y)), (
+                                screen,
+                                "scenery overwrote a drawn pixel",
+                            )
+                stray = scenery_touching(frame, plain)
+                assert not stray, (combo, day.day_local, screen, stray[:5])
+                seen += frame.tobytes() != plain.tobytes()
+    assert seen >= 7 * 4, "the scenes are there: today, parked, week and books every day"
+
+
+def test_the_weather_sky_follows_the_condition_and_the_hour():
+    from app.render.city import SKY_ROWS, SKY_TONES, _weather_frame
+    from app.render.palette import dim
+    from tests.render.test_city import status, view_of, weather
+
+    noon, late = from_utc_iso("2026-10-02T16:00:00Z"), from_utc_iso("2026-10-03T02:00:00Z")
+
+    def sky(code: int, now) -> set:
+        w = weather(code=code, fetched_at_utc=now.strftime("%Y-%m-%dT%H:%M:%SZ"))
+        city = status(weather=w)
+        frame = _weather_frame(view_of(city), city, now)
+        rows = range(SKY_ROWS[0], SKY_ROWS[1] + 1)
+        return {frame.getpixel((x, y)) for y in rows for x in (0, 63)}
+
+    assert sky(0, noon) == {SKY_TONES["clear"]}
+    assert sky(3, noon) == {SKY_TONES["overcast"]}
+    assert sky(61, noon) == {SKY_TONES["rain"]}
+    assert sky(3, late) == {dim(SKY_TONES["overcast"], 0.6)}, "dimmer at night"
+    assert sky(0, late) == {(0, 0, 0)}, "a clear night is open sky: black, with stars"
+    assert len(set(SKY_TONES.values()) - {None}) == 8, "eight skies, each its own tone"

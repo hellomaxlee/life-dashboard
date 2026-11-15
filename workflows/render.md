@@ -59,6 +59,13 @@ dots as planets in a night sky (an earned workout is a planet in the dot's colou
 empty orbit; the stars are seeded by the day and never land within two pixels of anything), the
 weeks-hit streak under them, the Claude usage bar at the bottom.
 
+Scenes (style B, 2026-11-15). Every rotation screen carries scenery drawn after its words, kept one
+pixel off everything by `screens.draw_field` and `scatter_stars`: Today has last night's stars around
+the sleep number; Books a wall in the weekday's colour; Weather a sky in the condition's tone behind
+the temperature (stars on a clear night) with the hour-by-hour strip unchanged; the Month calendar
+draws each day gone in what it earned (gold a workout, violet sleep, teal a book; a dot for none) from
+the stored `wins`. `tests/render/test_no_bleed.py` is the gate.
+
 Health pushes cover whole days ending yesterday, so today has no sleep, steps or workout
 until tomorrow. When the requested day has none and the day before does, the Today screen
 shows the day before and is headed "YESTERDAY FRI 2" instead of "TODAY SAT 3". Week, streak,

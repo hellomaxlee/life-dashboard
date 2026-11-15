@@ -25,7 +25,9 @@ from app.render.city import (
     ICONS,
     LINES_MS,
     MINI_ICONS,
+    NIGHT_SKY,
     NOTICE_Y,
+    SKY_TONES,
     STATUS_WORDS,
     STEP_LABEL_Y,
     STEP_TEMP_Y,
@@ -58,7 +60,6 @@ from app.render.palette import (
     BUS_BLUE,
     GOLD,
     GREEN,
-    LABEL,
     MOONLIGHT,
     MTA_ORANGE,
     MTA_YELLOW,
@@ -66,6 +67,8 @@ from app.render.palette import (
     RED,
     SECONDARY,
     TRACK,
+    day_accent,
+    dim,
 )
 from app.render.rotation import device_parts, hold_ms, rotation_sequence, sequence_names
 from app.render.screens import LEFT, RIGHT, clean_summary, wrap_lines
@@ -91,6 +94,11 @@ def steps(rows=HOURS) -> tuple[HourWeather, ...]:
         last = hour
         out.append(HourWeather(hour, temp, pct, code, tomorrow))
     return tuple(out)
+
+
+SKIES = {tone for tone in SKY_TONES.values() if tone} | {
+    dim(tone, NIGHT_SKY) for tone in SKY_TONES.values() if tone
+}
 
 
 def weather(**changes) -> Weather:
@@ -220,8 +228,8 @@ def test_the_weather_page_shows_the_rounded_temperature_high_low_and_condition(m
     assert all(r[1] + text_width("H") < high[1] for r in letters)
     assert texts(recorded, NOTICE_Y) == ["OVERCAST"]
     degree = {page.getpixel((x, y)) for x in range(39, 43) for y in range(TEMP_Y, TEMP_Y + 4)}
-    assert degree == {BLACK, (255, 255, 255)}, "a degree mark after the number"
-    assert page.getpixel((LEFT, HEADER_Y)) == LABEL
+    assert degree - SKIES == {BLACK, (255, 255, 255)}, "a degree mark after the number"
+    assert page.getpixel((LEFT, HEADER_Y)) == day_accent(DAY)
 
 
 def test_every_number_on_the_weather_page_is_a_field_of_the_status(monkeypatch):
@@ -387,7 +395,7 @@ def test_an_alert_is_shown_in_amber_and_takes_the_notice_line(monkeypatch):
     assert texts(recorded, NOTICE_Y) == ["WIND ADVISORY"], "the first alert, not the condition"
     assert "COASTAL FLOOD STATEMENT" not in texts(recorded)
     row = {page.getpixel((x, y)) for x in range(SIZE) for y in range(NOTICE_Y, NOTICE_Y + 5)}
-    assert row == {BLACK, AMBER}
+    assert row - SKIES == {BLACK, AMBER}
     assert len([r for r in recorded if r[2] == STEP_TEMP_Y]) == 6, "one line: the temperatures stay"
 
 
@@ -660,7 +668,7 @@ def test_a_part_older_than_the_limit_is_headed_as_of_in_amber(monkeypatch):
     assert "WEATHER" not in texts(recorded)
     header = {clip.frames[0].getpixel((x, y)) for x in range(SIZE) for y in range(HEADER_Y, 7)}
     assert header == {BLACK, AMBER}
-    assert clip.frames[1].getpixel((LEFT, HEADER_Y)) == LABEL, "transit is fresh"
+    assert clip.frames[1].getpixel((LEFT, HEADER_Y)) == day_accent(DAY), "transit is fresh"
     assert ("57", TEMP_X, TEMP_Y, BODY.name, 2) in recorded, "the old number is still shown"
 
     both = replace(old, transit_fetched_at_utc=at(200))
@@ -739,7 +747,7 @@ def test_every_page_is_on_true_black_with_one_header_row(settings, monkeypatch):
             assert black_count(frame) > SIZE * SIZE // 2
             edge = [frame.getpixel((x, y)) for x in range(SIZE) for y in (0, 63)]
             edge += [frame.getpixel((x, y)) for y in range(SIZE) for x in (0, 63)]
-            assert set(edge) == {BLACK}, "nothing touches the frame's edge"
+            assert set(edge) - SKIES == {BLACK}, "nothing but the sky reaches the frame's edge"
     headers = [r for r in recorded if r[2] in (HEADER_Y - 1, HEADER_Y, HEADER_Y + 1)]
     small = [r for r in headers if r[3] == SMALL.name]
     assert small and {r[2] for r in small} == {HEADER_Y}, "no header is a pixel off its row"

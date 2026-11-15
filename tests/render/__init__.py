@@ -31,6 +31,18 @@ def rotation(view: DayView, now: datetime) -> dict[str, Clip]:
     return dict(rotation_clips(view, now))
 
 
+def without(frame, tones):
+    """A copy of `frame` with every pixel of the scenery `tones` put back to black, for a test
+    that is about the words and marks, not the scene behind them."""
+    out = frame.copy()
+    pixels = out.load()
+    for y in range(out.height):
+        for x in range(out.width):
+            if pixels[x, y] in tones:
+                pixels[x, y] = (0, 0, 0)
+    return out
+
+
 def record_text(monkeypatch) -> list[tuple[str, int, int, str, int]]:
     """Record every string a renderer draws as (text, x, y, font name, scale), still drawing it."""
     from app.render import celebrate, city, font, month, screens, usage

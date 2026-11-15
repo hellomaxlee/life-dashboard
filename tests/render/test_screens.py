@@ -26,6 +26,7 @@ from app.render.screens import (
     render_parked,
     render_today,
     sleep_text,
+    today_facts,
 )
 from app.render.theme import theme_for
 from app.render.view import DayView
@@ -249,7 +250,7 @@ def test_a_night_over_nine_hours_is_yellow_and_not_a_sleep_win():
     from app.render.screens import sleep_goal_label
 
     def number_colours(hours: float) -> set:
-        frame = render_today(DayView(day_local="2026-10-02", sleep_hours=hours)).poster
+        frame = today_facts(DayView(day_local="2026-10-02", sleep_hours=hours))
         return {frame.getpixel((x, y)) for x in range(16, 62) for y in range(9, 24)}
 
     for hours, colour, win in (

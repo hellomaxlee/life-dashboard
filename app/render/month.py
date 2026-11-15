@@ -24,7 +24,7 @@ from datetime import date, datetime
 from app.month.spec import ART_SIZE, UNLIT, DayPlate, MonthFeature
 from app.render.font import SMALL, Font, draw_text, text_width
 from app.render.frame import SIZE, Clip, Color, Frame, new_frame, still
-from app.render.palette import LABEL, TEXT, TRACK, WHITE, dim, hue
+from app.render.palette import GOLD, LABEL, TEAL, TEXT, TRACK, VIOLET, WHITE, dim, hue
 from app.render.screens import fill_rect
 from app.render.theme import STOCK, MonthTheme, theme_for
 from app.render.view import DayView
@@ -169,13 +169,37 @@ def month_color(month: int) -> Color:
     return hue((month - 1) / 12 + 0.55)
 
 
-def _calendar_frame(day_local: str, theme: MonthTheme = STOCK) -> Frame:
+WIN_COLORS: dict[str, Color] = {"workout": GOLD, "sleep": VIOLET, "book": TEAL}
+
+
+def _draw_wins(frame: Frame, x: int, y: int, wins: tuple[str, ...]) -> None:
+    """A past day that earned something, in the wins' own colours (the sparkle icons'): gold
+    across the top half for a workout, violet across the bottom half for sleep in its band,
+    a teal block at the right edge for a finished book; an unearned half is left black."""
+    half = CELL // 2
+    if "workout" in wins:
+        fill_rect(frame, x, y, x + CELL - 1, y + half - 1, WIN_COLORS["workout"])
+    if "sleep" in wins:
+        fill_rect(frame, x, y + half, x + CELL - 1, y + CELL - 1, WIN_COLORS["sleep"])
+    if "book" in wins:
+        fill_rect(frame, x + CELL - 2, y + 1, x + CELL - 1, y + CELL - 2, WIN_COLORS["book"])
+
+
+def _calendar_frame(
+    day_local: str,
+    theme: MonthTheme = STOCK,
+    month_wins: tuple[tuple[int, tuple[str, ...]], ...] = (),
+) -> Frame:
     """With a month theme (a stored feature), the month's name and the days gone take its
     accent and the days to come its tinted track (Max, 2026-11-09: "calibrate the calendar
     boxes screen with the month's theme color"); without one, the month's own hue and the
     stock track. The days gone are at PAST_SHADE: at 0.5 an accent and its track sat too close
     at 1x and the palette's lighter hues went to mud, and at full strength a pale accent hides
-    today's white."""
+    today's white. A day gone that earned a win is drawn in the win's colours instead
+    (`_draw_wins`, style B, 2026-11-15) and, once any day's wins are known, a day with
+    none is a small dot of the past shade: shown plainly, and never mistaken for a win when
+    the month's accent sits near gold or violet. With no wins known the days gone are whole
+    cells of the past shade, as before."""
     frame = new_frame()
     day = date.fromisoformat(day_local)
     color = theme.accent or month_color(day.month)
@@ -190,7 +214,15 @@ def _calendar_frame(day_local: str, theme: MonthTheme = STOCK) -> Frame:
     for column, letter in enumerate(WEEKDAY_LETTERS):
         x = GRID_X + column * CELL_PITCH + (CELL - text_width(letter)) // 2
         draw_text(frame, x, header_y, letter, LABEL)
+    earned = {n: wins for n, wins in month_wins if wins}
     for n, (x, y) in cells.items():
+        if n < day.day and n in earned:
+            _draw_wins(frame, x, y, earned[n])
+            continue
+        if n < day.day and month_wins:
+            mid = CELL // 2 - 1
+            fill_rect(frame, x + mid, y + mid, x + mid + 1, y + mid + 1, dim(color, PAST_SHADE))
+            continue
         if n == day.day:
             shade = WHITE
         elif n < day.day:
@@ -208,7 +240,8 @@ def render_month(view: DayView, now: datetime | None = None) -> Clip:
     alone."""
     found = plate_for(view)
     if found is None:
-        return still(_calendar_frame(view.day_local))
+        return still(_calendar_frame(view.day_local, month_wins=view.month_wins))
     feature, plate = found
-    frames = (_plate_frame(feature, plate), _calendar_frame(view.day_local, theme_for(view)))
+    plate_page = _plate_frame(feature, plate)
+    frames = (plate_page, _calendar_frame(view.day_local, theme_for(view), view.month_wins))
     return Clip(frames, (PLATE_MS, CALENDAR_MS))
