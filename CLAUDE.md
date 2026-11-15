@@ -18,7 +18,7 @@ Python 3.12 · uv · FastAPI · SQLite (stdlib `sqlite3`, hand-written migration
 - SQLite over Postgres: one user, one box, one file to back up.
 - Pillow over a browser canvas: frames are PNG bytes the device adapters transport; no browser in the render path.
 - LLM: Anthropic SDK, model id pinned in `config.toml`, never hardcoded; load `/claude-api` before choosing or changing it.
-- Health Auto Export (iOS) pushes JSON to `POST /ingest/health`; Goodreads via the public `read` shelf RSS.
+- Health Auto Export (iOS) pushes JSON to `POST /ingest/health`; Goodreads via the public `read` shelf widget (the shelf RSS was retired by Goodreads around 2026-10-28).
 
 ## Commands
 | Task | Command |

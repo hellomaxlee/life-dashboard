@@ -453,8 +453,13 @@ to look first.
 
 ## 17. Goodreads
 
-The `read` shelf's public RSS is the reading source. Its URL carries a private
-key, so it is the secret `GOODREADS_RSS_URL` in `.env` (Goodreads → My Books →
+The `read` shelf is the reading source. Goodreads retired the shelf RSS around
+2026-10-28 (every feed URL is a 404), so since 2026-11-15 the poll reads the public shelf
+widget instead: it takes the user id and shelf from `GOODREADS_RSS_URL` and fetches
+`/review/custom_widget/<user id>`, sending no key. The widget carries no dates, so a book
+new to the shelf is dated the day the poll first saw it and marked date-inferred; set the
+read date on Goodreads and nothing changes here, the widget never shows it. The variable
+keeps its name and is still a secret in `.env` (Goodreads → My Books →
 the `read` shelf → the RSS icon at the bottom of the list; copy the link). Set
 it, restart the service (section 4), and `goodreads_poll` is registered; leave
 it empty and the job is simply absent, nothing else changes. The host must be

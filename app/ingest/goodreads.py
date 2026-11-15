@@ -20,11 +20,32 @@ else is stored as null and logged, never guessed. The fallback rule
 `read_at` stays null.
 
 Books YTD and the "finished a book" win are Phase 2 metrics; this module only stores.
+
+The shelf widget (2026-11-15). Goodreads retired its shelf RSS feeds around 2026-10-28:
+every `/review/list_rss/` URL answers 404 and the shelf page redirects to sign-in. The
+public shelf widget, `/review/custom_widget/<user id>?shelf=read`, still answers without a
+login, so the poll now fetches that (`shelf_url` derives it from the configured feed URL and
+sends no key). It is a script that carries the shelf as an escaped HTML string: up to 100
+books, most recently read first, each with a review id, a title and an author, and NO
+dates. So for a widget payload:
+- a book already stored (matched by title and author, a "(Series, #1)" suffix and case
+  ignored, by title alone when the stored row has no author, or by its review id) is left
+  exactly as it is: its dates came from the feed;
+- a book not yet stored was added to the shelf since the last look, so its read day is
+  the day its payload was received (`raw_archive.received_at_utc`, home timezone), stored
+  like a feed read date and marked `date_inferred = 1`. That is the goal model's own rule
+  ("the `read` shelf gained an entry") and it replays to the same day;
+- on an empty `books` table nothing is known about when anything was read, so every book
+  is stored undated and counts toward no day.
+Archived widget payloads keep the source's `.xml` suffix; `apply_feed` tells the two forms
+apart by their first byte.
 """
 
 from __future__ import annotations
 
+import html
 import logging
+import re
 import sqlite3
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
@@ -37,7 +58,7 @@ import httpx
 
 from app.config import Settings
 from app.ingest.health import archive_raw, run_ingest
-from app.timeutil import to_utc_iso
+from app.timeutil import from_utc_iso, to_utc_iso
 
 SOURCE = "goodreads"
 ALLOWED_HOSTS = frozenset({"www.goodreads.com", "goodreads.com"})
@@ -57,6 +78,136 @@ class Book:
     author: str | None
     read_at_utc: str | None
     date_added_utc: str | None
+
+
+WIDGET_PATH = "/review/custom_widget/{user}"
+WIDGET_QUERY = (
+    "num_books=100&order=d&shelf={shelf}&show_author=1&show_cover=0&show_rating=0"
+    "&show_review=0&show_tags=0&show_title=1&sort=date_read"
+)
+_FEED_PATH = re.compile(r"^/review/list_rss/(\d+)")
+_SHELF = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+WIDGET_MARK = "gr_custom_container_"
+_WIDGET_CODE = re.compile(r"var\s+widget_code\s*=\s*'((?:[^'\\\n]|\\.)*)'", re.S)
+_JS_ESCAPE = re.compile(r"\\(.)", re.S)
+_JS_UNESCAPED = {"n": "\n", "t": "\t", "r": "\r"}
+_WIDGET_BOOK = re.compile(
+    r'gr_custom_title_">\s*<a[^>]*?/review/show/(\d+)[^>]*>(.*?)</a>'
+    r'(?:(?!gr_custom_title_).)*?gr_custom_author_">\s*(?:by\s*)?<a[^>]*>(.*?)</a>',
+    re.S,
+)
+_WIDGET_TITLE = re.compile(r'gr_custom_title_">')
+_SERIES = re.compile(r"\s*\([^()]*#\s*\d+[^()]*\)\s*$")
+_SPACE = re.compile(r"\s+")
+REVIEW_ID_PREFIX = "review:"
+
+
+@dataclass(frozen=True)
+class ShelfBook:
+    """One book as the shelf widget shows it: no dates, and a review id, not a book id."""
+
+    review_id: str
+    title: str
+    author: str | None
+
+
+def shelf_url(configured: str) -> str:
+    """The URL the poll fetches. A retired shelf-feed URL (`/review/list_rss/<user id>`)
+    becomes that user's shelf widget, same host, same shelf, WITHOUT the feed's key; any
+    other URL is fetched as written."""
+    try:
+        target = httpx.URL(configured)
+    except httpx.InvalidURL:
+        return configured
+    found = _FEED_PATH.match(target.path)
+    if found is None:
+        return configured
+    shelf = target.params.get("shelf", "read")
+    if not _SHELF.match(shelf):
+        shelf = "read"
+    path = WIDGET_PATH.format(user=found.group(1))
+    return f"{target.scheme}://{target.host}{path}?{WIDGET_QUERY.format(shelf=shelf)}"
+
+
+def is_widget(body: bytes) -> bool:
+    """A widget payload is a script; a feed is XML and starts with '<'."""
+    return not body.lstrip().startswith(b"<")
+
+
+def parse_widget(body: bytes) -> list[ShelfBook]:
+    """Every book of a shelf-widget script, in its order. ValueError when the bytes are not
+    one, or when a title in it cannot be read whole (a changed layout must fail loudly, not
+    drop books). An empty shelf is a valid widget with no books."""
+    try:
+        text = body.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ValueError(f"malformed goodreads widget: {exc}") from exc
+    code = _WIDGET_CODE.search(text)
+    if code is None or WIDGET_MARK not in code.group(1):
+        raise ValueError("malformed goodreads widget: no widget_code string with a shelf in it")
+    markup = _JS_ESCAPE.sub(lambda m: _JS_UNESCAPED.get(m.group(1), m.group(1)), code.group(1))
+    books = []
+    for review_id, title, author in _WIDGET_BOOK.findall(markup):
+        name = _SPACE.sub(" ", html.unescape(re.sub(r"<[^>]+>", "", title))).strip()
+        by = _SPACE.sub(" ", html.unescape(re.sub(r"<[^>]+>", "", author))).strip()
+        if name:
+            books.append(ShelfBook(review_id, name, by or None))
+    titles = len(_WIDGET_TITLE.findall(markup))
+    if len(books) != titles:
+        raise ValueError(
+            f"malformed goodreads widget: {titles} titles but {len(books)} readable books"
+        )
+    return books
+
+
+def match_key(title: str, author: str | None) -> tuple[str, str]:
+    """What makes two listings the same book across the feed and the widget: the title
+    without a trailing "(Series, #1)" and the author, spaces collapsed, case ignored."""
+    bare = _SERIES.sub("", title)
+    return (
+        _SPACE.sub(" ", bare).strip().casefold(),
+        _SPACE.sub(" ", author or "").strip().casefold(),
+    )
+
+
+def first_seen_dates(received_at_utc: str, home_tz: str) -> tuple[str, str]:
+    """(read_at, date_added) for a book first seen in a payload received then: the home-
+    timezone day's midnight, as a feed read date is stored, and the instant itself."""
+    received = from_utc_iso(received_at_utc)
+    local = received.astimezone(ZoneInfo(home_tz))
+    midnight = datetime(local.year, local.month, local.day, tzinfo=ZoneInfo(home_tz))
+    return to_utc_iso(midnight), to_utc_iso(received)
+
+
+def store_shelf(
+    conn: sqlite3.Connection, books: list[ShelfBook], received_at_utc: str, home_tz: str
+) -> int:
+    """Add the widget's books that are not stored yet; touch nothing that is. A new book is
+    dated the day it was first seen and marked inferred, unless the table was empty, when
+    nothing is known and it is stored undated. Returns the number of rows added."""
+    rows = conn.execute("SELECT id, title, author FROM books").fetchall()
+    known_ids = {str(row["id"]) for row in rows}
+    known = {match_key(str(row["title"]), row["author"]) for row in rows}
+    authorless = {title for title, author in known if not author}
+    read_at, date_added, inferred = (None, None, 0)
+    if rows:
+        read_at, date_added = first_seen_dates(received_at_utc, home_tz)
+        inferred = 1
+    added = 0
+    for book in books:
+        book_id = REVIEW_ID_PREFIX + book.review_id
+        key = match_key(book.title, book.author)
+        if book_id in known_ids or key in known or key[0] in authorless:
+            continue
+        conn.execute(
+            "INSERT INTO books (id, title, author, read_at, date_added, date_inferred) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (book_id, book.title, book.author, read_at, date_added, inferred),
+        )
+        known_ids.add(book_id)
+        known.add(key)
+        added += 1
+    return added
 
 
 @dataclass(frozen=True)
@@ -214,7 +365,16 @@ def store_books(
 def apply_feed(
     conn: sqlite3.Connection, body: bytes, raw_archive_id: int, settings: Settings, first: bool
 ) -> int:
-    """Parse and store one feed inside the caller's transaction."""
+    """Parse and store one payload, a feed or a shelf widget, inside the caller's
+    transaction."""
+    if is_widget(body):
+        row = conn.execute(
+            "SELECT received_at_utc FROM raw_archive WHERE id = ?", (raw_archive_id,)
+        ).fetchone()
+        if row is None:
+            raise ValueError(f"no raw_archive row {raw_archive_id} to date a shelf widget by")
+        shelf = parse_widget(body)
+        return store_shelf(conn, shelf, str(row["received_at_utc"]), settings.home_tz)
     books = parse_feed(body, settings.home_tz)
     return store_books(conn, books, settings.books.fallback_to_date_added)
 
@@ -243,7 +403,7 @@ def poll_goodreads(
     url = settings.goodreads_rss_url
     if not url:
         return PollResult("unconfigured")
-    body = fetch_feed(url, client)
+    body = fetch_feed(shelf_url(url), client)
     archived = archive_raw(conn, settings.storage.raw_dir, body, source=SOURCE)
     if archived.duplicate:
         return PollResult("duplicate", archived.raw_archive_id)

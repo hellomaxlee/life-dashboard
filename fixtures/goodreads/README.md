@@ -44,3 +44,27 @@ Expected rows after `shelf_variants.xml` with `books.fallback_to_date_added = tr
 | 90000005 | 2025-12-31T05:00:00Z | 2026-01-01T05:30:00Z | 0 |
 | 90000006 | null | null | 0 |
 | 90000007 | 2026-03-08T05:00:00Z | 2026-03-08T10:30:00Z | 0 |
+
+## The shelf widget, 2026-11-15 (SYNTHETIC)
+
+Goodreads retired the shelf RSS feeds around 2026-10-28 (every `/review/list_rss/` URL is a
+404). The poll now reads the public shelf widget, `/review/custom_widget/<user id>?shelf=read`.
+The `widget_*.js` files are shaped after one fetch of the real widget on 2026-11-15; every
+title, author and id is invented.
+
+| Fact | Value |
+|---|---|
+| Content type | `text/javascript`, 38,866 bytes for 76 books; two fetches two seconds apart had one sha256 |
+| Shape | `var widget_code = '<escaped HTML>'` then a few lines that write it into the page |
+| Escaping | inside the single-quoted string: `\"`, `\/`, `\n`, and `\'` for an apostrophe; `&amp;` for an ampersand |
+| Per book | `gr_custom_title_` with a link to `/review/show/<review id>` and the title; `gr_custom_author_` with "by" and the author |
+| Missing | read dates, added dates, the book id, and the series suffix the feed put on titles ("(Series, #1)") |
+| Limit | `num_books` up to 100, most recently read first with `sort=date_read&order=d` |
+
+| File | What it is |
+|---|---|
+| `widget_shelf.js` | the seven books of `shelf_variants.xml` as the widget lists them (no series suffix, one with different case and spacing, one whose stored row has no author) plus one new book |
+| `widget_shelf_later.js` | the same with a second new book on top |
+| `widget_empty.js` | a shelf with no books |
+| `widget_changed.js` | a layout change: the first title's link no longer carries a review id |
+

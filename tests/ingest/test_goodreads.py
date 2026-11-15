@@ -443,7 +443,7 @@ def test_job_runs_the_poll_on_a_fresh_connection_and_survives_a_failure(
     run = built.get_job(jobs.GOODREADS_JOB).func
 
     run()
-    assert calls == [FEED_URL]
+    assert calls == [goodreads.shelf_url(FEED_URL)]
     assert rows(db) == EXPECTED_ROWS
     assert built.job_stats[jobs.GOODREADS_JOB] == jobs.JobStats(runs=1)
 
@@ -505,3 +505,135 @@ def test_raw_archive_file_is_xml_next_to_the_json_sources(db, gr_settings):
     plan = replay.replay_plan(gr_settings.storage.raw_dir, db)
     assert [source for source, _, _ in plan.entries] == ["goodreads"]
     assert plan.unrecorded == []
+
+
+# the shelf widget: Goodreads retired the shelf feeds around 2026-10-28
+
+
+WIDGET_URL = (
+    "https://www.goodreads.com/review/custom_widget/1?num_books=100&order=d&shelf=read"
+    "&show_author=1&show_cover=0&show_rating=0&show_review=0&show_tags=0&show_title=1"
+    "&sort=date_read"
+)
+FIRST_NEW = "review:70000010"
+SECOND_NEW = "review:70000011"
+
+
+def take(conn, settings, name: str, received: str) -> int:
+    """Archive a fixture as received at `received` (UTC ISO) and ingest it."""
+    from app.ingest.goodreads import SOURCE, ingest_archived
+    from app.ingest.health import archive_raw
+    from app.timeutil import from_utc_iso
+
+    body = feed(name)
+    archived = archive_raw(
+        conn, settings.storage.raw_dir, body, source=SOURCE, received_at=from_utc_iso(received)
+    )
+    return ingest_archived(conn, body, archived.raw_archive_id, settings)
+
+
+def test_a_retired_feed_url_becomes_the_shelf_widget_and_the_key_is_never_sent():
+    from app.ingest.goodreads import shelf_url
+
+    assert shelf_url(FEED_URL) == WIDGET_URL
+    assert "key" not in shelf_url(FEED_URL) and "FIXTURE" not in shelf_url(FEED_URL)
+    other = "https://goodreads.com/review/list_rss/42?shelf=to-read&key=SECRET"
+    assert shelf_url(other).startswith("https://goodreads.com/review/custom_widget/42?")
+    assert "shelf=to-read" in shelf_url(other) and "SECRET" not in shelf_url(other)
+    odd = "https://www.goodreads.com/review/list_rss/42?shelf=a%26b%3Dc"
+    assert "shelf=read&" in shelf_url(odd), "a shelf name that is not a plain word is not passed on"
+    assert shelf_url(WIDGET_URL) == WIDGET_URL, "any other URL is fetched as written"
+    assert shelf_url("not a url") == "not a url"
+
+
+def test_the_widget_parses_to_its_books_in_order_with_escapes_undone():
+    from app.ingest.goodreads import ShelfBook, is_widget, parse_widget
+
+    body = feed("widget_shelf.js")
+    assert is_widget(body) and not is_widget(feed("shelf_variants.xml"))
+    books = parse_widget(body)
+    assert len(books) == 8
+    assert books[0] == ShelfBook(
+        "70000010", "A Book Finished Since: What the Feed Didn't Say", "June O'Kafor"
+    )
+    assert ShelfBook("70000002", "Why We're Restless", "Ezra O'Neill") in books
+    assert ShelfBook("70000004", "The Handmaid’s Garden", "Margaret & Roland Atwell") in books
+    assert (
+        ShelfBook("70000003", "Salt & Stone: A Field Guide to the Coast", "Nadia Qureshi-Ławski")
+        in books
+    )
+    assert parse_widget(feed("widget_empty.js")) == []
+    for bad in (b"", b"var x = 1", feed("widget_changed.js"), b"\xff\xfe"):
+        with pytest.raises(ValueError, match="malformed goodreads widget"):
+            parse_widget(bad)
+
+
+def test_a_widget_after_the_feed_adds_only_the_new_book_dated_the_day_it_was_seen(db, gr_settings):
+    poll(db, gr_settings, "shelf_variants.xml")
+    assert rows(db) == EXPECTED_ROWS
+    # 03:30 UTC on the 16th is 10:30 PM on the 15th in New York: the home day decides
+    assert take(db, gr_settings, "widget_shelf.js", "2026-11-16T03:30:00Z") == 1
+    after = rows(db)
+    assert {k: v for k, v in after.items() if k in EXPECTED_ROWS} == EXPECTED_ROWS, (
+        "nothing the feed stored is touched: no series-less, recased or authorless double"
+    )
+    assert set(after) == set(EXPECTED_ROWS) | {FIRST_NEW}
+    assert after[FIRST_NEW] == ("2026-11-15T05:00:00Z", "2026-11-16T03:30:00Z", 1)
+    title = db.execute("SELECT title, author FROM books WHERE id = ?", (FIRST_NEW,)).fetchone()
+    assert tuple(title) == ("A Book Finished Since: What the Feed Didn't Say", "June O'Kafor")
+
+    assert take(db, gr_settings, "widget_shelf_later.js", "2026-11-20T15:00:00Z") == 1
+    later = rows(db)
+    assert later[FIRST_NEW] == after[FIRST_NEW], "the first new book keeps the day it was seen"
+    assert later[SECOND_NEW] == ("2026-11-20T05:00:00Z", "2026-11-20T15:00:00Z", 1)
+    assert len(later) == 9
+
+
+def test_the_new_book_counts_on_its_day_for_the_metrics(db, gr_settings):
+    from datetime import date
+
+    from app.metrics.books import effective_date
+
+    poll(db, gr_settings, "shelf_variants.xml")
+    take(db, gr_settings, "widget_shelf.js", "2026-11-16T03:30:00Z")
+    row = db.execute("SELECT read_at, date_added FROM books WHERE id = ?", (FIRST_NEW,)).fetchone()
+    assert effective_date(row["read_at"], row["date_added"], gr_settings) == date(2026, 11, 15)
+
+
+def test_a_widget_on_an_empty_table_dates_nothing(db, gr_settings):
+    assert take(db, gr_settings, "widget_shelf.js", "2026-11-16T03:30:00Z") == 8
+    stored = rows(db)
+    assert len(stored) == 8 and set(stored.values()) == {(None, None, 0)}
+    assert take(db, gr_settings, "widget_shelf_later.js", "2026-11-20T15:00:00Z") == 1
+    assert rows(db)[SECOND_NEW] == ("2026-11-20T05:00:00Z", "2026-11-20T15:00:00Z", 1)
+
+
+def test_the_poll_fetches_the_widget_without_the_key_and_a_repoll_is_a_no_op(db, gr_settings):
+    poll(db, gr_settings, "shelf_variants.xml")
+    shelf = Shelf(feed("widget_shelf.js"))
+    with shelf.client() as client:
+        first = poll_goodreads(db, gr_settings, client)
+        second = poll_goodreads(db, gr_settings, client)
+    assert [str(r.url) for r in shelf.requests] == [WIDGET_URL, WIDGET_URL]
+    assert (first.status, first.books) == ("ok", 1) and second.status == "duplicate"
+    assert len(rows(db)) == 8
+    changed = Shelf(feed("widget_changed.js"))
+    with changed.client() as client:
+        assert poll_goodreads(db, gr_settings, client).status == "malformed"
+    assert len(rows(db)) == 8, "a layout change stores nothing and is marked, not half-read"
+    assert count(db, "raw_archive") == 3
+
+
+def test_replay_of_feeds_then_widgets_reproduces_live(db, gr_settings, tmp_path):
+    poll(db, gr_settings, "shelf_variants.xml")
+    take(db, gr_settings, "widget_shelf.js", "2026-11-16T03:30:00Z")
+    take(db, gr_settings, "widget_shelf_later.js", "2026-11-20T15:00:00Z")
+    live = snapshot(db)
+    assert len(live["books"]) == 9
+    scratch = replay.replay(
+        gr_settings.storage.raw_dir, tmp_path / "scratch.db", gr_settings, recorded=db
+    )
+    try:
+        assert checksum(snapshot(scratch)) == checksum(live)
+    finally:
+        scratch.close()
