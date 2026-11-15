@@ -37,7 +37,7 @@ from typing import Literal
 
 from app.render.font import BODY, SMALL, Font, draw_text, draw_text_centered, text_width
 from app.render.frame import SIZE, Clip, Color, Frame, new_frame
-from app.render.palette import BLACK, CONFETTI, GOLD, LABEL, TEAL, TEXT, VIOLET, WHITE, dim, hue
+from app.render.palette import BLACK, CONFETTI, GOLD, TEAL, TEXT, VIOLET, WHITE, dim, hue
 from app.render.screens import (
     DOT_ROW_Y,
     MOON,
@@ -198,7 +198,7 @@ def sparkle_clip(
     rng = random.Random(seed)
     accent = nth_dot_color(dot) if win == "workout" else GOLD
     lines = WIN_LABELS[win]
-    star_floor = 46 - 7 * (len(lines) - 1)
+    star_floor = 53 - 7 * (len(lines) - 1)
     stars = []
     while len(stars) < 14:
         x, y = rng.randrange(4, SIZE - 4), rng.randrange(4, star_floor)
@@ -237,8 +237,7 @@ def sparkle_clip(
             draw_twinkle(frame, x, y, size, hue(colour_at + beat * 0.13))
         if beat >= 2:
             for row, line in enumerate(lines):
-                draw_text_centered(frame, 57 - 7 * (len(lines) - row), line, TEXT, SMALL)
-            draw_text_centered(frame, 57, "SMALL WIN", LABEL, SMALL)
+                draw_text_centered(frame, 57 - 7 * (len(lines) - 1 - row), line, TEXT, SMALL)
         frames.append(frame)
     return Clip(tuple(frames), (STEP_MS,) * SPARKLE_BEATS, poster_index=2)
 

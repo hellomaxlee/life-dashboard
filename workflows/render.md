@@ -187,7 +187,7 @@ job runs it: Today → City → Week → Month → Books → one sparkle per sma
 definition; a restart begins at Today. A still holds for `device.screen_seconds` (6 s). Anything animated holds
 for whole plays and is never replaced part way: Books until its summary has paged through
 exactly once (2 s a page), City's pages once each (6 s, 6 s, then 5 s a detail page), Month's plate 6 s then the calendar 6 s, each sparkle one pass
-of five stills at 300 ms (about 9 s on the device, each still's 1.45 s upload included; every still is its own picture: the icon rising on a streak, the burst of rays, the sparks and the label, the sparks falling wide with the icon's gesture, the icon settled among stars), the party one pass of six stills at 300 ms (about 10 s). On the device a paged screen goes as one still per page. The workout sparkle reads "WORKOUT DONE / SMALL WIN", and once the week's target is met
+of five stills at 300 ms (about 9 s on the device, each still's 1.45 s upload included; every still is its own picture: the icon rising on a streak, the burst of rays, the sparks and the label, the sparks falling wide with the icon's gesture, the icon settled among stars), the party one pass of six stills at 300 ms (about 10 s). On the device a paged screen goes as one still per page. The workout sparkle reads "WORKOUT DONE" on the bottom line, with no subtitle (Max, 2026-11-15), and once the week's target is met
 it stays in the sequence every day through Sunday, and so does the party. `/preview` stays the engineering view; the
 three pages link each other on their first line.
 

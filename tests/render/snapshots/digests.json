@@ -5,15 +5,15 @@
   },
   "celebrations/sparkle_book": {
     "frames": 5,
-    "sha256": "edd6283bd316cc376d6a81840e4bf1a3ac9e55f5d87e464e92450f2f7f0375d7"
+    "sha256": "a4a7afe6969023bdca266093519bbc89bb5f458d3bf2f4d88323f051b50fcb56"
   },
   "celebrations/sparkle_sleep": {
     "frames": 5,
-    "sha256": "b7108b4151d041084102f36da4e8080a9f811402aa8ae5a77d01e02d17a8d747"
+    "sha256": "be154484c032268b7a21eac207859e561c3f4fa1b7e1067dd5ac13fc3e3bb473"
   },
   "celebrations/sparkle_workout": {
     "frames": 5,
-    "sha256": "c74496ddca9f7820240883ead53d8143ed33aa9b3a5ffefe862f913499466270"
+    "sha256": "3dea4c793341a8950a8ef3d61eeee0d85bc102da6560eaf00b403a8cf7e0924d"
   },
   "empty/books": {
     "frames": 1,

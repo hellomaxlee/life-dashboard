@@ -56,7 +56,7 @@ def test_dry_run_prices_the_request_and_calls_nothing(db, fake, capsys):
     out = capsys.readouterr().out
     assert "The month is October 2026" in out
     assert "max_tokens 32000" in out
-    assert "worst case: $0.65" in out and "for a run of 2 calls" in out
+    assert "worst case: $0.66" in out and "for a run of 2 calls" in out
     assert "call allowed" in out
     assert "2026-10: not stored; guard: an automatic run may call; api key: absent" in out
     assert fake.requests == []

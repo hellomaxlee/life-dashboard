@@ -3,6 +3,18 @@
 Running log, newest first. The Lead reads this to find root causes and prioritize.
 Entry format: `## YYYY-MM-DD · <Title> (<Author>)` followed by terse bullets. Name the fixture combo on render/summary cycles.
 
+2026-11-15 · performance-review · 11 agents reviewed (first review, 59 entries in); Fatima El-Amrani promoted to Manager; Kwabena Osei fired (agents/_old); Bartek Zieliński's demotion on a Manager tie vetoed by Max
+
+## 2026-11-15 · No "SMALL WIN" under a win; a month feature that need not grow; December authored (Lucía Ferrer; brief Theodora Makris; build Diego Almeida)
+- Max: "get rid of the 'Small Win' subtitle - it's a bit cheesy on celebrations"; and of the month feature, "in a dynamic structure - it doesn't always have to be an incremental thing growing or ticking", "not every day has to be the same color".
+- `app/render/celebrate.py`: the subtitle is gone from all three sparkles; the win's own label (WORKOUT DONE, RESTED, BOOK DONE) sits alone on the bottom line (y 57, was 50) and the stars get the freed rows. render.md and notes.txt updated; README sparkle GIFs regenerated.
+- `app/month/prompt.py`: "THE THREAD" (a slow build, a picture that grows) is now "THE SHAPE OF THE MONTH": six shapes offered, the build barred after a build in either of the last two months, colour free to lead differently plate to plate. Request contents unchanged. month.md and notes.txt updated.
+- December authored ahead with `tools.month --month 2026-12`: "A LAMP A NIGHT", 31 different lamps from fire to the LED, one call, accepted first time. Read as a sheet of all 31 plates and through `render_month` for Dec 1, 13, 21 and 31 at 1x under gamma.
+- Fixture combo for the eye test: `train / all sources / alive / peak` (not used before), plus the three sparkles' five steps each at 1x under gamma. 3 sparkle snapshots and their digests regenerated, 5 no-feature sparkle digests re-pinned (only sparkle keys changed).
+- Gates: ruff clean; full suite 1662 passed and 4 failed before regeneration (the 3 sparkle snapshots and the no-feature digest test, all expected); after it, the full suite on the tree as committed: 1667 passed. Mutants red: subtitle drawn again (3), label left on its old row (3), brief allowing a third build (1). `test_cli` worst-case price re-pinned $0.65 to $0.66 (longer brief).
+- Spend: $1.7181 at the start, $2.1994 of $3 at the end (December's feature, $0.4813). Service restart needed for the sparkle.
+- Found while checking Health Auto Export, not fixed here: no health push since 2026-11-14 1:50PM EST (the Mac slept until 12:21PM on the 15th); the Goodreads poll returns 404 (26 logged failures, last new payload 2026-10-26); one `nightly_backup` disk I/O error, later backups fine.
+
 ## 2026-11-09 · One quiet tone for the unread shelf (Lucía Ferrer; proposal Mei-Lin Tsao; build Diego Almeida)
 - Max: "yes, do the one-tone unread shelf" (Mei-Lin's open proposal from the colour-system round).
 - `app/render/screens.py`: a read book is its lit spine; every unread slot is the month theme's track (TRACK without a feature), so the empty slots read as structure and the read books carry the colour. `SHELF_TINT` and `shelf_tint` removed from palette.py; render.md and notes.txt § Design updated. The ring tone was rendered too and competed with the read spines at 1x; through the panel the track sits at 0.57 of the dimmest lit spine's luma, the ring at 0.80.

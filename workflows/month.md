@@ -12,6 +12,10 @@ drawn). `spec.parse_feature` is the only judge of what is stored; the renderer d
 plate, then the month's calendar as the last page; while no feature is stored the
 calendar is the whole screen.
 
+The brief asks for a month shape, not always a build (a collection, variations, one scene
+revisited, episodes, a rhythm, or a build; no build when either of the last two features was
+one), and lets colour lead differently from plate to plate (Max, 2026-11-15).
+
 The request carries the month, the year and the titles and themes of earlier features.
 Nothing of Max's is in it: no metrics, no dates of his, no health data. That is why the spec
 bans digits in the feature's text.

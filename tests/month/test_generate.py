@@ -437,3 +437,23 @@ def test_the_brief_asks_for_months_that_differ_and_days_that_inform():
     for phrase in ("differ in concept", "sharp and informative", "do not invent"):
         assert phrase in prompt.SYSTEM_PROMPT, phrase
     assert "note" not in prompt.SYSTEM_PROMPT, "the feature is one page: no note is asked for"
+
+
+def test_the_brief_offers_many_month_shapes_and_bars_a_third_build_running():
+    """Max, 2026-11-15: the feature "doesn't always have to be an incremental thing growing
+    or ticking"; October grew a pumpkin and November filled an hourglass."""
+    from app.month import prompt
+
+    for phrase in (
+        "a collection:",
+        "variations:",
+        "one scene revisited:",
+        "episodes:",
+        "a rhythm:",
+        "If either of the two most recent features",
+        "this month must not",
+        "Let colour move through the month",
+    ):
+        assert phrase in prompt.SYSTEM_PROMPT, phrase
+    assert "THE THREAD" not in prompt.SYSTEM_PROMPT
+    assert "the month itself filling up" not in prompt.SYSTEM_PROMPT

@@ -9,7 +9,7 @@ import pytest
 from PIL import Image, ImageChops
 
 from app.render.adapters.file import FileAdapter, gif_bytes, png_bytes
-from app.render.celebrate import celebrations_for, party_clip, sparkle_clip
+from app.render.celebrate import WIN_LABELS, celebrations_for, party_clip, sparkle_clip
 from app.render.font import BODY, SMALL, draw_text, text_width
 from app.render.frame import SIZE, Clip, new_frame, still, upscale
 from app.render.gamma import led_gamma, led_lut
@@ -279,7 +279,12 @@ def test_every_sparkle_step_is_a_different_picture(win, monkeypatch):
     for step, (before, after) in enumerate(zip(frames, frames[1:], strict=False)):
         moved = ImageChops.difference(before, after).convert("L").point(lambda v: 255 if v else 0)
         assert moved.histogram()[255] >= 100, f"step {step} to {step + 1} barely moves"
-    assert [text for text, *_ in drawn].count("SMALL WIN") == 3, "the label arrives with step 3"
+    texts = [text for text, *_ in drawn]
+    for line in WIN_LABELS[win]:
+        assert texts.count(line) == 3, "the win's own label arrives with step 3"
+    assert "SMALL WIN" not in texts, "no subtitle under the label (Max, 2026-11-15)"
+    label_rows = {y for text, _x, y, *_ in drawn if text in WIN_LABELS[win]}
+    assert max(label_rows) == 57, "the label sits on the bottom line"
     assert frames[0].crop((20, 14, 44, 34)).getbbox() is not None, "the icon pops in at home"
     assert frames[0].crop((26, 36, 38, SIZE)).getbbox() is None, (
         "no streak trails below the icon (Max, 2026-11-09)"
