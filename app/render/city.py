@@ -114,8 +114,9 @@ ICON_X, ICON_Y = 38, 9
 COMPACT_ICON_X = 31
 STACK_YS = (10, 17)
 TEMP_X, TEMP_Y = 2, 9
-HIGH_LOW_Y = 25
-NOTICE_Y = 31
+HIGH_LOW_Y = 24
+NOTICE_Y = 30
+BAND_TOP_MIN = 23  # one row under the large temperature, which ends at row 22
 STEPS = 6
 STEP_PITCH = 10
 STEP_INNER = 9
@@ -639,7 +640,7 @@ def _local_hour(now: datetime | None, home_tz: str) -> int | None:
     return None if now is None else now.astimezone(ZoneInfo(home_tz)).hour
 
 
-FLOOR_TOP = 37
+FLOOR_TOP = 36
 FLOOR_SHADE = 0.5
 NIGHT_SKY = 0.5
 OPEN_NIGHT: Color = (0, 8, 36)
@@ -771,7 +772,8 @@ def _weather_frame(view: DayView, city: CityStatus, now: datetime | None) -> Fra
         # an alert is a band across the foot of the sky, a shade deeper so its amber is
         # drawn as itself; the hero above it shrinks to the compact form to stay clear
         rows = (HIGH_LOW_Y, NOTICE_Y)[2 - len(notice) :]
-        fill_rect(frame, 0, rows[0] - 2, SIZE - 1, FLOOR_TOP - 1, band(sky))
+        top = max(rows[0] - 2, BAND_TOP_MIN)
+        fill_rect(frame, 0, top, SIZE - 1, FLOOR_TOP - 1, band(sky))
         draw_icon(frame, COMPACT_ICON_X, ICON_Y + 1, ICONS[kind])
         _draw_temperature(frame, temp, COMPACT_ICON_X - 2)
         _draw_high_low_stacked(frame, weather, label)

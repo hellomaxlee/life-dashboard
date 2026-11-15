@@ -271,11 +271,14 @@ def test_an_alert_is_amber_on_its_band_whatever_the_sky(kind):
     for alert, top in (("Wind Advisory", NOTICE_Y), ("Winter Storm Warning", HIGH_LOW_Y)):
         city = status(weather=weather(code=code, alerts=(alert,)))
         frame = city_screen._weather_frame(view_of(city), city, CITY_NOW)
-        rows = range(top - 2, FLOOR_TOP)
+        rows = range(max(top - 2, city_screen.BAND_TOP_MIN), FLOOR_TOP)
         strip = {frame.getpixel((x, y)) for x in range(SIZE) for y in rows}
         assert strip == {band(sky), AMBER}, (kind, alert, "one band, one amber, nothing else")
-        above = {frame.getpixel((x, top - 3)) for x in range(SIZE)}
-        assert band(sky) not in above, "the band starts two rows above the alert, no higher"
+        first = max(top - 2, city_screen.BAND_TOP_MIN)
+        above = {frame.getpixel((x, first - 1)) for x in range(SIZE)}
+        assert band(sky) not in above, "the band starts where it should, no higher"
+        under = {frame.getpixel((x, FLOOR_TOP - 1)) for x in range(SIZE)}
+        assert under == {band(sky)}, "a clear row of band between the alert and the divider"
         calm = status(weather=weather(code=code))
         quiet = city_screen._weather_frame(view_of(calm), calm, CITY_NOW)
         hours = [(x, y) for x in range(SIZE) for y in range(FLOOR_TOP, SIZE)]
