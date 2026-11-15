@@ -54,7 +54,9 @@ What the screens say when data is thin. Today's dot label states the dot, not th
 WORKOUT" (`workout_count` 0), "NO HR DATA" (a workout with no `workout_load`), or "LOAD
 62/100" (`workout_load` floored against the week's `load_bar`); "NO DOT YET" only when the
 row carries none of those. "NO WORKOUT" needs a day a push has covered (it has sleep or steps); the row the
-engine writes before any push says nothing. The Week screen reads top to bottom: dots, the
+engine writes before any push says nothing. The Week screen reads top to bottom: the week's
+dots as planets in a night sky (an earned workout is a planet in the dot's colour, an unearned one an
+empty orbit; the stars are seeded by the day and never land within two pixels of anything), the
 weeks-hit streak under them, the Claude usage bar at the bottom.
 
 Health pushes cover whole days ending yesterday, so today has no sleep, steps or workout
@@ -74,8 +76,9 @@ only when the day has no data at all. The summary is folded to ASCII before pagi
 folded, curly quotes and dashes straightened, paired `*`/`_` markers removed, emoji dropped,
 and a number is kept on the same line as its unit or its "of N".
 
-Colour (approved 2026-10-05). Each rotation screen's header word wears its own accent from
-`palette.HEADERS`: `TODAY`/`YESTERDAY` violet, `WEEK` coral, `BOOKS` gold; the right-hand stamp
+Colour (2026-11-15, replacing one fixed accent per screen from 2026-10-05). The header word of
+Today, Week and Books wears the weekday's accent, `palette.day_accent`: Monday coral, then amber,
+gold, green, teal, sky, Sunday violet; the right-hand stamp
 (weekday and date, `0 OF 3`, the year) stays TEXT, and the small field labels inside a screen
 (`SLEEP`, `STEPS`, `CLAUDE`, `WK STREAK`) stay LABEL blue. City keeps its LABEL header and Month
 its feature palette. On the shelf, a read book is its lit spine and every unread slot is one quiet tone, the month

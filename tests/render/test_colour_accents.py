@@ -12,16 +12,23 @@ from app.render.font import BODY, text_width
 from app.render.frame import Color, Frame
 from app.render.gamma import led_lut
 from app.render.palette import (
+    AMBER,
     ATTRIBUTION,
+    CORAL,
+    DAY_ACCENTS,
     GOLD,
-    HEADERS,
+    GREEN,
     LABEL,
+    SKY,
     SPINES,
+    TEAL,
     TEXT,
     TRACK,
     VIOLET,
     VOICE,
+    WHEEL,
     WOOD,
+    day_accent,
 )
 from app.render.rotation import rotation_clips
 from app.render.screens import (
@@ -37,7 +44,6 @@ from app.render.view import DayView
 from app.timeutil import from_utc_iso
 from tests.render import COMBOS, WEEK_41, load, record_text
 
-CORAL = (255, 90, 80)
 BLACK = (0, 0, 0)
 EPICTETUS = (
     "Yesterday's sleep data has not arrived. "
@@ -76,31 +82,47 @@ def on_panel(color: Color) -> Color:
 # 1. a colour per header
 
 
-def test_header_accents_are_three_distinct_colours_and_not_the_label_blue():
-    assert HEADERS == {"today": VIOLET, "week": CORAL, "books": GOLD}
-    assert len(set(HEADERS.values())) == 3
-    assert LABEL not in HEADERS.values()
-    assert TEXT not in HEADERS.values()
+HEADER_SCREENS = ("today", "week", "books")
+
+
+def test_the_weekday_accents_are_seven_distinct_family_colours_monday_to_sunday():
+    """Max, 2026-11-15: "not every day has to be the same color for every panel"."""
+    assert DAY_ACCENTS == (CORAL, AMBER, GOLD, GREEN, TEAL, SKY, VIOLET)
+    assert len(set(DAY_ACCENTS)) == 7 and set(DAY_ACCENTS) <= set(WHEEL)
+    assert LABEL not in DAY_ACCENTS and TEXT not in DAY_ACCENTS
+    week = [f"2026-11-{day:02d}" for day in range(9, 16)]  # Monday 9 to Sunday 15
+    assert [day_accent(day) for day in week] == list(DAY_ACCENTS)
+    assert day_accent("not a day") == DAY_ACCENTS[0]
 
 
 @pytest.mark.parametrize("combo", [*COMBOS, "empty"])
-def test_each_header_word_wears_its_accent_and_the_stamp_stays_text(combo, settings):
+def test_each_header_word_wears_the_days_accent_and_the_stamp_stays_text(combo, settings):
     if combo == "empty":
         view, now = DayView(day_local="2026-10-02"), from_utc_iso("2026-10-02T16:00:00Z")
     else:
         view, now = load(combo, settings)
+    accent = day_accent(view.day_local)
     clips = dict(rotation_clips(view, now))
-    for screen, accent in HEADERS.items():
+    for screen in HEADER_SCREENS:
         for frame in clips[screen].frames:
             assert frame.getpixel((2, 2)) == accent, (combo, screen)
             assert lit_colours(frame, (0, 2, 32, 7)) == {accent}, (combo, screen)
             assert lit_colours(frame, (34, 2, 64, 7)) == {TEXT}, (combo, screen)
 
 
-def test_yesterday_header_is_violet_too(settings):
+@pytest.mark.parametrize("offset", range(7))
+def test_the_header_changes_colour_with_the_weekday_on_every_screen(offset, settings):
+    view, now = load(WEEK_41, settings)
+    day = f"2026-11-{9 + offset:02d}"
+    clips = dict(rotation_clips(replace(view, day_local=day), now))
+    for screen in HEADER_SCREENS:
+        assert lit_colours(clips[screen].poster, (0, 2, 32, 7)) == {DAY_ACCENTS[offset]}, screen
+
+
+def test_yesterday_header_wears_the_days_accent_too(settings):
     view, now = load(WEEK_41, settings)
     frame = dict(rotation_clips(replace(view, day_shown="2026-09-29"), now))["today"].poster
-    assert lit_colours(frame, (0, 2, 40, 7)) == {VIOLET}
+    assert lit_colours(frame, (0, 2, 40, 7)) == {day_accent(view.day_local)}
     assert lit_colours(frame, (41, 2, 64, 7)) == {TEXT}
 
 

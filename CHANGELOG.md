@@ -3,6 +3,16 @@
 Running log, newest first. The Lead reads this to find root causes and prioritize.
 Entry format: `## YYYY-MM-DD · <Title> (<Author>)` followed by terse bullets. Name the fixture combo on render/summary cycles.
 
+## 2026-11-15 · Week as a night sky; colour by weekday; nothing bleeds (Lucía Ferrer; design Mei-Lin Tsao; build Diego Almeida)
+- Max, on the concept sheet (two directions, nine mock-ups, published as a private page): "I generally prefer B. Make sure nothing bleeds (like the white text doesn't touch the white cloud). In general I also like having the hour by hour in B." Colour by: "The weekday". First screen of the build; Today, Month, Books and City follow one per push.
+- `app/render/palette.py`: `day_accent` (Monday to Sunday: coral, amber, gold, green, teal, sky, violet) replaces `HEADERS`; the header word of Today, Week and Books wears it.
+- `app/render/screens.py`: `draw_planet` (the dot's colour, a night side, a glint, bands or a ring; a plain disc under radius 5) and `scatter_stars` (22 stars seeded by the day, each alone in its 5x5 block, none in an orbit). Text positions on Week are unchanged, so the text goldens did not move.
+- New gate `tests/render/test_no_bleed.py`: no lit non-text pixel within a pixel of a letter in the Week sky; stars out of every orbit; each day its own sky; over every fixture, 7 weekdays x 5 counts. Header tests rewritten for the weekday.
+- Fixture combo for the eye test: `travel / Health delayed / alive / off` (not used before), with all ten Week snapshots old over new at 1x under gamma and two at 4x; Today and Books diffs confined to the header word (asserted, x under 34, y 2 to 6). 33 snapshots regenerated, 12 no-feature digests re-pinned (today, week, books only).
+- Gates: ruff clean; full suite on the tree as committed: 1683 passed. Mutants red: a star beside anything (2), stars inside orbits (1), one sky for every day (1, after the first version of that test passed on the header colour alone and was rewritten to compare lit positions), every day Monday's colour (7).
+- Not done: README images still show the old Week and header colours (refresh when the redesign lands); no motion (waits for the panel test with Max watching); the scene has not been seen on the panel itself. A cleanup command of mine ended in `git checkout` on an uncommitted file and was blocked before it ran; mutants are restored from file copies.
+- No model calls; spend unchanged at $2.1994 of $3. Service restart needed.
+
 2026-11-15 · performance-review · 11 agents reviewed (first review, 59 entries in); Fatima El-Amrani promoted to Manager; Kwabena Osei fired (agents/_old); Bartek Zieliński's demotion on a Manager tie vetoed by Max
 
 ## 2026-11-15 · No "SMALL WIN" under a win; a month feature that need not grow; December authored (Lucía Ferrer; brief Theodora Makris; build Diego Almeida)

@@ -15,6 +15,7 @@ rejected: mid-lightness colours have no channel near zero and the panel washes t
 from __future__ import annotations
 
 import math
+from datetime import date
 
 from app.render.frame import Color
 
@@ -72,9 +73,21 @@ CONFETTI: tuple[Color, ...] = (CORAL, GOLD, TEAL, VIOLET, PINK, SKY, GREEN, WHIT
 # The family `hue()` walks, in hue order.
 WHEEL: tuple[Color, ...] = (CORAL, AMBER, GOLD, GREEN, TEAL, SKY, VIOLET, PINK)
 
-# The header word of each rotation screen, one accent each, so the rotation reads as distinct
-# places. City keeps LABEL and Month its feature palette; the right-hand stamp stays TEXT.
-HEADERS: dict[str, Color] = {"today": VIOLET, "week": CORAL, "books": GOLD}
+# The header word of Today, Week and Books wears the weekday's colour (Max, 2026-11-15: "not
+# every day has to be the same color for every panel"), Monday to Sunday along the family
+# wheel; the weekday screens' scenery takes it too. It replaces one fixed accent per screen
+# (2026-10-05). City keeps LABEL and Month its feature palette; the right-hand stamp stays
+# TEXT. Colours that carry meaning (the week's dots, sleep in or out of its band) never move.
+DAY_ACCENTS: tuple[Color, ...] = (CORAL, AMBER, GOLD, GREEN, TEAL, SKY, VIOLET)
+
+
+def day_accent(day_local: str) -> Color:
+    """The accent of a home-timezone day, YYYY-MM-DD; an unreadable day takes Monday's."""
+    try:
+        return DAY_ACCENTS[date.fromisoformat(day_local).weekday()]
+    except ValueError:
+        return DAY_ACCENTS[0]
+
 
 # The summary's three voices (Max, 2026-10-05: the quotation in white, the author in gold, his
 # own clause in a third colour): a quotation, marks included, in TEXT; its "- Author" in GOLD;

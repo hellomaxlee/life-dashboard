@@ -9,16 +9,20 @@ pixel scroll of a 110-character line needs some 300 frames and the device holds 
 60, so pages are the form that reaches the panel as drawn. Its three voices are told apart by
 colour: a quotation in VOICE, its "- Author" in ATTRIBUTION, Max's own words in TEXT.
 
-Each screen's header word wears its own accent (palette.HEADERS) so the rotation reads as
-distinct places; the stamp on the right and the field labels inside keep TEXT and LABEL.
+Each screen's header word wears the weekday's accent (palette.day_accent), so the panel is
+not one colour seven days running; the stamp on the right and the field labels keep TEXT and
+LABEL. Week is a small scene: each earned workout is a planet in a night sky whose stars are
+seeded by the day, and a star never lands within a pixel of anything else (nothing bleeds).
 The structural tones (the sleep bar's track, the empty rings, the inactive page pip) come
 from the month's theme (theme.py): the stock palette tones unless the month has a feature.
 """
 
 from __future__ import annotations
 
+import random
 import re
 import unicodedata
+import zlib
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
@@ -39,7 +43,6 @@ from app.render.palette import (
     DOTS,
     GOLD,
     GREEN,
-    HEADERS,
     LABEL,
     RING,
     SECONDARY,
@@ -48,9 +51,11 @@ from app.render.palette import (
     TEXT,
     VIOLET,
     VOICE,
+    WHEEL,
     WHITE,
     WOOD,
     YELLOW,
+    day_accent,
     dim,
 )
 from app.render.theme import theme_for
@@ -127,6 +132,69 @@ def draw_ring(
             pixels[x, y] = color
 
 
+PLANET_MIN_RADIUS = 5
+SKY_TOP = 9
+SKY_BOTTOM = 39
+SKY_STARS = 22
+
+
+def draw_planet(frame: Frame, cx: int, cy: int, radius: int, color: Color, index: int) -> None:
+    """A weekly dot as a small world: the dot's own colour, a night side to the lower right,
+    a glint to the upper left, and either two bands in the next colour of the family or (every
+    second planet) a ring. Under PLANET_MIN_RADIUS it is the plain disc: no room for detail."""
+    draw_disc(frame, cx, cy, radius, color)
+    if radius < PLANET_MIN_RADIUS:
+        return
+    pixels = frame.load()
+    band = WHEEL[(WHEEL.index(color) + 1) % len(WHEEL)] if color in WHEEL else WHITE
+    ringed = index % 2 == 1
+    for dy in range(-radius, radius + 1):
+        for dx in range(-radius, radius + 1):
+            x, y = cx + dx, cy + dy
+            if not _in_disc(dx, dy, radius) or not (0 <= x < SIZE and 0 <= y < SIZE):
+                continue
+            tone = band if not ringed and dy in (-2, 2) else color
+            if dx * 0.8 + dy > radius * 0.55:
+                tone = dim(tone, 0.5)
+            pixels[x, y] = tone
+    glint = radius // 2
+    for dx in (0, 1):
+        pixels[cx - glint + dx, cy - glint] = WHITE
+    if ringed:
+        for dx in range(-radius - 3, radius + 4):
+            x, y = cx + dx, cy + round(dx * 0.25)
+            behind = _in_disc(dx, y - cy, radius) and y <= cy
+            if not behind and 0 <= x < SIZE and 0 <= y < SIZE:
+                pixels[x, y] = TEXT
+
+
+def scatter_stars(
+    frame: Frame,
+    seed: str,
+    colors: tuple[Color, ...],
+    keep_out: tuple[tuple[int, int, int], ...] = (),
+    count: int = SKY_STARS,
+) -> None:
+    """Single-pixel stars between SKY_TOP and SKY_BOTTOM, placed from `seed` so each day has
+    its own sky. A star is drawn only where the 5x5 block around it is unlit, so none touches
+    a word, a planet or another star, and never inside a `keep_out` disc (cx, cy, radius): an
+    empty orbit stays empty."""
+    rng = random.Random(zlib.crc32(seed.encode()))
+    pixels = frame.load()
+    placed = 0
+    for _ in range(count * 12):
+        if placed == count:
+            break
+        x, y = rng.randrange(2, SIZE - 2), rng.randrange(SKY_TOP + 2, SKY_BOTTOM - 1)
+        color = colors[rng.randrange(len(colors))]
+        clear = all(
+            pixels[x + dx, y + dy] == BLACK for dy in range(-2, 3) for dx in range(-2, 3)
+        ) and not any(_in_disc(x - cx, y - cy, radius + 2) for cx, cy, radius in keep_out)
+        if clear:
+            pixels[x, y] = color
+            placed += 1
+
+
 def draw_bitmap(frame: Frame, x: int, y: int, rows: tuple[str, ...], color: Color) -> None:
     pixels = frame.load()
     for row_index, row in enumerate(rows):
@@ -177,7 +245,7 @@ def _draw_streak(frame: Frame, streak: int) -> None:
 def _week_frame(view: DayView, now: datetime) -> Frame:
     frame = new_frame()
     theme = theme_for(view)
-    draw_text(frame, LEFT, 2, "WEEK", HEADERS["week"], SMALL)
+    draw_text(frame, LEFT, 2, "WEEK", day_accent(view.day_local), SMALL)
     centres, radius = dot_layout(view.week_target)
     dots = _count(view.week_dots)
     streak = _count(view.streak_weeks)
@@ -189,7 +257,7 @@ def _week_frame(view: DayView, now: datetime) -> Frame:
         if dots is None:
             draw_ring(frame, cx, DOT_ROW_Y, radius, theme.ring, dashed=True)
         elif index < dots:
-            draw_disc(frame, cx, DOT_ROW_Y, radius, dot_color(index))
+            draw_planet(frame, cx, DOT_ROW_Y, radius, dot_color(index), index)
         else:
             draw_ring(frame, cx, DOT_ROW_Y, radius, theme.ring)
 
@@ -198,12 +266,16 @@ def _week_frame(view: DayView, now: datetime) -> Frame:
     else:
         _draw_streak(frame, streak)
 
+    accent = day_accent(view.day_local)
+    orbits = tuple((cx, DOT_ROW_Y, radius) for cx in centres)
+    scatter_stars(frame, view.day_local, (WHITE, TEXT, accent), orbits)
     draw_usage(frame, usage_state(view.claude, now, view.stale_hours), theme.track)
     return frame
 
 
 def render_week(view: DayView, now: datetime) -> Clip:
-    """Three dots, the weeks-hit streak under them, the Claude usage bar at the bottom.
+    """Three planets in the day's sky (an unearned one is an empty orbit), the weeks-hit
+    streak under them, the Claude usage bar at the bottom.
     A still even when the usage reading is stale: amber dot, amber age line."""
     return still(_week_frame(view, now))
 
@@ -311,7 +383,7 @@ def render_today(view: DayView, now: datetime | None = None) -> Clip:
     theme = theme_for(view)
     day = date.fromisoformat(view.day_shown or view.day_local)
     title = "TODAY" if view.day_shown in (None, view.day_local) else "YESTERDAY"
-    draw_text(frame, LEFT, 2, title, HEADERS["today"], SMALL)
+    draw_text(frame, LEFT, 2, title, day_accent(view.day_local), SMALL)
     weekday = _WEEKDAYS[day.weekday()]
     stamp = f"{weekday} {day.day}"
     if LEFT + text_width(title, SMALL) + TITLE_GAP > RIGHT + 1 - text_width(stamp, SMALL):
@@ -410,7 +482,7 @@ def _books_base(view: DayView) -> Frame:
     ten dim tints of the spines-to-be read as olive, maroon and slate on the panel)."""
     frame = new_frame()
     theme = theme_for(view)
-    draw_text(frame, LEFT, 2, "BOOKS", HEADERS["books"], SMALL)
+    draw_text(frame, LEFT, 2, "BOOKS", day_accent(view.day_local), SMALL)
     draw_text_right(frame, RIGHT, 2, view.day_local[:4], TEXT, SMALL)
     read = _count(view.books_ytd)
     if read is None:
