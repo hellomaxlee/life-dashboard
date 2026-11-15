@@ -156,6 +156,7 @@ def test_a_false_dot_says_why(monkeypatch, settings, count, workout_load, bar, l
     assert 13 + text_width(label) - 1 <= 61
 
 
+@pytest.mark.usefixtures("no_scenery")
 @pytest.mark.parametrize(
     ("dot", "label", "centre"),
     [
@@ -182,12 +183,8 @@ def test_books_screen_text_and_pages_race_week(monkeypatch, settings):
     view, now = load(RACE_WEEK, settings)
     drawn = record_text(monkeypatch)
     clip = render_screen("books", view, now)
-    assert drawn[:4] == [
-        ("BOOKS", 2, 2, S, 1),
-        ("2026", 47, 2, S, 1),
-        ("10", 2, 9, B, 2),
-        ("of 12", 28, 16, B, 1),
-    ]
+    assert drawn[:2] == [("BOOKS", 2, 2, S, 1), ("10 OF 12", 33, 2, S, 1)]
+    assert drawn[2][2] == 45, "nothing else above the summary: the count is the stamp"
     assert page_lines(drawn) == [
         ["Finished", "Jazz"],
         ["(10 of 12);", "9.8 h of"],
@@ -203,12 +200,7 @@ def test_books_screen_text_and_pages_week_41(monkeypatch, settings):
     view, now = load(WEEK_41, settings)
     drawn = record_text(monkeypatch)
     render_screen("books", view, now)
-    assert drawn[:4] == [
-        ("BOOKS", 2, 2, S, 1),
-        ("2026", 47, 2, S, 1),
-        ("3", 2, 9, B, 2),
-        ("of 12", 16, 16, B, 1),
-    ]
+    assert drawn[:2] == [("BOOKS", 2, 2, S, 1), ("3 OF 12", 37, 2, S, 1)]
     assert page_lines(drawn) == [
         ["Second dot", "this week,"],
         ["7.4 h of", "sleep. What"],

@@ -18,6 +18,7 @@ from app.render.rotation import PAGED_FRAME_MS, rotation_clips
 from app.render.screens import (
     AS_OF_Y,
     LEFT,
+    TIER_BOARDS,
     ZZ,
     ZZ_X,
     as_of_label,
@@ -25,6 +26,7 @@ from app.render.screens import (
     render_books,
     render_parked,
     render_today,
+    shelf_slots,
     sleep_text,
     today_facts,
 )
@@ -131,8 +133,8 @@ def test_books_shelf_counts_spines(settings):
     for read in (0, 3, 12, 15):
         frame = render_books(replace(view, books_ytd=read)).poster
         lit_spines = 0
-        for index in range(12):
-            if frame.getpixel((2 + index * 5, 40)) == SPINES[index % len(SPINES)]:
+        for index, (tier, x0, _width, _height) in enumerate(shelf_slots(12)):
+            if frame.getpixel((x0, TIER_BOARDS[tier] - 1)) == SPINES[index % len(SPINES)]:
                 lit_spines += 1
         assert lit_spines == min(read, 12)
 
@@ -320,6 +322,7 @@ def parked_views(settings) -> list[tuple[str, DayView, object]]:
     return cases
 
 
+@pytest.mark.usefixtures("no_scenery")
 def test_the_parked_zz_never_touches_the_as_of_line(settings):
     """The mark's own pixels are SECONDARY, the rest of its box and two columns before
     it are black, and the as-of row says the time Today said, with AS OF dropped only when

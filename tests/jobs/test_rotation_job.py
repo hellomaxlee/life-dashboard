@@ -949,6 +949,7 @@ def test_park_waits_for_a_send_in_flight_and_gives_up_in_time(db, jobs_settings,
     assert [record.name for record in rotation.sends] == ["today"]
 
 
+@pytest.mark.usefixtures("no_scenery")
 def test_the_parked_screen_is_today_plus_a_dim_mark_at_the_foot(db, jobs_settings):
     view = view_from_db(db, jobs_settings, "2026-10-02")
     today = render_screen("today", view, NOON).poster.load()

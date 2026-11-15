@@ -81,8 +81,8 @@ from app.render.screens import (
     RIGHT,
     clean_summary,
     draw_disc,
-    draw_field,
     fill_rect,
+    paint_behind,
     scatter_stars,
     wrap_lines,
 )
@@ -102,17 +102,18 @@ NO_DATA = "NO DATA"
 AGE_UNKNOWN = "AGE UNKNOWN"
 MISSING = "--"
 
-ICON_X, ICON_Y = 2, 9
-TEMP_X, TEMP_Y = 17, 9
-HIGH_Y, LOW_Y = 10, 17
-NOTICE_Y = 25
+ICON_X, ICON_Y = 39, 7
+ICON_SCALE = 2
+TEMP_X, TEMP_Y = 2, 9
+HIGH_LOW_Y = 25
+NOTICE_Y = 31
 STEPS = 6
 STEP_PITCH = 10
 STEP_INNER = 9
-STEP_TEMP_Y = 32
-STEP_ICON_Y = 38
-BAR_TOP = 45
-BAR_HEIGHT = 10
+STEP_TEMP_Y = 38
+STEP_ICON_Y = 44
+BAR_TOP = 51
+BAR_HEIGHT = 5
 BAR_WIDTH = 5
 STEP_LABEL_Y = 57
 NIGHT_FROM, DAY_FROM = 19, 6
@@ -356,13 +357,18 @@ def condition(code: object, hour: object = None) -> str:
     return UNKNOWN
 
 
-def draw_icon(frame: Frame, x: int, y: int, rows: tuple[str, ...]) -> None:
+def draw_icon(frame: Frame, x: int, y: int, rows: tuple[str, ...], scale: int = 1) -> None:
+    """An icon from its ink rows, each cell a `scale` by `scale` block."""
     pixels = frame.load()
     for row_index, row in enumerate(rows):
         for col_index, cell in enumerate(row):
-            px, py = x + col_index, y + row_index
-            if cell in INK and 0 <= px < SIZE and 0 <= py < SIZE:
-                pixels[px, py] = INK[cell]
+            if cell not in INK:
+                continue
+            for dy in range(scale):
+                for dx in range(scale):
+                    px, py = x + col_index * scale + dx, y + row_index * scale + dy
+                    if 0 <= px < SIZE and 0 <= py < SIZE:
+                        pixels[px, py] = INK[cell]
 
 
 def _draw_mark(frame: Frame, x: int, y: int, rows: tuple[str, ...], color: Color) -> None:
@@ -578,52 +584,92 @@ def _draw_temperature(frame: Frame, text: str, room_right: int) -> None:
     _draw_mark(frame, after, TEMP_Y + 4, SMALL_DEGREE, WHITE)
 
 
-def _draw_high_low(frame: Frame, weather: Weather) -> int:
-    """ "H 62" over "L 51" at the right edge. Returns the x the block starts at."""
-    values = [degrees(weather.high_f) or MISSING, degrees(weather.low_f) or MISSING]
-    letter_x = RIGHT + 1 - max(text_width(v) for v in values) - 3 - text_width("H")
-    for letter, value, y in zip("HL", values, (HIGH_Y, LOW_Y), strict=True):
-        draw_text(frame, letter_x, y, letter, LABEL, SMALL)
-        draw_text_right(frame, RIGHT, y, value, TEXT, SMALL)
-    return letter_x
+def _draw_high_low(frame: Frame, weather: Weather) -> None:
+    """ "H 62  L 51" on one line under the temperature."""
+    x = LEFT
+    for letter, value in (("H", weather.high_f), ("L", weather.low_f)):
+        after = draw_text(frame, x, HIGH_LOW_Y, letter, LABEL, SMALL)
+        after = draw_text(frame, after + 1, HIGH_LOW_Y, degrees(value) or MISSING, TEXT, SMALL)
+        x = after + 3
 
 
 def _local_hour(now: datetime | None, home_tz: str) -> int | None:
     return None if now is None else now.astimezone(ZoneInfo(home_tz)).hour
 
 
-SKY_ROWS = (8, 30)
-# The sky behind the hero band, by condition: one channel at or near zero so the panel keeps
-# it a colour and does not wash it to grey. None is an open sky: black, with stars at night.
+SKY_ROWS = (8, 36)
+SKYLINE_BASE = 36
+# The sky, by condition: one channel at or near zero so the panel keeps it a colour and does
+# not wash it to grey. None is an open sky: black, with stars at night.
 SKY_TONES: dict[str, Color | None] = {
-    CLEAR: (0, 35, 80),
+    CLEAR: (0, 80, 190),
     CLEAR_NIGHT: None,
-    PARTLY: (0, 30, 68),
-    OVERCAST: (15, 20, 35),
-    FOG: (22, 25, 30),
-    RAINY: (0, 12, 65),
-    HEAVY_RAIN: (8, 0, 58),
-    SNOW: (20, 35, 55),
-    THUNDER: (28, 0, 52),
+    PARTLY: (0, 70, 160),
+    OVERCAST: (45, 55, 80),
+    FOG: (60, 65, 75),
+    RAINY: (0, 35, 150),
+    HEAVY_RAIN: (25, 0, 130),
+    SNOW: (50, 90, 140),
+    THUNDER: (60, 0, 120),
     UNKNOWN: None,
 }
 STARRY = (CLEAR_NIGHT, PARTLY)
-SKY_STAR_COUNT = 12
-NIGHT_SKY = 0.6
+SKY_STAR_COUNT = 5
+NIGHT_SKY = 0.45
+# The skyline along the foot of the sky: (x0, width, height) of each building, the same
+# city every day. Windows are lit at night.
+SKYLINE: tuple[tuple[int, int, int], ...] = (
+    (0, 5, 4),
+    (6, 4, 6),
+    (11, 6, 3),
+    (18, 3, 5),
+    (22, 5, 4),
+    (28, 4, 3),
+    (33, 5, 5),
+    (39, 3, 3),
+    (43, 6, 4),
+    (50, 4, 6),
+    (55, 5, 3),
+    (61, 3, 5),
+)
+WINDOW: Color = GOLD
 
 
-def draw_sky(frame: Frame, kind: str, night: bool, day_local: str, accent: Color) -> None:
-    """The scene behind the weather page's hero band (style B, 2026-11-15), drawn after the
-    words so it keeps a pixel off them (`draw_field`): a flat sky in the condition's tone,
-    dimmer at night, and on a clear or partly clear night a few stars seeded by the day. The
-    day strip below stays on black."""
+def in_skyline(x: int, y: int) -> bool:
+    return any(x0 <= x < x0 + w and SKYLINE_BASE - h < y <= SKYLINE_BASE for x0, w, h in SKYLINE)
+
+
+def window_lit(x: int, y: int) -> bool:
+    """A lit window: every other column and row inside a building, about half of them on."""
+    grid = x % 2 == 1 and y % 2 == 0 and y < SKYLINE_BASE
+    return grid and in_skyline(x, y) and (x * 5 + y * 3) % 7 < 4
+
+
+def draw_scene(
+    frame: Frame, kind: str, night: bool, day_local: str, accent: Color, skyline: bool
+) -> None:
+    """The weather page's scene (style B, 2026-11-15), drawn after the words so it keeps a
+    pixel off them (`paint_behind`): the sky in the condition's tone over the whole upper
+    half, dimmer at night, open and starred on a clear or partly clear night; and, unless an
+    alert has taken its row, a low skyline cut out of the sky at its foot, its windows lit at
+    night. The hour-by-hour strip below stays on black."""
     tone = SKY_TONES.get(kind)
-    if night and kind in STARRY:
-        top, bottom = SKY_ROWS
-        stars = (WHITE, TEXT, accent)
-        scatter_stars(frame, day_local, stars, count=SKY_STAR_COUNT, rows=(top - 1, bottom + 2))
-    elif tone is not None:
-        draw_field(frame, SKY_ROWS, dim(tone, NIGHT_SKY) if night else tone)
+    top, bottom = SKY_ROWS
+    starry = night and kind in STARRY
+    if starry:
+        tone = None
+        scatter_stars(frame, day_local, (WHITE, accent), count=SKY_STAR_COUNT, rows=(top, 30))
+    elif tone is not None and night:
+        tone = dim(tone, NIGHT_SKY)
+    built = in_skyline if skyline else (lambda x, y: False)
+    layers = []
+    if tone is not None:
+        layers.append((lambda x, y: top <= y <= bottom and not built(x, y), tone))
+    if skyline and tone is None:
+        layers.append((built, dim(accent, 0.25)))
+    if skyline and night:
+        layers.append((window_lit, WINDOW))
+    paint_behind(frame, tuple(layers))
 
 
 def _weather_frame(view: DayView, city: CityStatus, now: datetime | None) -> Frame:
@@ -638,9 +684,9 @@ def _weather_frame(view: DayView, city: CityStatus, now: datetime | None) -> Fra
     _header(frame, "WEATHER", day_stamp(view.day_local), stale, accent)
     hour = _local_hour(now, view.home_tz)
     kind = condition(weather.code, hour)
-    draw_icon(frame, ICON_X, ICON_Y, ICONS[kind])
-    room_right = _draw_high_low(frame, weather)
-    _draw_temperature(frame, degrees(weather.temp_f) or MISSING, room_right - 2)
+    draw_icon(frame, ICON_X, ICON_Y, ICONS[kind], ICON_SCALE)
+    _draw_temperature(frame, degrees(weather.temp_f) or MISSING, ICON_X - 2)
+    _draw_high_low(frame, weather)
 
     alerts = [a for a in weather.alerts if isinstance(a, str) and a.strip()]
     notice = alert_lines(alerts[0]) if alerts else []
@@ -648,10 +694,8 @@ def _weather_frame(view: DayView, city: CityStatus, now: datetime | None) -> Fra
         draw_text(frame, LEFT, NOTICE_Y, notice[0], AMBER, SMALL)
         if len(notice) > 1:
             draw_text(frame, LEFT, STEP_TEMP_Y, notice[1], AMBER, SMALL)
-    elif CONDITION_WORDS[kind]:
-        draw_text(frame, LEFT, NOTICE_Y, CONDITION_WORDS[kind], SECONDARY, SMALL)
     _draw_strip(frame, strip_steps(weather), temps=len(notice) < 2, theme=theme_for(view))
-    draw_sky(frame, kind, is_night(hour), view.day_local, accent)
+    draw_scene(frame, kind, is_night(hour), view.day_local, accent, skyline=not notice)
     return frame
 
 

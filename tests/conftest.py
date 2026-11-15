@@ -71,3 +71,14 @@ def post_fixture(client: TestClient, name: str, **headers: str):
 
 def count(conn: sqlite3.Connection, table: str) -> int:
     return int(conn.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()[0])
+
+
+@pytest.fixture
+def no_scenery(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Render the screens' words and marks on black, without their scenes: for a test that is
+    about where a word sits or what colour a mark is, not about the picture behind it."""
+    from app.render import city, screens
+
+    for module in (screens, city):
+        monkeypatch.setattr(module, "paint_behind", lambda *args, **kwargs: None)
+        monkeypatch.setattr(module, "scatter_stars", lambda *args, **kwargs: None)

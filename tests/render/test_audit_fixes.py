@@ -213,6 +213,7 @@ def test_as_of_line_is_omitted_when_data_exists_without_a_push(monkeypatch, db, 
 # 11. nothing runs off the frame, and impossible times are not printed
 
 
+@pytest.mark.usefixtures("no_scenery")
 def test_today_labels_and_long_sleep_stay_inside_the_margins(settings):
     view, _ = load(WEEK_41, settings)
     for dot in (True, False, None):
@@ -445,6 +446,7 @@ def test_a_summary_with_no_drawable_character_wraps_the_placeholder(settings):
         assert clip.frames[0].crop((62, 45, 64, 62)).getbbox() is None
 
 
+@pytest.mark.usefixtures("no_scenery")
 @pytest.mark.parametrize("day", ["2026-09-28", "2026-09-30", "2026-10-13", "2026-10-03"])
 def test_the_yesterday_header_never_touches_the_date(day, settings):
     view, now = load(WEEK_41, settings)

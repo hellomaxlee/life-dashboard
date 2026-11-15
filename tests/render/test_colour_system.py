@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import math
 
+import pytest
+
 from app.render.gamma import led_lut
 from app.render.palette import (
     AMBER,
@@ -63,6 +65,7 @@ def test_labels_recede_behind_values():
     assert label[1] < sky[1] - 0.03, "a label is quieter than the sleep value's blue"
 
 
+@pytest.mark.usefixtures("no_scenery")
 def test_the_sleep_goal_is_reference_text():
     frame = render_today(DayView(day_local="2026-10-02", sleep_hours=8.0)).poster
     goal = {frame.getpixel((x, y)) for x in range(28, 64) for y in range(32, 37)} - {(0, 0, 0)}

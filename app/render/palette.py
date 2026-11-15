@@ -81,6 +81,28 @@ WHEEL: tuple[Color, ...] = (CORAL, AMBER, GOLD, GREEN, TEAL, SKY, VIOLET, PINK)
 DAY_ACCENTS: tuple[Color, ...] = (CORAL, AMBER, GOLD, GREEN, TEAL, SKY, VIOLET)
 
 
+# The same seven as scenery: the sky or wall behind a scene, deep enough to sit behind white
+# words and with its weakest channel at or near zero so the panel keeps it a colour. Chosen by
+# eye, not scaled from the accents: a dimmed coral or amber is brown.
+DAY_GROUNDS: tuple[Color, ...] = (
+    (90, 12, 28),
+    (95, 40, 0),
+    (78, 62, 0),
+    (0, 78, 30),
+    (0, 72, 66),
+    (0, 46, 96),
+    (52, 18, 98),
+)
+
+
+def day_ground(day_local: str) -> Color:
+    """The scenery tone of a home-timezone day; an unreadable day takes Monday's."""
+    try:
+        return DAY_GROUNDS[date.fromisoformat(day_local).weekday()]
+    except ValueError:
+        return DAY_GROUNDS[0]
+
+
 def day_accent(day_local: str) -> Color:
     """The accent of a home-timezone day, YYYY-MM-DD; an unreadable day takes Monday's."""
     try:

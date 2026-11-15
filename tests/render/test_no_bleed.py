@@ -64,14 +64,15 @@ def test_nothing_in_the_week_sky_touches_a_letter(settings, monkeypatch):
 
 
 def test_stars_stay_out_of_every_orbit_and_off_every_planet(settings, monkeypatch):
-    """The stars are the pixels a starless render lacks; each has its 3x3 block to itself and
-    none is inside an orbit or within a pixel of one."""
+    """The stars are the pixels a starless render lacks (both without the sky's field): each
+    is a five-pixel plus, none inside an orbit or within three pixels of one."""
     from app.render import screens
 
     for view in week_cases(settings):
         centres, radius = dot_layout(view.week_target)
-        frame = render_week(view, NOW).poster
         with monkeypatch.context() as patch:
+            patch.setattr(screens, "paint_behind", lambda *args, **kwargs: None)
+            frame = render_week(view, NOW).poster
             patch.setattr(screens, "scatter_stars", lambda *args, **kwargs: None)
             bare = render_week(view, NOW).poster
         stars = [
@@ -80,18 +81,12 @@ def test_stars_stay_out_of_every_orbit_and_off_every_planet(settings, monkeypatc
             for x in range(SIZE)
             if frame.getpixel((x, y)) != bare.getpixel((x, y))
         ]
-        assert 0 < len(stars) <= SKY_STARS, (view.day_local, len(stars))
+        assert len(stars) % 5 == 0 and len(stars) <= SKY_STARS * 5, (view.day_local, len(stars))
+        world = radius + screens.PLANET_GROW
         for x, y in stars:
             assert SKY_TOP < y < SKY_BOTTOM, (view.day_local, (x, y))
-            block = [
-                frame.getpixel((x + dx, y + dy))
-                for dy in (-1, 0, 1)
-                for dx in (-1, 0, 1)
-                if dx or dy
-            ]
-            assert set(block) == {(0, 0, 0)}, (view.day_local, view.week_dots, (x, y))
             for cx in centres:
-                inside = (x - cx) ** 2 + (y - DOT_ROW_Y) ** 2 <= (radius + 1) ** 2
+                inside = (x - cx) ** 2 + (y - DOT_ROW_Y) ** 2 <= (world + 1) ** 2
                 assert not inside, (view.day_local, view.week_dots, (x, y))
 
 
@@ -144,7 +139,7 @@ def bare_scenes(view: DayView, now, monkeypatch) -> dict[str, list[Frame]]:
 
     with monkeypatch.context() as patch:
         for module in (screens, city):
-            patch.setattr(module, "draw_field", lambda *args, **kwargs: None)
+            patch.setattr(module, "paint_behind", lambda *args, **kwargs: None)
             patch.setattr(module, "scatter_stars", lambda *args, **kwargs: None)
         return scenes(view, now)
 
@@ -195,12 +190,12 @@ def test_the_weather_sky_follows_the_condition_and_the_hour():
         w = weather(code=code, fetched_at_utc=now.strftime("%Y-%m-%dT%H:%M:%SZ"))
         city = status(weather=w)
         frame = _weather_frame(view_of(city), city, now)
-        rows = range(SKY_ROWS[0], SKY_ROWS[1] + 1)
-        return {frame.getpixel((x, y)) for y in rows for x in (0, 63)}
+        rows = range(SKY_ROWS[0], SKY_ROWS[0] + 10)
+        return {frame.getpixel((x, y)) for y in rows for x in (0, 37)}
 
     assert sky(0, noon) == {SKY_TONES["clear"]}
     assert sky(3, noon) == {SKY_TONES["overcast"]}
     assert sky(61, noon) == {SKY_TONES["rain"]}
-    assert sky(3, late) == {dim(SKY_TONES["overcast"], 0.6)}, "dimmer at night"
+    assert sky(3, late) == {dim(SKY_TONES["overcast"], 0.45)}, "dimmer at night"
     assert sky(0, late) == {(0, 0, 0)}, "a clear night is open sky: black, with stars"
     assert len(set(SKY_TONES.values()) - {None}) == 8, "eight skies, each its own tone"

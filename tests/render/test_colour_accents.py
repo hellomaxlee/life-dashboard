@@ -19,6 +19,7 @@ from app.render.palette import (
     GOLD,
     GREEN,
     LABEL,
+    RING,
     SKY,
     SPINES,
     TEAL,
@@ -29,13 +30,16 @@ from app.render.palette import (
     WHEEL,
     WOOD,
     day_accent,
+    day_ground,
 )
 from app.render.rotation import rotation_clips
 from app.render.screens import (
     LEFT,
     SUMMARY_LINE_YS,
+    TIER_BOARDS,
     line_colors,
     render_books,
+    shelf_slots,
     summary_colors,
     wrap_pages,
 )
@@ -129,19 +133,29 @@ def test_yesterday_header_wears_the_days_accent_too(settings):
 # 2. the shelf: a read book is its lit spine, every unread slot one quiet tone
 
 
-def test_every_unread_slot_is_the_month_themes_track(settings):
-    """Max, 2026-11-09: one tone for unread slots instead of a tint of each spine-to-be."""
+def test_every_unread_slot_is_an_outline_in_the_month_themes_ring(settings):
+    """Max, 2026-11-09: one tone for unread slots instead of a tint of each spine-to-be; since
+    2026-11-15 the slot is the outline of the book to come, on a two-shelf bookcase."""
     view, _ = load(WEEK_41, settings)
+    slots = shelf_slots(12)
+    assert [tier for tier, *_ in slots] == [0] * 6 + [1] * 6, "two shelves of six"
     for case in (view, replace(view, month_feature=None)):
-        track = theme_for(case).track
+        ring = theme_for(case).ring
         for read in (0, 3, 7, 12, 15, None):
             frame = render_books(replace(case, books_ytd=read)).poster
-            for index in range(12):
-                expected = SPINES[index % len(SPINES)] if index < (read or 0) else track
-                assert frame.getpixel((2 + index * 5, 40)) == expected, (read, index)
-                assert frame.getpixel((2 + index * 5 + 3, 40)) == expected, (read, index)
-            assert frame.getpixel((2, 41)) == WOOD
-    assert theme_for(replace(view, month_feature=None)).track == TRACK
+            for index, (tier, x0, width, height) in enumerate(slots):
+                bottom = TIER_BOARDS[tier] - 1
+                corners = {frame.getpixel((x, bottom)) for x in (x0, x0 + width - 1)}
+                inside = frame.getpixel((x0 + 1, bottom - 1))
+                if index < (read or 0):
+                    assert corners == {SPINES[index % len(SPINES)]}, (read, index)
+                else:
+                    assert corners == {ring}, (read, index, "an outline in the theme's ring")
+                    assert inside in ((0, 0, 0), day_ground(case.day_local)), (read, index)
+                assert frame.getpixel((x0, bottom - height)) != SPINES[index % len(SPINES)]
+            for board in TIER_BOARDS:
+                assert frame.getpixel((2, board)) == WOOD
+    assert theme_for(replace(view, month_feature=None)).ring == RING
 
 
 def test_an_unread_slot_is_quiet_but_there_through_the_panel_curve():

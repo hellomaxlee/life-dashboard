@@ -22,6 +22,9 @@ from app.render.city import (
     DETAIL_MS,
     DETAIL_TOP,
     HEADER_Y,
+    HIGH_LOW_Y,
+    ICON_X,
+    ICON_Y,
     ICONS,
     LINES_MS,
     MINI_ICONS,
@@ -75,7 +78,7 @@ from app.render.screens import LEFT, RIGHT, clean_summary, wrap_lines
 from app.render.view import DayView, city_stale_minutes, fixture_city
 from app.render.view_db import view_from_db
 from app.timeutil import from_utc_iso, to_utc_iso
-from tests.render import COMBOS, DAYS, WEEK_41, load, record_text
+from tests.render import COMBOS, DAYS, WEEK_41, load, record_text, without
 
 DAY = "2026-09-30"
 NOW = from_utc_iso("2026-09-30T22:15:00Z")
@@ -99,6 +102,14 @@ def steps(rows=HOURS) -> tuple[HourWeather, ...]:
 SKIES = {tone for tone in SKY_TONES.values() if tone} | {
     dim(tone, NIGHT_SKY) for tone in SKY_TONES.values() if tone
 }
+
+
+ICON_BOX = (ICON_X, ICON_Y, ICON_X + 24, ICON_Y + 24)
+
+
+def no_sky(frame):
+    """The page with the sky's own tones put back to black; windows and stars stay."""
+    return without(frame, SKIES)
 
 
 def weather(**changes) -> Weather:
@@ -188,15 +199,15 @@ def test_what_is_not_a_finite_number_is_no_temperature():
 
 
 @pytest.mark.parametrize(
-    ("percent", "pixels"), [(0, 0), (1, 0), (9, 0), (10, 1), (49, 4), (50, 5), (99, 9), (100, 10)]
+    ("percent", "pixels"), [(0, 0), (1, 0), (19, 0), (20, 1), (49, 2), (60, 3), (99, 4), (100, 5)]
 )
 def test_a_rain_gauge_is_floored_never_rounded_up(percent, pixels):
-    assert BAR_HEIGHT == 10
+    assert BAR_HEIGHT == 5, "five rows since the strip made room for the sky (2026-11-15)"
     assert precip_px(percent) == pixels
 
 
 def test_a_rain_percent_out_of_range_or_not_a_number_never_overfills():
-    assert [precip_px(v) for v in (-5, 250, None, "x", float("nan"), True)] == [0, 10, 0, 0, 0, 0]
+    assert [precip_px(v) for v in (-5, 250, None, "x", float("nan"), True)] == [0, 5, 0, 0, 0, 0]
 
 
 @pytest.mark.parametrize(
@@ -222,13 +233,15 @@ def test_the_weather_page_shows_the_rounded_temperature_high_low_and_condition(m
     assert texts(recorded, HEADER_Y)[:2] == ["WEATHER", "WED 30"]
     high = next(r for r in recorded if r[0] == "62")
     low = next(r for r in recorded if r[0] == "51")
-    assert high[2] < low[2] and high[1] + text_width("62") - 1 == RIGHT == low[1] + 6
-    letters = [r for r in recorded if r[0] in ("H", "L") and r[2] in (high[2], low[2])]
-    assert [(r[0], r[2]) for r in letters] == [("H", high[2]), ("L", low[2])]
-    assert all(r[1] + text_width("H") < high[1] for r in letters)
-    assert texts(recorded, NOTICE_Y) == ["OVERCAST"]
-    degree = {page.getpixel((x, y)) for x in range(39, 43) for y in range(TEMP_Y, TEMP_Y + 4)}
+    assert high[2] == low[2] == HIGH_LOW_Y, "one line under the temperature"
+    line = sorted((r[1], r[0]) for r in recorded if r[2] == HIGH_LOW_Y)
+    assert [text for _, text in line] == ["H", "62", "L", "51"]
+    assert line[0][0] == LEFT and line[-1][0] + text_width("51") < ICON_X, "clear of the icon"
+    assert texts(recorded, NOTICE_Y) == [], "the icon says the condition; no word for it"
+    degree = {page.getpixel((x, y)) for x in range(24, 29) for y in range(TEMP_Y, TEMP_Y + 4)}
     assert degree - SKIES == {BLACK, (255, 255, 255)}, "a degree mark after the number"
+    big = page.crop((ICON_X, ICON_Y, ICON_X + 24, ICON_Y + 24))
+    assert big.getbbox() is not None, "the condition's icon at twice its size"
     assert page.getpixel((LEFT, HEADER_Y)) == day_accent(DAY)
 
 
@@ -308,7 +321,7 @@ def test_each_gauge_is_filled_from_the_bottom_by_the_floored_percent():
     )
     page = render_city(view_of(status(weather=weather(hours=steps(rows)))), NOW).frames[0]
     drawn = strip_steps(weather(hours=steps(rows)))
-    for step, want in zip(drawn, (0, 0, 4, 9, 10, 5), strict=True):
+    for step, want in zip(drawn, (0, 0, 2, 4, 5, 2), strict=True):
         x0, y0, x1, y1 = bar_box(step)
         assert (x1 - x0 + 1, y1 - y0 + 1) == (BAR_WIDTH, BAR_HEIGHT)
         column = [page.getpixel((x0, y)) for y in range(y0, y1 + 1)]
@@ -375,14 +388,14 @@ def test_any_code_renders_and_the_icon_follows_the_code_and_the_hour():
     for code in [*range(-1, 101), 999, None]:
         w = weather(code=code, hours=steps(tuple((h, 50.0, 10, code) for h in range(0, 18, 3))))
         page = render_city(view_of(status(weather=w)), NOW).frames[0]
-        icon = page.crop((2, 9, 14, 21))
+        icon = no_sky(page).crop(ICON_BOX)
         assert icon.getbbox() is not None, code
         seen.setdefault(condition(code, 18), icon.tobytes())
         assert seen[condition(code, 18)] == icon.tobytes()
     assert len(set(seen.values())) == 9, "nine groups by day"
     clear = status(weather=weather(code=0))
-    day = render_city(view_of(clear), NOW).frames[0].crop((2, 9, 14, 21))
-    night = render_city(view_of(clear), NOW + timedelta(hours=5)).frames[0].crop((2, 9, 14, 21))
+    day = render_city(view_of(clear), NOW).frames[0].crop(ICON_BOX)
+    night = render_city(view_of(clear), NOW + timedelta(hours=5)).frames[0].crop(ICON_BOX)
     assert GOLD in colours(day) and MOONLIGHT not in colours(day)
     assert MOONLIGHT in colours(night) and GOLD not in colours(night)
 
@@ -432,8 +445,7 @@ def test_a_temperature_too_wide_for_double_size_steps_down_and_stays_whole(monke
         assert len(hero) == 1, "drawn once, in the body face"
         text, x, _, _, scale = hero[0]
         sizes.append(scale)
-        letter_x = next(r[1] for r in recorded if r[0] == "H")
-        assert x + text_width(text, BODY, scale) + 4 < letter_x, "clear of the high and low"
+        assert x + text_width(text, BODY, scale) + 4 < ICON_X + 4, "clear of the icon"
         assert (degrees(high) or "--") in texts(recorded)
     assert sizes == [1, 1, 2, 2]
 

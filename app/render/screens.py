@@ -19,10 +19,12 @@ from the month's theme (theme.py): the stock palette tones unless the month has 
 
 from __future__ import annotations
 
+import math
 import random
 import re
 import unicodedata
 import zlib
+from collections.abc import Callable
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
@@ -40,6 +42,7 @@ from app.render.frame import SIZE, Clip, Color, Frame, new_frame, still
 from app.render.palette import (
     ATTRIBUTION,
     BLACK,
+    CORAL,
     DOTS,
     GOLD,
     GREEN,
@@ -56,6 +59,7 @@ from app.render.palette import (
     WOOD,
     YELLOW,
     day_accent,
+    day_ground,
     dim,
 )
 from app.render.theme import theme_for
@@ -135,7 +139,8 @@ def draw_ring(
 PLANET_MIN_RADIUS = 5
 SKY_TOP = 9
 SKY_BOTTOM = 39
-SKY_STARS = 22
+SKY_STARS = 5
+PLANET_GROW = 1
 
 
 def draw_planet(frame: Frame, cx: int, cy: int, radius: int, color: Color, index: int) -> None:
@@ -161,7 +166,7 @@ def draw_planet(frame: Frame, cx: int, cy: int, radius: int, color: Color, index
     for dx in (0, 1):
         pixels[cx - glint + dx, cy - glint] = WHITE
     if ringed:
-        for dx in range(-radius - 3, radius + 4):
+        for dx in range(-radius - 2, radius + 3):
             x, y = cx + dx, cy + round(dx * 0.25)
             behind = _in_disc(dx, y - cy, radius) and y <= cy
             if not behind and 0 <= x < SIZE and 0 <= y < SIZE:
@@ -176,56 +181,64 @@ def scatter_stars(
     count: int = SKY_STARS,
     rows: tuple[int, int] = (SKY_TOP, SKY_BOTTOM),
 ) -> None:
-    """Single-pixel stars between `rows` (SKY_TOP to SKY_BOTTOM unless given), placed from
-    `seed` so each day has its own sky. A star is drawn only where the 5x5 block around it
-    is unlit, so none touches a word, a planet or another star, and never inside a `keep_out`
-    disc (cx, cy, radius): an empty orbit stays empty."""
+    """Plus-shaped stars (`draw_star`) between `rows` (SKY_TOP to SKY_BOTTOM unless given),
+    placed from `seed` so each day has its own sky. A star is drawn only where the 7x7 block
+    around it is unlit, so none crowds a word, a planet or another star, and never inside a
+    `keep_out` disc (cx, cy, radius): an empty orbit stays empty."""
     rng = random.Random(zlib.crc32(seed.encode()))
     pixels = frame.load()
     placed = 0
     for _ in range(count * 12):
         if placed == count:
             break
-        x, y = rng.randrange(2, SIZE - 2), rng.randrange(rows[0] + 2, rows[1] - 1)
+        x, y = rng.randrange(3, SIZE - 3), rng.randrange(rows[0] + 2, rows[1] - 1)
         color = colors[rng.randrange(len(colors))]
         clear = all(
-            pixels[x + dx, y + dy] == BLACK for dy in range(-2, 3) for dx in range(-2, 3)
-        ) and not any(_in_disc(x - cx, y - cy, radius + 2) for cx, cy, radius in keep_out)
+            pixels[x + dx, y + dy] == BLACK
+            for dy in range(-3, 4)
+            for dx in range(-3, 4)
+            if 0 <= x + dx < SIZE and 0 <= y + dy < SIZE
+        ) and not any(_in_disc(x - cx, y - cy, radius + 3) for cx, cy, radius in keep_out)
         if clear:
-            pixels[x, y] = color
+            draw_star(frame, x, y, color)
             placed += 1
 
 
-GROUND_LEVEL = 45
+Layer = tuple[Callable[[int, int], bool], Color]
 
 
-def ground_tone(color: Color, level: int = GROUND_LEVEL) -> Color:
-    """A colour as scenery: its hue at a low level with its weakest channel at zero, so the
-    panel's curve keeps it a colour and does not wash it to grey (notes.txt § Design)."""
-    top = max(color) or 1
-    scaled = [channel * level // top for channel in color]
-    scaled[scaled.index(min(scaled))] = 0
-    return (scaled[0], scaled[1], scaled[2])
+def paint_behind(frame: Frame, layers: tuple[Layer, ...]) -> None:
+    """Scenery behind what is already drawn. Call it last. Each layer is (covers(x, y), tone);
+    a later layer paints over an earlier one. A pixel is lit only where nothing drawn before
+    the call is within one pixel of it, so every word, number and mark keeps a black edge and
+    none touches the scenery (Max, 2026-11-15: nothing bleeds)."""
+    pixels = frame.load()
+    drawn = {(x, y) for y in range(SIZE) for x in range(SIZE) if pixels[x, y] != BLACK}
+    for y in range(SIZE):
+        for x in range(SIZE):
+            if any((x + dx, y + dy) in drawn for dy in (-1, 0, 1) for dx in (-1, 0, 1)):
+                continue
+            for covers, tone in layers:
+                if covers(x, y):
+                    pixels[x, y] = tone
+
+
+def rows_between(top: int, bottom: int) -> Callable[[int, int], bool]:
+    return lambda x, y: top <= y <= bottom
 
 
 def draw_field(frame: Frame, rows: tuple[int, int], tone: Color) -> None:
-    """Scenery behind what is already drawn: a flat field of `tone` over `rows`, inclusive.
-    Call it last. A pixel is lit only where nothing drawn before it is within one pixel, so
-    every word, number and mark keeps a black edge and none touches the scenery (Max,
-    2026-11-15: nothing bleeds). Flat, not dithered: a dither behind small text read as noise
-    at 1x."""
-    top, bottom = rows
+    """A flat field of `tone` over `rows`, inclusive, behind what is already drawn."""
+    paint_behind(frame, ((rows_between(*rows), tone),))
+
+
+def draw_star(frame: Frame, x: int, y: int, color: Color) -> None:
+    """A star as a small plus: a white core with four arms in `color`."""
     pixels = frame.load()
-    drawn = {
-        (x, y)
-        for y in range(max(top - 1, 0), min(bottom + 2, SIZE))
-        for x in range(SIZE)
-        if pixels[x, y] != BLACK
-    }
-    for y in range(top, bottom + 1):
-        for x in range(SIZE):
-            if not any((x + dx, y + dy) in drawn for dy in (-1, 0, 1) for dx in (-1, 0, 1)):
-                pixels[x, y] = tone
+    for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+        if 0 <= x + dx < SIZE and 0 <= y + dy < SIZE:
+            pixels[x + dx, y + dy] = color
+    pixels[x, y] = WHITE
 
 
 def draw_bitmap(frame: Frame, x: int, y: int, rows: tuple[str, ...], color: Color) -> None:
@@ -286,13 +299,14 @@ def _week_frame(view: DayView, now: datetime) -> Frame:
         draw_text_right(frame, RIGHT, 2, "NO DATA", TEXT, SMALL)
     else:
         draw_text_right(frame, RIGHT, 2, f"{dots} OF {view.week_target}", TEXT, SMALL)
+    world = radius + PLANET_GROW if radius >= PLANET_MIN_RADIUS else radius
     for index, cx in enumerate(centres):
         if dots is None:
-            draw_ring(frame, cx, DOT_ROW_Y, radius, theme.ring, dashed=True)
+            draw_ring(frame, cx, DOT_ROW_Y, world, theme.ring, dashed=True)
         elif index < dots:
-            draw_planet(frame, cx, DOT_ROW_Y, radius, dot_color(index), index)
+            draw_planet(frame, cx, DOT_ROW_Y, world, dot_color(index), index)
         else:
-            draw_ring(frame, cx, DOT_ROW_Y, radius, theme.ring)
+            draw_ring(frame, cx, DOT_ROW_Y, world, theme.ring)
 
     if streak is None:
         draw_text_centered(frame, STREAK_Y + 2, "STREAK NO DATA", TEXT, SMALL)
@@ -300,9 +314,12 @@ def _week_frame(view: DayView, now: datetime) -> Frame:
         _draw_streak(frame, streak)
 
     accent = day_accent(view.day_local)
-    orbits = tuple((cx, DOT_ROW_Y, radius) for cx in centres)
-    scatter_stars(frame, view.day_local, (WHITE, TEXT, accent), orbits)
+    orbits = tuple((cx, DOT_ROW_Y, world) for cx in centres)
+    scatter_stars(frame, view.day_local, (WHITE, accent), orbits)
     draw_usage(frame, usage_state(view.claude, now, view.stale_hours), theme.track)
+    inside = lambda x, y: any(_in_disc(x - cx, y - DOT_ROW_Y, world) for cx in centres)  # noqa: E731
+    sky = lambda x, y: SKY_TOP - 1 <= y <= SKY_BOTTOM + 1 and not inside(x, y)  # noqa: E731
+    paint_behind(frame, ((sky, day_ground(view.day_local)),))
     return frame
 
 
@@ -410,16 +427,33 @@ def no_dot_label(view: DayView) -> str:
     return "NO DOT YET"
 
 
-TODAY_SKY = (8, 24)
-TODAY_STARS = 10
+TODAY_SKY = (8, 37)
+HILL_BACK: Color = (0, 95, 40)
+HILL_FRONT: Color = (20, 150, 45)
+
+
+def hill_back(x: int) -> int:
+    return 40 + round(2.5 * math.sin(x / 9 + 1.0))
+
+
+def hill_front(x: int) -> int:
+    return 49 + round(3 * math.sin(x / 6 + 4.0))
 
 
 def _today_scene(frame: Frame, view: DayView) -> None:
-    """Style B (2026-11-15): last night's sky around the moon and the sleep number, its stars
-    seeded by the day. The facts below stay on black: a ground behind three lines of small
-    text was tried and read as noise at 1x. Drawn last."""
-    accent = day_accent(view.day_local)
-    scatter_stars(frame, view.day_local, (WHITE, TEXT, accent), count=TODAY_STARS, rows=TODAY_SKY)
+    """Style B (2026-11-15): last night's sky in the weekday's colour behind the moon and the
+    sleep number, and two grassy hills under the day's facts, a black line along their crest
+    so a green Thursday sky does not run into them. No stars: beside a number they
+    read as stray dots (Max, 2026-11-15).
+    Drawn last, a pixel off every word."""
+    paint_behind(
+        frame,
+        (
+            (lambda x, y: TODAY_SKY[0] <= y < hill_back(x) - 1, day_ground(view.day_local)),
+            (lambda x, y: y >= hill_back(x), HILL_BACK),
+            (lambda x, y: y >= hill_front(x), HILL_FRONT),
+        ),
+    )
 
 
 def render_today(view: DayView, now: datetime | None = None) -> Clip:
@@ -512,58 +546,109 @@ def render_parked(view: DayView, now: datetime | None = None) -> Clip:
     return still(frame)
 
 
-def _draw_book_count(frame: Frame, count: int, target: int) -> None:
-    """The big count and "of N". Steps down in size until the whole line fits the frame."""
-    number, tail = str(count), f"of {target}"
-    room = RIGHT - LEFT + 1
-    big = text_width(number, BODY, 2)
-    if big + 4 + text_width(tail, BODY) <= room:
-        after = draw_text(frame, LEFT, 9, number, GOLD, BODY, scale=2)
-        draw_text(frame, after + 2, 16, tail, TEXT, BODY)
-    elif big + 2 + text_width(tail, SMALL) <= room:
-        after = draw_text(frame, LEFT, 9, number, GOLD, BODY, scale=2)
-        draw_text(frame, after, 18, tail, TEXT, SMALL)
-    elif text_width(number, BODY) + 2 + text_width(tail, SMALL) <= room:
-        after = draw_text(frame, LEFT, 16, number, GOLD, BODY)
-        draw_text(frame, after + 1, 18, tail, TEXT, SMALL)
-    else:
-        draw_text(frame, LEFT, 16, "MANY", GOLD, BODY)
+TIER_BOARDS = (24, 41)
+TIER_HEIGHTS = (13, 11, 14, 12, 13, 10, 12, 14, 11, 13, 10, 14)
+TIER_WIDTH_SWING = (0, -1, 1, 0, 1, -1)
+SHELF_RIGHT = 46
+DECOR_X = 54
+BOOKS_WALL = (8, 42)
+PLANT = (
+    "..g.g..",
+    ".g.g.g.",
+    "..ggg..",
+    "...g...",
+    ".ppppp.",
+    ".ppppp.",
+    "..ppp..",
+)
+LAMP = (
+    "..yyy..",
+    ".yyyyy.",
+    "yyyyyyy",
+    "...w...",
+    "...w...",
+    "...w...",
+    "..www..",
+)
+DECOR_INK: dict[str, Color] = {"g": GREEN, "p": CORAL, "y": GOLD, "w": TEXT}
 
 
-BOOKS_WALL = (8, 40)
+def books_stamp(view: DayView) -> str:
+    """The header's right side: the count against the target, "10 OF 12"; the count alone
+    when that would reach the header word."""
+    read = _count(view.books_ytd)
+    if read is None:
+        return "NO DATA"
+    room = RIGHT + 1 - (LEFT + text_width("BOOKS", SMALL) + TITLE_GAP)
+    for stamp in (f"{read} OF {view.books_target}", str(read)):
+        if text_width(stamp, SMALL) <= room:
+            return stamp
+    return "MANY"
+
+
+def shelf_slots(target: int) -> list[tuple[int, int, int, int]]:
+    """(tier, x0, width, height) of every slot, in reading order: the first half of the
+    target on the top shelf, the rest on the lower. Six to a shelf get widths that vary by a
+    pixel; more than fit that way get one even width, never under one pixel."""
+    slots = max(target, 1)
+    upper = (slots + 1) // 2
+    out = []
+    for tier, count in enumerate((upper, slots - upper)):
+        if not count:
+            continue
+        room = SHELF_RIGHT - LEFT + 1
+        even = max(1, (room - (count - 1)) // count)
+        swing = TIER_WIDTH_SWING if even >= 5 else (0,)
+        x = LEFT
+        for index in range(count):
+            width = even + swing[index % len(swing)]
+            if x + width - 1 > SHELF_RIGHT:
+                break
+            number = len(out)
+            out.append((tier, x, width, TIER_HEIGHTS[number % len(TIER_HEIGHTS)]))
+            x += width + 1
+    return out
+
+
+def _draw_decor(frame: Frame, tier: int, rows: tuple[str, ...]) -> None:
+    pixels = frame.load()
+    top = TIER_BOARDS[tier] - len(rows)
+    for dy, row in enumerate(rows):
+        for dx, cell in enumerate(row):
+            if cell in DECOR_INK:
+                pixels[DECOR_X + dx, top + dy] = DECOR_INK[cell]
 
 
 def _books_base(view: DayView) -> Frame:
-    """The count over the shelf. A read book is its lit spine; an unread slot is the month
-    theme's track, one quiet tone for every slot (Max, 2026-11-09, on Mei-Lin's proposal: the
-    ten dim tints of the spines-to-be read as olive, maroon and slate on the panel). Behind
-    them the wall is a flat field in the weekday's colour (style B, 2026-11-15)."""
+    """A two-shelf bookcase (style B, 2026-11-15): a read book is its lit spine with a band,
+    an unread slot the outline of the book to come in the month theme's ring (one quiet tone
+    for every slot; Max, 2026-11-09), a plant on the top shelf and a lamp on the lower, and
+    behind them a wall in the weekday's colour. The count is the header's stamp."""
     frame = new_frame()
     theme = theme_for(view)
     draw_text(frame, LEFT, 2, "BOOKS", day_accent(view.day_local), SMALL)
-    draw_text_right(frame, RIGHT, 2, view.day_local[:4], TEXT, SMALL)
-    read = _count(view.books_ytd)
-    if read is None:
-        draw_text(frame, LEFT, 9, "--", TEXT, BODY, scale=2)
-        draw_text_right(frame, RIGHT, 16, "NO DATA", TEXT, SMALL)
-    else:
-        _draw_book_count(frame, read, view.books_target)
-
-    slots = max(view.books_target, 1)
-    spine = max(1, (60 - (slots - 1)) // slots)
-    for index in range(slots):
-        x0 = LEFT + index * (spine + 1)
-        if x0 + spine - 1 > RIGHT:
-            break
-        top = 41 - _SPINE_HEIGHTS[index % len(_SPINE_HEIGHTS)]
-        color = SPINES[index % len(SPINES)]
-        if index < (read or 0):
-            fill_rect(frame, x0, top, x0 + spine - 1, 40, color)
-            fill_rect(frame, x0, top + 2, x0 + spine - 1, top + 2, dim(color, 0.45))
+    draw_text_right(frame, RIGHT, 2, books_stamp(view), TEXT, SMALL)
+    read = _count(view.books_ytd) or 0
+    pixels = frame.load()
+    for number, (tier, x0, width, height) in enumerate(shelf_slots(view.books_target)):
+        bottom = TIER_BOARDS[tier] - 1
+        top = bottom - height + 1
+        x1 = x0 + width - 1
+        if number < read:
+            color = SPINES[number % len(SPINES)]
+            fill_rect(frame, x0, top, x1, bottom, color)
+            fill_rect(frame, x0, top + 2, x1, top + 2, dim(color, 0.45))
+            fill_rect(frame, x0, bottom - 3, x1, bottom - 2, dim(color, 0.45))
         else:
-            fill_rect(frame, x0, top, x0 + spine - 1, 40, theme.track)
-    fill_rect(frame, LEFT, 41, RIGHT, 42, WOOD)
-    draw_field(frame, BOOKS_WALL, ground_tone(day_accent(view.day_local)))
+            for x in range(x0, x1 + 1):
+                pixels[x, top] = theme.ring
+            for y in range(top, bottom + 1):
+                pixels[x0, y] = pixels[x1, y] = theme.ring
+    for board in TIER_BOARDS:
+        fill_rect(frame, 0, board, SIZE - 1, board + 1, WOOD)
+    _draw_decor(frame, 0, PLANT)
+    _draw_decor(frame, 1, LAMP)
+    draw_field(frame, BOOKS_WALL, day_ground(view.day_local))
     return frame
 
 
