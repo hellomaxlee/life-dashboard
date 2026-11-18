@@ -2,7 +2,7 @@
 
 ### My first adventure into the realm of Hardware!
 
-## Stack<img width="518" height="461" alt="Screenshot 2026-11-17 at 8 39 08 PM" src="https://github.com/user-attachments/assets/a5c278c3-2d64-43c4-97de-6e8ecdff1ee7" />
+<img width="518" height="461" alt="Screenshot 2026-11-17 at 8 39 08 PM" src="https://github.com/user-attachments/assets/a5c278c3-2d64-43c4-97de-6e8ecdff1ee7" />
 
 I got a Divoom Pixoo 64 (LED display) and coded up a dashboard of various rotating wellbeing metrics. I'll get a Raspberry Pi one day but currently it depends on my MacBook being on.
 
@@ -29,5 +29,5 @@ Small wins and a completed week get a short celebration, sent to the panel as a 
 |---|---|---|
 | ![Workout sparkle](docs/images/sparkle-workout.gif) | ![Sleep sparkle](docs/images/sparkle-sleep.gif) | ![Week party](docs/images/party.gif) |
 
-- Python 3.12, uv, FastAPI, SQLite (stdlib, hand-written migrations), APScheduler, httpx, Pillow, pytest, ruff.
-- Anthropic SDK for the daily line, the month feature, and a heart-rate "coach" that can credit a sustained effort the feed missed. Model ids and the monthly cap live in `config.toml`.
+### Stack
+- Python 3.12, uv, FastAPI, SQLite (stdlib, hand-written migrations), APScheduler, httpx, Pillow, pytest, ruff, Anthropic SDK.
