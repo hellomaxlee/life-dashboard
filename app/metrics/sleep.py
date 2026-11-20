@@ -26,6 +26,7 @@ class SleepFragment:
     start_utc: str
     asleep_s: int
     source: str
+    end_utc: str | None = None
 
 
 def in_night_window(fragment: SleepFragment, tz: str) -> bool:
@@ -47,3 +48,17 @@ def night_seconds(fragments: list[SleepFragment], tz: str) -> dict[date, int]:
     for (day, _), seconds in per_source.items():
         nights[day] = max(nights.get(day, 0), seconds)
     return nights
+
+
+def night_spans(fragments: list[SleepFragment], tz: str) -> dict[date, tuple[datetime, datetime]]:
+    """First start and last end of each wake day's night fragments, over every source."""
+    spans: dict[date, tuple[datetime, datetime]] = {}
+    for fragment in fragments:
+        if fragment.end_utc is None or not in_night_window(fragment, tz):
+            continue
+        start, end = from_utc_iso(fragment.start_utc), from_utc_iso(fragment.end_utc)
+        known = spans.get(fragment.wake_day)
+        spans[fragment.wake_day] = (
+            (min(known[0], start), max(known[1], end)) if known else (start, end)
+        )
+    return spans

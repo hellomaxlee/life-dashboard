@@ -28,11 +28,13 @@ import logging
 import sqlite3
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
+from zoneinfo import ZoneInfo
 
 from app.config import Settings
 from app.ingest.activities import HrSampleRow, active_activities_sql, active_hr_samples
 from app.ingest.health import SOURCE as HEALTH_SOURCE
 from app.metrics import books as books_rules
+from app.metrics.bandwidth import NightSignal, bandwidth_json, night_signals
 from app.metrics.calendar import days_between, end_of_day_utc, local_date, week_start, weeks_between
 from app.metrics.calibration import (
     BarEntry,
@@ -47,7 +49,7 @@ from app.metrics.judge import Judgement, read_credits
 from app.metrics.keys import STATE_CHECK, STATE_NOW, STATE_TODAY, WELLNESS_KEYS, round_half_up
 from app.metrics.load import load_rows
 from app.metrics.manual import Override, read_overrides
-from app.metrics.sleep import SleepFragment, night_seconds
+from app.metrics.sleep import NIGHT_UNTIL, SleepFragment, night_seconds, night_spans
 from app.metrics.weekly import WeekInput, WeekRow, week_rows
 from app.metrics.wellness import Series, wellness_json
 from app.metrics.wins import sleep_win, wins
@@ -73,6 +75,7 @@ class Activity:
 class Inputs:
     activities: list[Activity] = field(default_factory=list)
     sleep_s: dict[date, int] = field(default_factory=dict)
+    nights: dict[date, NightSignal] = field(default_factory=dict)
     steps: dict[date, int] = field(default_factory=dict)
     wellness: Series = field(default_factory=dict)
     book_dates: list[date] = field(default_factory=list)
@@ -138,13 +141,23 @@ def read_inputs(conn: sqlite3.Connection, settings: Settings) -> Inputs:
             row["start_utc"],
             int(row["asleep_s"]),
             str(row["source"]),
+            row["end_utc"],
         )
         for row in conn.execute(
-            "SELECT wake_day_local, start_utc, asleep_s, source FROM sleep_sessions "
+            "SELECT wake_day_local, start_utc, end_utc, asleep_s, source FROM sleep_sessions "
             "WHERE asleep_s IS NOT NULL ORDER BY wake_day_local, start_utc, source"
         )
     ]
     inputs.sleep_s = night_seconds(fragments, tz)
+    inputs.nights = night_signals(
+        night_spans(fragments, tz),
+        [
+            (from_utc_iso(row["minute_utc"]), float(row["hr_avg"]))
+            for row in conn.execute(
+                "SELECT minute_utc, hr_avg FROM hr_minutes WHERE hr_avg IS NOT NULL"
+            )
+        ],
+    )
     for row in conn.execute("SELECT day_local, steps FROM steps_daily"):
         inputs.steps[date.fromisoformat(row["day_local"])] = int(row["steps"])
     for row in conn.execute("SELECT day_local, metric, value FROM wellness_daily"):
@@ -350,6 +363,12 @@ def compute_rows(
 
     load_by_day = dict(zip(days, load_rows([trimp(day) for day in days]), strict=True))
 
+    sleep_hours_by_day = {
+        day: round_half_up(seconds / 3600, 2) for day, seconds in inputs.sleep_s.items()
+    }
+
+    local_now = now.astimezone(ZoneInfo(tz))
+
     daily: dict[str, dict[str, object]] = {}
     for day in days:
         todays = by_day.get(day, [])
@@ -384,6 +403,8 @@ def compute_rows(
             "load_balance": load.balance,
         }
         row.update(wellness_json(inputs.wellness, day, settings))
+        awaiting = day == today and local_now.date() == today and local_now.time() < NIGHT_UNTIL
+        row.update(bandwidth_json(day, sleep_hours_by_day, inputs.nights, awaiting_night=awaiting))
         daily[day.isoformat()] = row
     return history, weeks, daily, checks
 

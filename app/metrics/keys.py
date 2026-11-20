@@ -38,6 +38,9 @@ DAILY_KEYS = frozenset(
         "load_chronic",
         "load_balance",
         "wellness_fact",
+        "bandwidth",
+        "bandwidth_low",
+        "bandwidth_trace",
     }
     | set(WELLNESS_KEYS.values())
     | {f"{name}_baseline" for name in WELLNESS_KEYS.values()}

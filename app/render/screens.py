@@ -532,7 +532,9 @@ LAMP = (
     "...w...",
     "..www..",
 )
-DECOR_INK: dict[str, Color] = {"g": GREEN, "p": CORAL, "y": GOLD, "w": TEXT}
+LAMP_UNLIT = tuple(row.replace("y", "u") for row in LAMP)
+UNLIT_SHADE: Color = dim(GOLD, 0.3)
+DECOR_INK: dict[str, Color] = {"g": GREEN, "p": CORAL, "y": GOLD, "w": TEXT, "u": UNLIT_SHADE}
 
 
 def books_stamp(view: DayView) -> str:
@@ -585,7 +587,9 @@ def _books_base(view: DayView) -> Frame:
     """A two-shelf bookcase (style B, 2026-11-15): a read book is its lit spine with a band,
     an unread slot the outline of the book to come in the month theme's ring (one quiet tone
     for every slot; Max, 2026-11-09), a plant on the top shelf and a lamp on the lower, all
-    on the page's one ground, which the summary below shares. The count is the header's stamp."""
+    on the page's one ground, which the summary below shares. The count is the header's stamp.
+    The lamp is unlit while `view.bandwidth_low` (Max, 2026-11-20: a signal for him alone,
+    with no word or number on the panel)."""
     frame = new_frame(page_ground(view))
     theme = theme_for(view)
     draw_text(frame, LEFT, 2, "BOOKS", day_accent(view.day_local), SMALL)
@@ -609,7 +613,7 @@ def _books_base(view: DayView) -> Frame:
     for board in TIER_BOARDS:
         fill_rect(frame, 0, board, SIZE - 1, board + 1, WOOD)
     _draw_decor(frame, 0, PLANT)
-    _draw_decor(frame, 1, LAMP)
+    _draw_decor(frame, 1, LAMP_UNLIT if view.bandwidth_low else LAMP)
     return frame
 
 

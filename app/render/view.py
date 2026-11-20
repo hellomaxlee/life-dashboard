@@ -69,6 +69,7 @@ WORKOUT_COUNT = "workout_count"
 WORKOUT_LOAD = "workout_load"
 WEEK_LOAD_BAR = "load_bar"
 SLEEP_HOURS = "sleep_hours"
+BANDWIDTH_LOW = "bandwidth_low"
 STEPS = "steps"
 BOOKS_YTD = "books_ytd"
 SUMMARY_LINE = "summary_device_line"
@@ -118,6 +119,9 @@ class DayView:
     # (day of month, that day's stored wins) for the days of day_local's month before it:
     # the calendar colours a past day by what it earned. Empty when nothing is stored.
     month_wins: tuple[tuple[int, tuple[str, ...]], ...] = ()
+    # The night recovery score's cue (app/metrics/bandwidth.py): the Books lamp is unlit.
+    # False without a reading, so missing data never draws it.
+    bandwidth_low: bool = False
 
 
 def _number(value: Any) -> float | None:
@@ -235,6 +239,7 @@ def view_from_metrics(
         claude=claude if claude is not None else claude_from_metrics(daily),
         stale_hours=settings.claude_usage.stale_hours,
         city_stale_minutes=city_stale_minutes(settings),
+        bandwidth_low=daily.get(BANDWIDTH_LOW) is True,
     )
 
 
