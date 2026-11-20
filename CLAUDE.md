@@ -30,6 +30,7 @@ Python 3.12 · uv · FastAPI · SQLite (stdlib `sqlite3`, hand-written migration
 | Render a frame | `uv run python -m tools.render --date YYYY-MM-DD --scale 8` |
 | Replay raw archive | `uv run python -m tools.replay --since YYYY-MM-DD` |
 | Sync sources now | `uv run python -m tools.sync --source goodreads` |
+| Read the bandwidth scores | `uv run python -m tools.bandwidth --days 14` |
 
 ## Code Style
 ruff is the authority (format + lint). Type hints on every public function. No comments where the name says it. Timestamps stored as UTC ISO strings, displayed in the home timezone from config. Small modules named for the thing they own: `app/ingest/`, `app/metrics/`, `app/render/`, `app/summary/`, `app/web/`.
@@ -80,7 +81,7 @@ Every render or summary test cycle uses a NEW fixture combination across: day ty
 
 ## Structure
 - `app/` — FastAPI service: `ingest/`, `metrics/`, `render/`, `summary/`, `month/` (monthly feature), `city/` (transit and weather), `jobs/`, `web/`, `main.py`
-- `tools/` — CLIs per workflow (`render`, `replay`, `sync`, `backup`, `summary`, `month`, `city`, `pixoo_check`); `workflows/` — one markdown spec per tool
+- `tools/` — CLIs per workflow (`render`, `replay`, `sync`, `backup`, `summary`, `month`, `city`, `pixoo_check`, `bandwidth`); `workflows/` — one markdown spec per tool
 - `fixtures/` — sanitized raw payloads and golden metric cases; `tests/` — pytest
 - `data/` — SQLite db, `raw/` archive, backups (git-ignored)
 - `agents/` — `[Role] First Last.md`; `agents/_old/` fired/demoted; `agents/performance/` reviews

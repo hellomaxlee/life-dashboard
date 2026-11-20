@@ -42,6 +42,9 @@ DAILY_KEYS = frozenset(
         "bandwidth_low",
         "bandwidth_lamp",
         "bandwidth_trace",
+        "bandwidth_full",
+        "bandwidth_full_low",
+        "bandwidth_full_trace",
     }
     | set(WELLNESS_KEYS.values())
     | {f"{name}_baseline" for name in WELLNESS_KEYS.values()}

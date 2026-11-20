@@ -162,6 +162,65 @@ $\ge 0$, so $z_s + z_h \ge 0 > -2$. With no term present the cue is off unless
 carried, and a carried cue rests on yesterday's reading.
 \end{proof}
 
+\section{The Fuller Score, a Shadow}
+Max, 20 November 2026: robust ``isn't necessarily to decrease the number of
+variables \dots\ partially means defensibility and partially means completeness
+as a proxy for my actual bandwidth''. A second score with ten terms is stored
+beside the first. Nothing displays it; the lamp still shows the two-term score.
+\begin{equation}
+B_{\text{full}} = 50 + \frac{1}{6} \sum_i w_i z_i, \qquad \sum_i w_i = 100
+\end{equation}
+\begin{center}
+\begin{tabular}{L{0.20\textwidth}L{0.47\textwidth}rr}
+\toprule
+Domain & Term & Weight & Range of $z$ \\
+\midrule
+Sleep Amount & Last night, on his bands & 30 & $[-3, 2]$ \\
+ & Mean band score of the three nights before & 14 & $[-3, 2]$ \\
+Quality and Timing & Deep-plus-REM share and minutes awake & 5 & $[-3, 3]$ \\
+ & Sleep onset against his usual, later is worse & 12 & $[-3, 1]$ \\
+Recovery & Sleeping heart rate & 24 & $[-3, 3]$ \\
+ & $\ln$ of yesterday's HRV & 4 & $[-3, 3]$ \\
+ & Yesterday's resting heart rate & 3 & $[-3, 3]$ \\
+Load & Yesterday's acute over chronic, overreach only & 2 & $[-3, 0]$ \\
+Movement and Light & Yesterday's steps & 4 & $[-3, 3]$ \\
+ & Yesterday's minutes of daylight & 2 & $[-3, 3]$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+Terms without a band of their own are robust $z$ scores against the prior 28
+days, as in Section 3. An absent term adds 0, and the trace records how much of
+the hundred was present.
+
+\begin{claim}[Range]
+$0 \le B_{\text{full}} \le 50 + 226/6 \approx 87.67$, with no clamp on the result.
+\end{claim}
+\begin{proof}
+Each $z_i$ lies in its own range above, so $\sum w_i z_i \in [-300, 226]$.
+\end{proof}
+
+\paragraph{The Cue Line Follows from the Weights.} A weighted mean of ten terms
+spreads less than a sum of two. If the terms were independent with equal spread,
+the spread of $\sum w_i z_i$ would be proportional to $\sqrt{\sum w_i^2}$. The
+lamp's score is the same form with weights $(50, 50)$ and its cue at $-100$, so
+\begin{equation}
+\ell = -100 \cdot \frac{\sqrt{\sum w_i^2}}{\sqrt{50^2 + 50^2}} = -100 \cdot
+\frac{\sqrt{1890}}{\sqrt{5000}} \approx -61.48
+\end{equation}
+and the cue is on when $\sum w_i z_i \le \ell$ with at least 60 of the hundred
+present: $B_{\text{full}} \le 39.75$. Green starts at the mirror image, 60.25.
+Either anchor term reaches the line alone: $30 \cdot (-3) = -90$ and
+$24 \cdot (-3) = -72$.
+
+\paragraph{What It Can Claim.} The weights are priors, set from how repeatable
+each input is on his data and a stated guess at its relevance. Two reviews found
+that the sleep bands still carry about half of all movement in the score, that it
+correlates 0.95 with the two-term score, and that under a $\pm 50\%$ perturbation
+of the weights 93.7\% of days keep their colour. So the fuller score is broader
+and stable, and no more proven than the first. The inputs that would widen it
+most are not built: a same-day sedentary run, hours awake, sleeping respiratory
+rate and wrist temperature.
+
 \section{The Trace}
 Each day stores, per term, $x$, the reference, the scale, $z$, the points
 $\tfrac{25}{3} z$, and the history count, plus the censored flag and the number

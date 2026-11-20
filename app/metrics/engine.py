@@ -35,6 +35,7 @@ from app.ingest.activities import HrSampleRow, active_activities_sql, active_hr_
 from app.ingest.health import SOURCE as HEALTH_SOURCE
 from app.metrics import books as books_rules
 from app.metrics.bandwidth import NightSignal, bandwidth_json, night_signals
+from app.metrics.bandwidth_full import FullInputs, full_json
 from app.metrics.calendar import days_between, end_of_day_utc, local_date, week_start, weeks_between
 from app.metrics.calibration import (
     BarEntry,
@@ -49,7 +50,14 @@ from app.metrics.judge import Judgement, read_credits
 from app.metrics.keys import STATE_CHECK, STATE_NOW, STATE_TODAY, WELLNESS_KEYS, round_half_up
 from app.metrics.load import load_rows
 from app.metrics.manual import Override, read_overrides
-from app.metrics.sleep import NIGHT_UNTIL, SleepFragment, night_seconds, night_spans
+from app.metrics.sleep import (
+    NIGHT_UNTIL,
+    NightStages,
+    SleepFragment,
+    night_seconds,
+    night_spans,
+    night_stages,
+)
 from app.metrics.weekly import WeekInput, WeekRow, week_rows
 from app.metrics.wellness import Series, wellness_json
 from app.metrics.wins import sleep_win, wins
@@ -76,6 +84,8 @@ class Inputs:
     activities: list[Activity] = field(default_factory=list)
     sleep_s: dict[date, int] = field(default_factory=dict)
     nights: dict[date, NightSignal] = field(default_factory=dict)
+    stages: dict[date, NightStages] = field(default_factory=dict)
+    spans: dict[date, tuple[datetime, datetime]] = field(default_factory=dict)
     steps: dict[date, int] = field(default_factory=dict)
     wellness: Series = field(default_factory=dict)
     book_dates: list[date] = field(default_factory=list)
@@ -142,15 +152,21 @@ def read_inputs(conn: sqlite3.Connection, settings: Settings) -> Inputs:
             int(row["asleep_s"]),
             str(row["source"]),
             row["end_utc"],
+            row["deep_s"],
+            row["rem_s"],
+            row["awake_s"],
         )
         for row in conn.execute(
-            "SELECT wake_day_local, start_utc, end_utc, asleep_s, source FROM sleep_sessions "
+            "SELECT wake_day_local, start_utc, end_utc, asleep_s, source, deep_s, rem_s, awake_s "
+            "FROM sleep_sessions "
             "WHERE asleep_s IS NOT NULL ORDER BY wake_day_local, start_utc, source"
         )
     ]
     inputs.sleep_s = night_seconds(fragments, tz)
+    inputs.stages = night_stages(fragments, tz)
+    inputs.spans = night_spans(fragments, tz)
     inputs.nights = night_signals(
-        night_spans(fragments, tz),
+        inputs.spans,
         [
             (from_utc_iso(row["minute_utc"]), float(row["hr_avg"]))
             for row in conn.execute(
@@ -368,6 +384,19 @@ def compute_rows(
     }
 
     local_now = now.astimezone(ZoneInfo(tz))
+    full_inputs = FullInputs(
+        sleep_hours=sleep_hours_by_day,
+        nights=inputs.nights,
+        stages=inputs.stages,
+        onsets={day: span[0] for day, span in inputs.spans.items()},
+        hrv_ms=inputs.wellness.get("hrv_ms", {}),
+        resting_hr=inputs.wellness.get("resting_hr", {}),
+        load_balance={day: load.balance for day, load in load_by_day.items()},
+        load_chronic={day: load.chronic for day, load in load_by_day.items()},
+        steps=inputs.steps,
+        daylight_min=inputs.wellness.get("daylight_min", {}),
+        tz=tz,
+    )
 
     daily: dict[str, dict[str, object]] = {}
     for day in days:
@@ -405,6 +434,7 @@ def compute_rows(
         row.update(wellness_json(inputs.wellness, day, settings))
         awaiting = day == today and local_now.date() == today and local_now.time() < NIGHT_UNTIL
         row.update(bandwidth_json(day, sleep_hours_by_day, inputs.nights, awaiting_night=awaiting))
+        row.update(full_json(day, full_inputs))
         daily[day.isoformat()] = row
     return history, weeks, daily, checks
 

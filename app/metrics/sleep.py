@@ -27,6 +27,17 @@ class SleepFragment:
     asleep_s: int
     source: str
     end_utc: str | None = None
+    deep_s: int | None = None
+    rem_s: int | None = None
+    awake_s: int | None = None
+
+
+@dataclass(frozen=True)
+class NightStages:
+    asleep_s: int
+    deep_s: int
+    rem_s: int
+    awake_s: int
 
 
 def in_night_window(fragment: SleepFragment, tz: str) -> bool:
@@ -62,3 +73,30 @@ def night_spans(fragments: list[SleepFragment], tz: str) -> dict[date, tuple[dat
             (min(known[0], start), max(known[1], end)) if known else (start, end)
         )
     return spans
+
+
+def night_stages(fragments: list[SleepFragment], tz: str) -> dict[date, NightStages]:
+    """Stage seconds per wake day from the source `night_seconds` took (the one with the
+    most sleep; the first by name on a tie). A night is absent when any of its fragments
+    lacks a stage, so a half-staged night is never read as a night of little deep sleep."""
+    per_source: dict[tuple[date, str], list[SleepFragment]] = {}
+    for fragment in fragments:
+        if in_night_window(fragment, tz):
+            per_source.setdefault((fragment.wake_day, fragment.source), []).append(fragment)
+    best: dict[date, tuple[int, str]] = {}
+    for (day, source), parts in sorted(per_source.items()):
+        total = sum(part.asleep_s for part in parts)
+        if day not in best or total > best[day][0]:
+            best[day] = (total, source)
+    out: dict[date, NightStages] = {}
+    for day, (total, source) in best.items():
+        parts = per_source[(day, source)]
+        if any(p.deep_s is None or p.rem_s is None or p.awake_s is None for p in parts):
+            continue
+        out[day] = NightStages(
+            total,
+            sum(p.deep_s or 0 for p in parts),
+            sum(p.rem_s or 0 for p in parts),
+            sum(p.awake_s or 0 for p in parts),
+        )
+    return out
