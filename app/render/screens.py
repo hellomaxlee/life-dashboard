@@ -518,15 +518,113 @@ TIER_HEIGHTS = (13, 11, 14, 12, 13, 10, 12, 14, 11, 13, 10, 14)
 TIER_WIDTH_SWING = (0, -1, 1, 0, 1, -1)
 SHELF_RIGHT = 46
 DECOR_X = 54
-PLANT = (
-    "..g.g..",
-    ".g.g.g.",
-    "..ggg..",
-    "...g...",
+PLANT_POT = (
     ".ppppp.",
     ".ppppp.",
     "..ppp..",
 )
+PLANT_CROWN = (
+    "..g.g..",
+    ".g.g.g.",
+    "..ggg..",
+)
+PLANT_STEM = "...g..."
+PLANT_LEAVES = (".ggg...", "...ggg.")
+PLANT_MAX_STREAK = 10
+PLANT_STOCK_STREAK = 3
+
+
+def plant_rows(streak: int | None) -> tuple[str, ...]:
+    """The plant on the top shelf, one row of green taller for every week of the weeks-hit
+    streak (Max, 2026-11-20): a bare shoot at 0, the plant as first drawn at 3, and full
+    height, just under the header, from PLANT_MAX_STREAK on, after which `overgrowth` takes
+    over. Under the crown the stem puts
+    out a leaf every other row, left then right. With no streak on record it is the stock
+    plant, a decoration and not a count."""
+    weeks = PLANT_STOCK_STREAK if streak is None else max(0, min(streak, PLANT_MAX_STREAK))
+    height = weeks + 1
+    if height == 1:
+        green: tuple[str, ...] = (PLANT_STEM,)
+    elif height == 2:
+        green = (PLANT_CROWN[0], PLANT_STEM)
+    elif height == 3:
+        green = (*PLANT_CROWN[:2], PLANT_STEM)
+    else:
+        stem = [
+            PLANT_STEM if up % 2 == 0 else PLANT_LEAVES[(up // 2) % 2]
+            for up in range(height - len(PLANT_CROWN))
+        ]
+        green = (*PLANT_CROWN, *reversed(stem))
+    return (*green, *PLANT_POT)
+
+
+LEAF_DARK: Color = dim(GREEN, 0.62)
+BUSH_X = (DECOR_X - 1, DECOR_X + 7)
+BUSH_Y = (10, TIER_BOARDS[0] - len(PLANT_POT) - 1)
+VINE_Y = TIER_BOARDS[0]
+LAMP_HEIGHT = 7
+LAMP_KEEP_OUT = (DECOR_X - 1, TIER_BOARDS[1] - LAMP_HEIGHT - 1, DECOR_X + 7, TIER_BOARDS[1] - 1)
+OVERGROWTH_PER_WEEK = 1.5
+
+
+def _mix(x: int, y: int) -> int:
+    return ((x * 73856093) ^ (y * 19349663)) % 1009
+
+
+def _overgrowth_order() -> tuple[tuple[int, int], ...]:
+    """Where the plant goes once it has reached its full height, in the order it gets there:
+    it bushes out round the stem, sends a vine left along the top shelf's edge with a leaf
+    hanging every few books, then drops a tendril down each side of the lamp, and at the
+    last fills the bush in. Nothing here is under the header, on a book, on the lamp or its
+    margin, or in the summary below the shelves."""
+    stem_x = DECOR_X + 3
+    tall = plant_rows(PLANT_MAX_STREAK)
+    top = TIER_BOARDS[0] - len(tall)
+    taken = {
+        (DECOR_X + dx, top + dy)
+        for dy, row in enumerate(tall)
+        for dx, cell in enumerate(row)
+        if cell != "."
+    }
+    cells = [
+        (x, y)
+        for y in range(BUSH_Y[0], BUSH_Y[1] + 1)
+        for x in range(BUSH_X[0], BUSH_X[1] + 1)
+        if (x, y) not in taken
+    ]
+    by_reach = sorted(cells, key=lambda c: (abs(c[0] - stem_x) + (c[1] - BUSH_Y[0]) // 3, _mix(*c)))
+    leafy = [c for c in by_reach if _mix(*c) % 5 < 3]
+    filler = [c for c in by_reach if _mix(*c) % 5 >= 3]
+    vine: list[tuple[int, int]] = []
+    for x in range(BUSH_X[0] - 1, -1, -1):
+        vine.append((x, VINE_Y))
+        if x % 5 == 2:
+            vine += [(x, VINE_Y + 1), (x, VINE_Y + 2)]
+    tendrils: list[tuple[int, int]] = []
+    right, left = SIZE - 2, DECOR_X - 3
+    for y in range(TIER_BOARDS[0] - 2, TIER_BOARDS[1]):
+        tendrils.append((right, y))
+        if y % 3 == 0:
+            tendrils.append((right + 1, y))
+        if VINE_Y + 2 <= y < LAMP_KEEP_OUT[1] and y % 2 == 0:
+            tendrils.append((left, y))
+    return (*leafy[:30], *vine, *tendrils, *leafy[30:], *filler)
+
+
+OVERGROWTH = _overgrowth_order()
+
+
+def overgrowth(streak: int | None) -> tuple[tuple[int, int], ...]:
+    """The pixels of green beyond the potted plant: none through PLANT_MAX_STREAK weeks, then
+    three more every two weeks, in OVERGROWTH's order, until there is nowhere left to grow
+    (Max, 2026-11-20: "it's fine if it's totally overgrown ... if I follow the habit for 2
+    years"). A longer streak always holds every pixel of a shorter one."""
+    if streak is None or streak <= PLANT_MAX_STREAK:
+        return ()
+    count = int((streak - PLANT_MAX_STREAK) * OVERGROWTH_PER_WEEK + 0.5)
+    return OVERGROWTH[:count]
+
+
 LAMP = (
     "..yyy..",
     ".yyyyy.",
@@ -537,6 +635,7 @@ LAMP = (
     "..www..",
 )
 DECOR_INK: dict[str, Color] = {"g": GREEN, "p": CORAL, "y": GOLD, "w": TEXT}
+assert len(LAMP) == LAMP_HEIGHT
 # The lamp's shade by the night recovery score: red at the cue line and under, the lamp's
 # own gold on an ordinary night, green a scale unit and more above it.
 LAMP_STOPS: tuple[tuple[float, Color], ...] = ((100 / 3, RED), (50.0, GOLD), (200 / 3, GREEN))
@@ -613,7 +712,8 @@ def _draw_decor(
 def _books_base(view: DayView) -> Frame:
     """A two-shelf bookcase (style B, 2026-11-15): a read book is its lit spine with a band,
     an unread slot the outline of the book to come in the month theme's ring (one quiet tone
-    for every slot; Max, 2026-11-09), a plant on the top shelf and a lamp on the lower, all
+    for every slot; Max, 2026-11-09), a plant on the top shelf that grows with the streak
+    (`plant_rows`) and a lamp on the lower, all
     on the page's one ground, which the summary below shares. The count is the header's stamp.
     The lamp's shade is `lamp_shade(view)` (Max, 2026-11-20: a signal for him alone, with
     no word or number on the panel; "green, yellow, red ... with gradients between")."""
@@ -639,7 +739,10 @@ def _books_base(view: DayView) -> Frame:
                 pixels[x0, y] = pixels[x1, y] = theme.ring
     for board in TIER_BOARDS:
         fill_rect(frame, 0, board, SIZE - 1, board + 1, WOOD)
-    _draw_decor(frame, 0, PLANT)
+    streak = _count(view.streak_weeks)
+    for x, y in overgrowth(streak):
+        pixels[x, y] = LEAF_DARK if _mix(x, y) % 3 == 0 else GREEN
+    _draw_decor(frame, 0, plant_rows(streak))
     _draw_decor(frame, 1, LAMP, {"y": lamp_shade(view)})
     return frame
 

@@ -17,10 +17,11 @@
 \section*{Status}
 Implemented in \texttt{app/metrics/bandwidth.py} and stored per day in
 \texttt{daily\_metrics}. It replaces the first draft, which a formal audit and a
-signal-validity review took apart (Section~\ref{sec:dropped}). The score compares
-last night with Max's own previous four weeks. It has not been checked against how
-he felt, and no self-report will be collected, so it is a statement about the
-night and not a measurement of mood or judgement.
+signal-validity review took apart (Section~\ref{sec:dropped}). Sleep is scored on
+bands Max set himself; sleeping heart rate is compared with his own previous four
+weeks. The score has not been checked against how he felt, and no self-report
+will be collected, so it is a statement about the night and not a measurement of
+mood or judgement.
 
 \section{Inputs}
 For wake day $d$ in America/New\_York:
@@ -40,28 +41,32 @@ $c$ & Censored: no heart-rate reading in the 90 minutes after the night ends,
 \end{tabular}
 \end{center}
 
-\section{Standardisation}
-One rule for both terms. Let $H_i$ be the values of input $i$ on days
-$d-28, \dots, d-1$, censored nights left out. A term is absent when its input is
-absent or $|H_i| < 14$.
-\begin{align}
-m_i &= \med(H_i) \\
-\sigma_i &= \max\!\big(1.4826 \cdot \med_{v \in H_i} |v - m_i|,\; f_i\big),
-  \qquad f_s = 1.0\ \text{h},\quad f_h = 2.0\ \text{bpm}
-\end{align}
-The sleep reference is capped, because a median above eight hours reflects
-catch-up sleep and not need:
-\begin{equation}
-r_s = \min(m_s,\, 8.0), \qquad r_h = m_h
-\end{equation}
-With $\tilde z_s = (x_s - r_s)/\sigma_s$ and $\tilde z_h = -(x_h - r_h)/\sigma_h$:
-\begin{align}
-z_s &= \clamp(\tilde z_s,\, -3,\, 1) \\
-z_h &= \clamp(\tilde z_h,\, -3,\, 3)
-\end{align}
-The sleep term stops at $+1$: a long night is not evidence of a good one, and at
-$+3$ a very long night could cancel a raised sleeping heart rate.
+\section{The Sleep Term}
+Max's ruling of 20 November 2026: too much sleep costs what too little does
+(``it's not too much about deprivation that is the issue for me, but rather
+oversleeping''). The term is his bands, joined by straight lines and flat beyond
+either end:
+\begin{center}
+\begin{tabular}{lrrrrrrrrrr}
+\toprule
+Hours & 4.5 & 5.5 & 6.0 & 6.5 & 7.0 & 8.5 & 9.0 & 9.5 & 10.0 & 11.0 \\
+$z_s$ & $-3$ & $-2$ & 0 & 0 & $+2$ & $+2$ & 0 & 0 & $-2$ & $-3$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+So $z_s = +2$ from 7 to 8.5 hours, 0 from 6 to 6.5 and from 9 to 9.5, and $-2$
+at 5.5 and at 10. It uses no history, so it exists from the first night.
 
+\section{The Heart-Rate Term}
+Let $H$ be the sleeping heart rates on days $d-28, \dots, d-1$, censored nights
+left out. The term is absent when $x_h$ is absent or $|H| < 14$.
+\begin{align}
+m &= \med(H) \\
+\sigma &= \max\!\big(1.4826 \cdot \med_{v \in H} |v - m|,\; 2.0\ \text{bpm}\big) \\
+z_h &= \clamp\!\Big(-\frac{x_h - m}{\sigma},\, -3,\, 3\Big)
+\end{align}
+
+\section{Censored Nights and Absent Terms}
 A censored night saw only part of the night. Its hours are a lower bound, and the
 first half of a night runs above the second, so neither term may go below zero:
 \begin{equation}
@@ -80,35 +85,39 @@ With both terms absent there is no reading: $B$ is stored as null, never 50, and
 the cue is off. The cue is decided on the $z$ sum, not on the rounded $B$, and is
 a pure function of the stored data and the clock, recomputed on every engine run.
 
-One carry rule keeps the cue from switching off at midnight: today, before noon,
-with no night on record yet, shows yesterday's cue. A past day never carries, and
-a carried cue is not carried again.
+One carry rule keeps the lamp from changing at midnight: today, before noon, with
+no night on record yet, shows yesterday's cue and score. A past day never
+carries, and a carried value is not carried again.
 
-$B$ is an affine label for the $z$ sum. Fifty is a night like his usual; $100/3$
-is the cue line. It is not a percentage and not a percentile.
+$B$ is an affine label for the $z$ sum: $100/3$ is the cue line, 50 a middling
+night, $200/3$ a night in the green band with an ordinary heart rate. It is not a
+percentage and not a percentile.
 
 \section{Properties}
 \begin{claim}[Range]
-Whenever $B$ is defined, $0 \le B \le 250/3 \approx 83.33$, with no clamp applied
+Whenever $B$ is defined, $0 \le B \le 275/3 \approx 91.67$, with no clamp applied
 to $B$. In particular $B$ never leaves $[0, 100]$.
 \end{claim}
 \begin{proof}
-$z_s \in [-3, 1]$ and $z_h \in [-3, 3]$ by their own clamps, or equal 0, so
-$z_s + z_h \in [-6, 4]$ and $B \in [50 - 50,\, 50 + 100/3]$. Both ends are
-attained.
+$z_s \in [-3, 2]$ because a piecewise-linear function takes its extremes at its
+knots, and $z_h \in [-3, 3]$ by its clamp; either may be 0. So
+$z_s + z_h \in [-6, 5]$ and $B \in [0,\, 50 + 125/3]$. Both ends are attained.
 \end{proof}
-\begin{claim}[Monotonicity]
-On valid inputs, $B$ is non-decreasing in $x_s$ and non-increasing in $x_h$.
+\begin{claim}[Shape]
+On valid inputs, $B$ is non-increasing in $x_h$. In $x_s$ it is continuous,
+non-decreasing up to 7 hours, constant to 8.5, and non-increasing after.
 \end{claim}
 \begin{proof}
-$r_i$ and $\sigma_i > 0$ depend only on history, so each $\tilde z_i$ is monotone
-in its input; clamping and $\max(\cdot, 0)$ preserve order.
+$m$ and $\sigma > 0$ depend only on history; clamping and $\max(\cdot, 0)$
+preserve order. The sleep knots rise to 7, hold to 8.5, and fall after.
 \end{proof}
 At the edge of validity an input becomes absent and its term returns to 0, which
 is a jump by design: 16.01 hours is not a night.
 \begin{claim}[Bounded Sensitivity]
-One hour of sleep moves $B$ by at most $25/3 \approx 8.33$ points and one bpm by
-at most $25/6 \approx 4.17$, because $\sigma_s \ge 1.0$ and $\sigma_h \ge 2.0$.
+One bpm moves $B$ by at most $25/6 \approx 4.17$ points, because
+$\sigma \ge 2.0$. A tenth of an hour of sleep moves it by at most
+$10/3 \approx 3.33$, on the steepest sides (5.5 to 6, 6.5 to 7, 8.5 to 9, 9.5 to
+10), and by nothing inside a band.
 \end{claim}
 \begin{claim}[Missing Data]
 An absent term changes $B$ by exactly its own contribution; a censored night
@@ -127,12 +136,13 @@ of heart-rate readings. \texttt{uv run python -m tools.metrics -{}-show DATE}
 prints it. Fifty plus the two point values re-adds to $B$ within 0.01.
 
 \section{A Worked Case}
-History: fourteen nights of 7.5 h at a sleeping heart rate of 55 bpm, so both
-scales sit at their floors. Last night: 6.0 h at 57 bpm.
+History: fourteen nights at a sleeping heart rate of 55 bpm, so the scale sits at
+its floor. Last night: 5.5 h at 57 bpm.
 \begin{align*}
-z_s &= (6.0 - 7.5)/1.0 = -1.5 & z_h &= -(57 - 55)/2.0 = -1.0 \\
-B &= 50 + \tfrac{25}{3}(-2.5) = 29.17 & &\text{cue on}
+z_s &= -2 \quad \text{(the knot at 5.5)} & z_h &= -(57 - 55)/2.0 = -1.0 \\
+B &= 50 + \tfrac{25}{3}(-3) = 25.00 & &\text{cue on}
 \end{align*}
+The same heart rate after 7.5 h gives $z_s = +2$ and $B = 58.33$.
 
 \section{On the Panel}
 The number is never shown. It colours the shade of the lamp on the lower Books
@@ -161,16 +171,17 @@ and the days the cue would have been on) are kept on the home machine in
 
 \section{Known Limits}
 \begin{itemize}
-\item No criterion. Nothing is logged by hand, so the weights stay priors and the
-  score can be audited for arithmetic, not for truth.
+\item No criterion. Nothing is logged by hand, so the bands and the weights are
+  Max's judgement and priors, and the score can be audited for arithmetic, not
+  for truth.
+\item A night in the green band cannot reach the cue on heart rate alone: the
+  lowest it can score is $50 + \tfrac{25}{3}(2 - 3) = 41.67$, orange. A night of
+  illness with ordinary hours shows as orange, not red.
 \item A night with no sleep record gives no reading, and those are common.
 \item Sleeping heart rate is taken over the whole session, awake minutes included.
 \item A night that begins before 18:00 is a nap by the dashboard's rules and gives
   no reading.
-\item Sleeping heart rate alone turns the cue on at 4 bpm over his median. The
-  mathematician would raise that floor to 3 bpm; the biostatistician would not.
-\item Marking a past night censored changes the baseline and can move a later day
-  across the line.
+\item The bands are fixed numbers. If his need changes, they are edited by hand.
 \end{itemize}
 
 \section{What Was Dropped and Why}\label{sec:dropped}
@@ -195,6 +206,9 @@ Terminal Clip & It fired on legal inputs and turned a NaN into a zero. The range
   now holds by construction. \\
 Three-Night Sleep Term & It counted last night twice and assumed independent
   nights. \\
+Personal Sleep Baseline & The audit's version scored sleep against his own median
+  and let a long night count in his favour. Max replaced it with fixed bands in
+  which oversleeping counts against. \\
 \bottomrule
 \end{tabular}
 \end{center}

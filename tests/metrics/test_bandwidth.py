@@ -10,6 +10,7 @@ import math
 import random
 from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
+from itertools import pairwise
 
 import pytest
 
@@ -19,6 +20,7 @@ from app.metrics.bandwidth import (
     NightSignal,
     bandwidth_json,
     night_signals,
+    sleep_band_z,
 )
 from app.metrics.engine import recompute
 from app.metrics.keys import DAILY_KEYS
@@ -58,55 +60,87 @@ def score(
     return bandwidth_json(DAY, hours, nights)
 
 
-def test_a_short_night_with_a_raised_heart_rate_is_29_17_and_low():
-    """z_sleep = (6.0 - 7.5) / 1.0 = -1.5; z_hr = -(57 - 55) / 2.0 = -1.0;
-    B = 50 + (25/3) x -2.5 = 29.17."""
-    out = score(6.0, 57.0)
-    assert out["bandwidth"] == 29.17
+def test_a_short_night_with_a_raised_heart_rate_is_25_and_low():
+    """5.5 h is the foot of the short side, z = -2; z_hr = -(57 - 55) / 2.0 = -1.0;
+    B = 50 + (25/3) x -3 = 25."""
+    out = score(5.5, 57.0)
+    assert out["bandwidth"] == 25.0
     assert out["bandwidth_low"] is True
     trace = out["bandwidth_trace"]
     assert trace["sleep"] == {
-        "x": 6.0,
-        "reference": 7.5,
-        "scale": 1.0,
-        "z": -1.5,
-        "points": -12.5,
+        "x": 5.5,
+        "reference": None,
+        "scale": None,
+        "z": -2.0,
+        "points": -16.67,
+        "history": None,
+    }
+    assert trace["sleep_hr"] == {
+        "x": 57.0,
+        "reference": 55.0,
+        "scale": 2.0,
+        "z": -1.0,
+        "points": -8.33,
         "history": 14,
     }
-    assert trace["sleep_hr"]["z"] == -1.0
-    assert trace["sleep_hr"]["points"] == -8.33
     readded = 50 + trace["sleep"]["points"] + trace["sleep_hr"]["points"]
     assert abs(readded - out["bandwidth"]) <= 0.01
 
 
-def test_the_cue_line_is_a_z_sum_of_exactly_minus_two():
-    on = score(6.5, 57.0)
-    assert (on["bandwidth"], on["bandwidth_low"]) == (33.33, True)
-    off = score(6.51, 57.0)
-    assert (off["bandwidth"], off["bandwidth_low"]) == (33.42, False)
+BANDS = [
+    (3.0, 25.0),
+    (4.5, 25.0),
+    (5.0, 29.17),
+    (5.5, 33.33),
+    (5.75, 41.67),
+    (6.0, 50.0),
+    (6.03, 50.0),
+    (6.5, 50.0),
+    (6.75, 58.33),
+    (7.0, 66.67),
+    (7.75, 66.67),
+    (8.5, 66.67),
+    (8.75, 58.33),
+    (9.0, 50.0),
+    (9.5, 50.0),
+    (9.75, 41.67),
+    (10.0, 33.33),
+    (10.5, 29.17),
+    (11.0, 25.0),
+    (15.0, 25.0),
+]
 
 
-def test_an_ordinary_night_is_fifty_and_the_ends_are_reached_without_a_clamp_on_b():
-    assert score(7.5, 55.0)["bandwidth"] == 50.0
-    assert score(0.5, 110.0)["bandwidth"] == 0.0
-    assert score(15.0, 31.0)["bandwidth"] == 83.33
+@pytest.mark.parametrize(("hours", "expected"), BANDS)
+def test_sleep_is_scored_on_maxs_bands_with_an_ordinary_heart_rate(hours, expected):
+    """Green from 7 to 8.5 h, the middle from 6 to 6.5 and 9 to 9.5, the cue line at 5.5
+    and at 10: too much sleep costs what too little does."""
+    assert score(hours, 55.0)["bandwidth"] == expected
+    assert score(hours, 55.0)["bandwidth_low"] is (expected <= 33.33)
 
 
-def test_a_long_night_counts_for_one_scale_unit_at_most():
-    """12 h against 7.5 is z = +4.5 unclamped; it enters as +1, so it cannot cancel a
-    sleeping heart rate two scale units up (z = -2): 50 + (25/3) x -1 = 41.67."""
-    assert score(8.5, 55.0)["bandwidth"] == 58.33
-    assert score(12.0, 55.0)["bandwidth"] == 58.33
-    assert score(12.0, 59.0)["bandwidth"] == 41.67
+def test_the_bands_are_one_unbroken_line():
+    """No jump anywhere: 0.01 h moves the sleep term by at most 0.04 (the steepest side
+    falls 2 in half an hour), a third of a point."""
+    values = [sleep_band_z(k / 100) for k in range(1, 1601)]
+    assert max(abs(b - a) for a, b in pairwise(values)) <= 0.04 + 1e-9
+    assert (min(values), max(values)) == (-3.0, 2.0)
+    assert sleep_band_z(7.75) == sleep_band_z(7.0) == sleep_band_z(8.5) == 2.0
 
 
 def test_the_cue_is_decided_on_the_z_sum_not_on_the_rounded_score():
     """A z sum of -1.9999 stores 33.33 like the line itself, and is off."""
-    near = score(6.5001, 57.0)
+    near = score(5.75, 56.9998)
     assert (near["bandwidth"], near["bandwidth_low"]) == (33.33, False)
-    for hours, rate in ((5.54, 55.08), (6.3, 56.6), (6.9, 57.8)):
+    for hours, rate in ((5.6, 55.8), (5.9, 58.2), (9.9, 55.8), (5.75, 57.0)):
         tie = score(hours, rate)
         assert (tie["bandwidth"], tie["bandwidth_low"]) == (33.33, True), (hours, rate)
+
+
+def test_the_ends_are_reached_without_a_clamp_on_b():
+    assert score(4.0, 110.0)["bandwidth"] == 0.0
+    assert score(12.0, 110.0)["bandwidth"] == 0.0
+    assert score(8.0, 31.0)["bandwidth"] == 91.67
 
 
 def test_an_absent_term_adds_nothing_and_the_other_is_not_reweighted():
@@ -115,40 +149,42 @@ def test_an_absent_term_adds_nothing_and_the_other_is_not_reweighted():
     assert (alone["bandwidth"], alone["bandwidth_low"]) == (37.5, False)
     assert alone["bandwidth_trace"]["sleep"] is None
     assert score(None, 59.0)["bandwidth_low"] is True
-    sleep_only = score(6.0, None)
-    assert (sleep_only["bandwidth"], sleep_only["bandwidth_low"]) == (37.5, False)
+    sleep_only = score(5.75, None)
+    assert (sleep_only["bandwidth"], sleep_only["bandwidth_low"]) == (41.67, False)
+
+
+def test_sleep_needs_no_history_and_heart_rate_needs_fourteen_nights():
+    assert score(8.0, 90.0, base=history(nights=0))["bandwidth"] == 66.67
+    short = score(8.0, 90.0, base=history(nights=MIN_HISTORY - 1))
+    assert short["bandwidth_trace"]["sleep_hr"] is None
+    assert score(8.0, 90.0, base=history(nights=MIN_HISTORY))["bandwidth"] == 41.67
 
 
 def test_no_term_is_no_reading_never_fifty_and_never_the_cue():
     out = score(None, None)
     assert out["bandwidth"] is None
     assert out["bandwidth_low"] is False
-    short = score(3.0, 90.0, base=history(nights=MIN_HISTORY - 1))
-    assert (short["bandwidth"], short["bandwidth_low"]) == (None, False)
-    assert score(3.0, 90.0, base=history(nights=MIN_HISTORY))["bandwidth"] == 0.0
+    thin = score(None, 90.0, base=history(nights=MIN_HISTORY - 1))
+    assert (thin["bandwidth"], thin["bandwidth_low"]) == (None, False)
 
 
-def test_a_censored_night_is_a_lower_bound_so_it_never_lowers_the_score():
+def test_a_censored_night_never_lowers_the_score():
     """The watch came off at 4.0 h: sleep was at least that, so the term is 0, not -3."""
     cut = score(4.0, 55.0, censored=True)
     assert (cut["bandwidth"], cut["bandwidth_low"]) == (50.0, False)
     assert cut["bandwidth_trace"]["censored"] is True
     assert score(4.0, 55.0)["bandwidth"] == 25.0
-    assert score(8.0, 55.0, censored=True)["bandwidth"] == 54.17
+    assert score(8.0, 55.0, censored=True)["bandwidth"] == 66.67
+    assert score(10.5, 55.0, censored=True)["bandwidth"] == 50.0
 
 
 def test_a_censored_night_cannot_lower_the_heart_rate_term_either():
     """Half a night's median runs high (the first half sits about 2 bpm over the second),
     so a raised rate on a censored night is 0, and a lower one still counts."""
-    assert score(7.5, 61.0, censored=True)["bandwidth"] == 50.0
-    assert score(7.5, 61.0)["bandwidth"] == 25.0
-    assert score(7.5, 53.0, censored=True)["bandwidth"] == 58.33
+    assert score(6.0, 61.0, censored=True)["bandwidth"] == 50.0
+    assert score(6.0, 61.0)["bandwidth"] == 25.0
+    assert score(6.0, 53.0, censored=True)["bandwidth"] == 58.33
     assert score(4.0, 70.0, censored=True)["bandwidth_low"] is False
-
-
-def test_the_censored_bound_is_the_capped_reference_not_the_median():
-    """History of 9.0 h nights: reference 8.0. A censored 8.5 h night is +0.5, not +1."""
-    assert score(8.5, 55.0, censored=True, base=history(sleep=9.0))["bandwidth"] == 54.17
 
 
 def test_a_night_with_no_signal_row_is_treated_as_censored():
@@ -169,7 +205,7 @@ def test_an_impossible_sleeping_heart_rate_is_absent(rate):
     out = score(None, rate)
     assert out["bandwidth"] is None
     assert json.dumps(out, allow_nan=False)
-    assert score(6.0, rate)["bandwidth"] == 37.5
+    assert score(5.75, rate)["bandwidth"] == 41.67
 
 
 def test_yesterdays_cue_is_carried_only_while_today_awaits_its_night():
@@ -186,13 +222,12 @@ def test_yesterdays_cue_is_carried_only_while_today_awaits_its_night():
     assert carried["bandwidth_trace"]["carried_from"] == yesterday.isoformat()
     hours[yesterday] = 7.5
     ordinary = bandwidth_json(DAY, hours, nights, awaiting_night=True)
-    assert (ordinary["bandwidth_low"], ordinary["bandwidth_lamp"]) == (False, 41.67)
+    assert (ordinary["bandwidth_low"], ordinary["bandwidth_lamp"]) == (False, 58.33)
     del hours[yesterday], nights[yesterday]
     nothing = bandwidth_json(DAY, hours, nights, awaiting_night=True)
     assert (nothing["bandwidth_lamp"], nothing["bandwidth_trace"]["carried_from"]) == (None, None)
     hours[yesterday], nights[yesterday] = 5.0, NightSignal(57.0, 40, False)
-    hours[yesterday] = 5.0
-    hours[DAY], nights[DAY] = 7.5, NightSignal(55.0, 40, False)
+    hours[DAY], nights[DAY] = 6.25, NightSignal(55.0, 40, False)
     arrived = bandwidth_json(DAY, hours, nights, awaiting_night=True)
     assert (arrived["bandwidth"], arrived["bandwidth_low"]) == (50.0, False)
     assert arrived["bandwidth_lamp"] == 50.0
@@ -201,43 +236,33 @@ def test_yesterdays_cue_is_carried_only_while_today_awaits_its_night():
     assert bandwidth_json(DAY, hours, nights, awaiting_night=True)["bandwidth_low"] is False
 
 
-def test_censored_nights_stay_out_of_the_history():
+def test_censored_nights_stay_out_of_the_heart_rate_history():
     hours, nights = history()
     for k in range(1, 4):
         nights[DAY - timedelta(days=k)] = NightSignal(55.0, 40, True)
     thin = score(6.0, 57.0, base=(hours, nights))["bandwidth_trace"]
-    assert thin["sleep"] is None and thin["sleep_hr"] is None
+    assert thin["sleep"] is not None and thin["sleep_hr"] is None
     for k in range(15, 18):
-        hours[DAY - timedelta(days=k)] = 7.5
         nights[DAY - timedelta(days=k)] = NightSignal(55.0, 40, False)
-    full = score(6.0, 57.0, base=(hours, nights))["bandwidth_trace"]
-    assert full["sleep"]["history"] == 14 and full["sleep_hr"]["history"] == 14
-
-
-def test_the_reference_night_is_capped_at_eight_hours():
-    out = score(8.0, 55.0, base=history(sleep=9.0))
-    assert out["bandwidth_trace"]["sleep"]["reference"] == 8.0
-    assert out["bandwidth"] == 50.0
+    assert score(6.0, 57.0, base=(hours, nights))["bandwidth_trace"]["sleep_hr"]["history"] == 14
 
 
 def test_the_scale_is_the_mad_when_it_is_wider_than_the_floor():
-    """Seven nights of 6.0 and seven of 9.0: median 7.5, MAD 1.5, scale 1.4826 x 1.5."""
+    """Seven nights at 52 bpm and seven at 58: median 55, MAD 3, scale 1.4826 x 3."""
     hours, nights = history()
-    for k, day in enumerate(sorted(hours)):
-        hours[day] = 6.0 if k % 2 else 9.0
-    trace = score(6.0, 55.0, base=(hours, nights))["bandwidth_trace"]["sleep"]
-    assert trace["scale"] == 2.22
-    assert trace["z"] == pytest.approx(-1.5 / (1.4826 * 1.5), abs=1e-4)
+    for k, day in enumerate(sorted(nights)):
+        nights[day] = NightSignal(52.0 if k % 2 else 58.0, 40, False)
+    trace = score(6.0, 59.0, base=(hours, nights))["bandwidth_trace"]["sleep_hr"]
+    assert trace["scale"] == 4.45
+    assert trace["z"] == pytest.approx(-4 / (1.4826 * 3), abs=1e-4)
 
 
 def test_only_the_prior_28_days_are_history():
     hours, nights = history(nights=28)
-    old = DAY - timedelta(days=29)
-    hours[old], nights[old] = 1.0, NightSignal(100.0, 40, False)
-    assert score(7.5, 55.0, base=(hours, nights))["bandwidth_trace"]["sleep"]["history"] == 28
-    future = DAY + timedelta(days=1)
-    hours[future], nights[future] = 1.0, NightSignal(100.0, 40, False)
-    assert score(7.5, 55.0, base=(hours, nights))["bandwidth"] == 50.0
+    nights[DAY - timedelta(days=29)] = NightSignal(100.0, 40, False)
+    assert score(6.0, 55.0, base=(hours, nights))["bandwidth_trace"]["sleep_hr"]["history"] == 28
+    nights[DAY + timedelta(days=1)] = NightSignal(100.0, 40, False)
+    assert score(6.0, 55.0, base=(hours, nights))["bandwidth"] == 50.0
 
 
 HOSTILE = (float("nan"), float("inf"), float("-inf"), 0.0, -4.0, 1e308, 16.0, 16.01, 5e-324)
@@ -266,39 +291,39 @@ def test_every_score_is_in_range_or_absent_whatever_the_inputs():
         if value is None:
             assert out["bandwidth_low"] is False
             continue
-        assert isinstance(value, float) and math.isfinite(value) and 0.0 <= value <= 83.34
+        assert isinstance(value, float) and math.isfinite(value) and 0.0 <= value <= 91.67
         assert out["bandwidth_low"] is (value <= 33.33) or abs(value - 100 / 3) < 0.01
         seen_low, seen_high = seen_low or value < 30, seen_high or value > 60
         readings += 1
     assert seen_low and seen_high and readings > 1000, readings
 
 
-def test_more_sleep_never_lowers_it_and_a_higher_sleeping_heart_rate_never_raises_it():
+def test_a_higher_sleeping_heart_rate_never_raises_it_and_sleep_peaks_in_the_green_band():
     rng = random.Random(7)
     for _ in range(300):
-        base = history(sleep=rng.uniform(5, 10), sleep_hr=rng.uniform(45, 70))
+        base = history(sleep_hr=rng.uniform(45, 70))
         censored = rng.random() < 0.3
-        rate = rng.uniform(40, 90)
-        by_sleep = [
-            score(h / 10, rate, censored=censored, base=base)["bandwidth"] for h in range(1, 161)
-        ]
-        assert by_sleep == sorted(by_sleep)
         hours = rng.uniform(3, 11)
         by_rate = [
             score(hours, float(r), censored=censored, base=base)["bandwidth"]
             for r in range(30, 121)
         ]
         assert by_rate == sorted(by_rate, reverse=True)
+        rate = rng.uniform(40, 90)
+        by_sleep = [score(h / 10, rate, base=base)["bandwidth"] for h in range(1, 161)]
+        rising, falling = by_sleep[:70], by_sleep[84:]
+        assert rising == sorted(rising) and falling == sorted(falling, reverse=True)
+        assert max(by_sleep) == by_sleep[75]
 
 
 def test_one_wobble_in_an_input_moves_the_score_by_a_bounded_amount():
-    """Lipschitz: 25/3 points per scale unit, so 8.33 per hour and 4.17 per bpm at the
-    floors, plus 0.01 for the two-decimal rounding of each stored score."""
-    for tenth in range(40, 110):
+    """25/3 points per z: sleep's steepest side is 4 z an hour, so 3.34 per tenth of an
+    hour; heart rate 4.17 per bpm at its floor; plus 0.01 for each stored rounding."""
+    for tenth in range(10, 150):
         a, b = score(tenth / 10, 55.0)["bandwidth"], score(tenth / 10 + 0.1, 55.0)["bandwidth"]
-        assert abs(b - a) <= 0.85
+        assert abs(b - a) <= 3.35
     for rate in range(40, 80):
-        a, b = score(7.5, float(rate))["bandwidth"], score(7.5, rate + 1.0)["bandwidth"]
+        a, b = score(6.0, float(rate))["bandwidth"], score(6.0, rate + 1.0)["bandwidth"]
         assert abs(b - a) <= 4.18
 
 
@@ -396,14 +421,16 @@ NOW = datetime(2026, 10, 15, 16, tzinfo=UTC)
 
 def test_the_engine_scores_stored_nights_and_the_view_carries_only_the_cue(db, settings):
     stored_history(db)
-    store_night(db, DAY, 6.0, 57.0)
+    store_night(db, DAY, 5.5, 57.0)
     db.commit()
     recompute(db, settings, DAY.isoformat(), NOW)
     row = daily(db, DAY)
-    assert (row["bandwidth"], row["bandwidth_low"], row["bandwidth_lamp"]) == (29.17, True, 29.17)
-    assert view_from_db(db, settings, DAY.isoformat()).bandwidth_lamp == 29.17
+    assert (row["bandwidth"], row["bandwidth_low"], row["bandwidth_lamp"]) == (25.0, True, 25.0)
+    assert view_from_db(db, settings, DAY.isoformat()).bandwidth_lamp == 25.0
     assert row["bandwidth_trace"]["hr_rows"] == 40
-    assert daily(db, DAY - timedelta(days=1))["bandwidth"] is None
+    before_history = daily(db, DAY - timedelta(days=1))
+    assert before_history["bandwidth"] == 66.67, "7.5 h scores with no heart-rate history yet"
+    assert before_history["bandwidth_trace"]["sleep_hr"] is None
     assert view_from_db(db, settings, DAY.isoformat()).bandwidth_low is True
     assert view_from_db(db, settings, (DAY - timedelta(days=1)).isoformat()).bandwidth_low is False
     before = daily(db, DAY)
@@ -413,12 +440,12 @@ def test_the_engine_scores_stored_nights_and_the_view_carries_only_the_cue(db, s
 
 def test_after_midnight_the_cue_holds_until_the_new_night_or_noon(db, settings):
     stored_history(db)
-    store_night(db, DAY, 6.0, 57.0)
+    store_night(db, DAY, 5.5, 57.0)
     db.commit()
     tomorrow = DAY + timedelta(days=1)
     recompute(db, settings, tomorrow.isoformat(), datetime(2026, 10, 16, 5, tzinfo=UTC))
     row = daily(db, tomorrow)
-    assert (row["bandwidth"], row["bandwidth_low"], row["bandwidth_lamp"]) == (None, True, 29.17)
+    assert (row["bandwidth"], row["bandwidth_low"], row["bandwidth_lamp"]) == (None, True, 25.0)
     assert row["bandwidth_trace"]["carried_from"] == DAY.isoformat()
     assert view_from_db(db, settings, tomorrow.isoformat()).bandwidth_low is True
     recompute(db, settings, tomorrow.isoformat(), datetime(2026, 10, 16, 16, 1, tzinfo=UTC))
@@ -435,7 +462,7 @@ def test_after_midnight_the_cue_holds_until_the_new_night_or_noon(db, settings):
     db.commit()
     recompute(db, settings, tomorrow.isoformat(), datetime(2026, 10, 16, 12, tzinfo=UTC))
     row = daily(db, tomorrow)
-    assert (row["bandwidth"], row["bandwidth_low"]) == (50.0, False)
+    assert (row["bandwidth"], row["bandwidth_low"]) == (66.67, False)
 
 
 def test_a_night_the_watch_left_early_does_not_draw_the_cue_through_the_engine(db, settings):
@@ -451,12 +478,13 @@ def test_a_night_the_watch_left_early_does_not_draw_the_cue_through_the_engine(d
 def test_the_score_is_an_engine_key_and_never_reaches_the_summary_model(db, settings):
     assert BANDWIDTH_KEYS <= DAILY_KEYS
     stored_history(db)
-    store_night(db, DAY, 6.0, 57.0)
+    store_night(db, DAY, 5.6, 57.5)
     db.commit()
     recompute(db, settings, DAY.isoformat(), NOW)
+    assert daily(db, DAY)["bandwidth"] == 26.25
     text = build_payload(db, settings, (DAY + timedelta(days=1)).isoformat()).text()
     assert "bandwidth" not in text
-    assert "29.17" not in text
+    assert "26.25" not in text
 
 
 def shade_pixels(view: DayView) -> set:

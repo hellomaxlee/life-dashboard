@@ -1,21 +1,23 @@
 """Bandwidth: a night recovery score on 0 to 100 (notes.txt § Goal model, "Bandwidth").
 
-Two terms, each last night against Max's own prior four weeks: hours asleep, and the median
-heart rate while asleep. Each is a robust z (median, 1.4826 x MAD with a floor); sleep is
-clamped to [-3, 1], because a long night is not evidence of a good one, and sleeping heart
-rate to [-3, 3]. An absent term contributes 0 and the weights are never renormalised.
+Two terms for last night. Sleep is scored on Max's own bands (2026-11-20: "it's not too
+much about deprivation that is the issue for me, but rather oversleeping"): +2 from 7 to
+8.5 hours, 0 from 6 to 6.5 and from 9 to 9.5, -2 at 5.5 and at 10, straight lines between,
+down to -3 at 4.5 and at 11 and flat beyond. Sleeping heart rate is a robust z against his
+prior four weeks (median, 1.4826 x MAD with a floor), clamped to [-3, 3]. An absent term
+contributes 0 and the weights are never renormalised.
 
     B = 50 + (25 / 3) * (z_sleep + z_sleep_hr)
 
-so B is in [0, 250/3] by construction, with no terminal clamp: 50 is a night like his usual,
-and the cue line 100/3 is a z sum of -2, decided on the z sum and not on the rounded score.
+so B is in [0, 275/3] by construction, with no terminal clamp: 50 is a middling night, and
+the cue line 100/3 is a z sum of -2, decided on the z sum and not on the rounded score.
 A night whose watch came off before waking (no heart-rate row in the 90 minutes after the
 session ends) saw only part of the night, so neither of its terms can go below 0, and it
-stays out of both histories. Until today's night arrives, and no later than noon, today
-carries yesterday's cue and score for the lamp, so neither switches off at midnight.
+stays out of the heart-rate history. Until today's night arrives, and no later than noon,
+today carries yesterday's cue and score for the lamp, so neither switches off at midnight.
 `bandwidth_lamp` is the score the Books lamp is coloured by: today's, or the carried one.
 
-Unchecked against how Max felt: it says last night was unlike his usual nights, no more.
+Unchecked against how Max felt: it says what kind of night last night was, no more.
 """
 
 from __future__ import annotations
@@ -24,6 +26,7 @@ import bisect
 import math
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
+from itertools import pairwise
 from statistics import median
 
 from app.metrics.keys import round_half_up
@@ -31,10 +34,20 @@ from app.metrics.keys import round_half_up
 WINDOW_DAYS = 28
 MIN_HISTORY = 14
 Z_LIMIT = 3.0
-SLEEP_Z_MAX = 1.0
 MAD_TO_SD = 1.4826
-SLEEP_FLOOR_H = 1.0
-SLEEP_REFERENCE_CAP_H = 8.0
+# (hours asleep, z): Max's bands, linear between the knots and flat outside them.
+SLEEP_KNOTS: tuple[tuple[float, float], ...] = (
+    (4.5, -3.0),
+    (5.5, -2.0),
+    (6.0, 0.0),
+    (6.5, 0.0),
+    (7.0, 2.0),
+    (8.5, 2.0),
+    (9.0, 0.0),
+    (9.5, 0.0),
+    (10.0, -2.0),
+    (11.0, -3.0),
+)
 SLEEP_MAX_H = 16.0
 HR_FLOOR_BPM = 2.0
 HR_MIN_BPM = 30.0
@@ -61,10 +74,10 @@ class NightSignal:
 @dataclass(frozen=True)
 class Term:
     x: float
-    reference: float
-    scale: float
     z: float
-    history: int
+    reference: float | None = None
+    scale: float | None = None
+    history: int | None = None
 
     @property
     def points(self) -> float:
@@ -117,8 +130,18 @@ def _baseline(history: list[float], floor: float) -> tuple[float, float] | None:
     return centre, max(spread, floor)
 
 
-def _clamp(z: float, upper: float = Z_LIMIT) -> float:
-    return max(-Z_LIMIT, min(upper, z))
+def _clamp(z: float) -> float:
+    return max(-Z_LIMIT, min(Z_LIMIT, z))
+
+
+def sleep_band_z(hours: float) -> float:
+    """Max's bands as a number: the knots joined by straight lines, flat past either end."""
+    if hours <= SLEEP_KNOTS[0][0]:
+        return SLEEP_KNOTS[0][1]
+    for (lo, below), (hi, above) in pairwise(SLEEP_KNOTS):
+        if hours <= hi:
+            return below + (above - below) * (hours - lo) / (hi - lo)
+    return SLEEP_KNOTS[-1][1]
 
 
 def sleep_term(
@@ -127,15 +150,8 @@ def sleep_term(
     x = sleep_hours.get(day)
     if not _valid_sleep(x):
         return None
-    usable = {d: v for d, v in sleep_hours.items() if _valid_sleep(v) and not _censored(d, nights)}
-    history = _history(usable, day)
-    base = _baseline(history, SLEEP_FLOOR_H)
-    if base is None:
-        return None
-    reference = min(base[0], SLEEP_REFERENCE_CAP_H)
-    lower_bound = max(x, reference) if _censored(day, nights) else x
-    z = _clamp((lower_bound - reference) / base[1], SLEEP_Z_MAX)
-    return Term(x, reference, base[1], z, len(history))
+    z = sleep_band_z(x)
+    return Term(x, max(z, 0.0) if _censored(day, nights) else z)
 
 
 def sleep_hr_term(day: date, nights: dict[date, NightSignal]) -> Term | None:
@@ -151,7 +167,7 @@ def sleep_hr_term(day: date, nights: dict[date, NightSignal]) -> Term | None:
     if base is None:
         return None
     z = _clamp(-(x - base[0]) / base[1])
-    return Term(x, base[0], base[1], max(z, 0.0) if night.censored else z, len(history))
+    return Term(x, max(z, 0.0) if night.censored else z, base[0], base[1], len(history))
 
 
 def _term_json(term: Term | None) -> dict[str, object] | None:
@@ -159,8 +175,8 @@ def _term_json(term: Term | None) -> dict[str, object] | None:
         return None
     return {
         "x": round_half_up(term.x, 2),
-        "reference": round_half_up(term.reference, 2),
-        "scale": round_half_up(term.scale, 2),
+        "reference": None if term.reference is None else round_half_up(term.reference, 2),
+        "scale": None if term.scale is None else round_half_up(term.scale, 2),
         "z": round_half_up(term.z, 4) + 0.0,
         "points": round_half_up(term.points, 2) + 0.0,
         "history": term.history,
