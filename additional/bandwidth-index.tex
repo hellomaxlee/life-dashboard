@@ -4,6 +4,7 @@
 \usepackage[T1]{fontenc}
 \usepackage{lmodern}
 \usepackage{parskip}
+\input{bandwidth-plots}
 \DeclareMathOperator{\clamp}{clamp}
 \DeclareMathOperator{\med}{med}
 \newtheorem{claim}{Claim}
@@ -92,6 +93,38 @@ carries, and a carried value is not carried again.
 $B$ is an affine label for the $z$ sum: $100/3$ is the cue line, 50 a middling
 night, $200/3$ a night in the green band with an ordinary heart rate. It is not a
 percentage and not a percentile.
+
+\section{The Shape of the Score}
+Three pictures of the same function, in the lamp's own colours: red at the cue
+line and under, gold at 50, green at $200/3$ and above.
+
+\begin{figure}[h!]
+\centering
+\bandsfigure{0.92\textwidth}{5.2cm}
+\caption{The sleep bands. The black line is $B$ against hours asleep at an
+ordinary sleeping heart rate ($z_h = 0$); the ground behind it is the colour the
+lamp shows there. The dashed line is the cue.}
+\end{figure}
+
+\begin{figure}[h!]
+\centering
+\surfacefigure{0.76\textwidth}{8.6cm}
+\caption{The whole score as a surface. Hours asleep run left to right and form
+the table-top of the green band with a cliff on each side; a raised sleeping
+heart rate tilts the whole surface down toward the viewer, 4.17 points per bpm
+until the clamp at 6 bpm. The black ridge line is Figure 1.}
+\end{figure}
+
+\begin{figure}[h!]
+\centering
+\mapfigure{0.8\textwidth}{6.2cm}
+\caption{The lamp's colour for every night, seen from above. The black line is
+the cue boundary $z_s + z_h = -2$: a night is red on the raised-heart-rate side
+of it. Inside
+the green band the boundary would need a heart rate 8 bpm over his median, which
+the clamp at 6 never grants, so the middle is never red.}
+\end{figure}
+\clearpage
 
 \section{Properties}
 \begin{claim}[Range]

@@ -29,5 +29,13 @@ Small wins and a completed week get a short celebration, sent to the panel as a 
 |---|---|---|
 | ![Workout sparkle](docs/images/sparkle-workout.gif) | ![Sleep sparkle](docs/images/sparkle-sleep.gif) | ![Week party](docs/images/party.gif) |
 
+### The lamp on the bookshelf
+
+The lamp's colour is a score of last night: hours asleep against bands I set (too much sleep costs what too little does), plus my heart rate while asleep against my own last four weeks. Green is a good night, gold a middling one, red a night to go easy after. The maths, with proofs that the score can never leave its range, is in [`additional/bandwidth-index.pdf`](additional/bandwidth-index.pdf).
+
+![The night score as a surface: hours asleep by sleeping heart rate, in the lamp's colours](docs/images/bandwidth.png)
+
+The plant on the shelf above it grows a little every week the workout streak continues.
+
 ### Stack
 - Python 3.12, uv, FastAPI, SQLite (stdlib, hand-written migrations), APScheduler, httpx, Pillow, pytest, ruff, Anthropic SDK.
