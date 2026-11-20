@@ -25,6 +25,7 @@ import math
 import re
 import unicodedata
 from datetime import date, datetime
+from itertools import pairwise
 from zoneinfo import ZoneInfo
 
 from app.metrics.wins import overslept
@@ -47,6 +48,7 @@ from app.render.palette import (
     GOLD,
     GREEN,
     LABEL,
+    RED,
     RING,
     SECONDARY,
     SKY,
@@ -62,7 +64,9 @@ from app.render.palette import (
     day_accent,
     day_ground,
     dim,
+    from_oklch,
     legible_on,
+    to_oklch,
 )
 from app.render.theme import theme_for
 from app.render.usage import draw_usage, usage_state
@@ -532,9 +536,29 @@ LAMP = (
     "...w...",
     "..www..",
 )
-LAMP_UNLIT = tuple(row.replace("y", "u") for row in LAMP)
-UNLIT_SHADE: Color = dim(GOLD, 0.3)
-DECOR_INK: dict[str, Color] = {"g": GREEN, "p": CORAL, "y": GOLD, "w": TEXT, "u": UNLIT_SHADE}
+DECOR_INK: dict[str, Color] = {"g": GREEN, "p": CORAL, "y": GOLD, "w": TEXT}
+# The lamp's shade by the night recovery score: red at the cue line and under, the lamp's
+# own gold on an ordinary night, green a scale unit and more above it.
+LAMP_STOPS: tuple[tuple[float, Color], ...] = ((100 / 3, RED), (50.0, GOLD), (200 / 3, GREEN))
+
+
+def lamp_shade(view: DayView) -> Color:
+    """Red while the cue is on; gold with no reading; otherwise the score's place between
+    the stops, interpolated in OKLCH so the oranges and limes keep their chroma."""
+    if view.bandwidth_low:
+        return RED
+    score = view.bandwidth_lamp
+    if score is None:
+        return GOLD
+    if score <= LAMP_STOPS[0][0]:
+        return LAMP_STOPS[0][1]
+    for (lo, below), (hi, above) in pairwise(LAMP_STOPS):
+        if score <= hi:
+            t = (score - lo) / (hi - lo)
+            (la, ca, ha), (lb, cb, hb) = to_oklch(below), to_oklch(above)
+            turn = (hb - ha + math.pi) % (2 * math.pi) - math.pi
+            return from_oklch(la + (lb - la) * t, ca + (cb - ca) * t, ha + turn * t)
+    return LAMP_STOPS[-1][1]
 
 
 def books_stamp(view: DayView) -> str:
@@ -574,13 +598,16 @@ def shelf_slots(target: int) -> list[tuple[int, int, int, int]]:
     return out
 
 
-def _draw_decor(frame: Frame, tier: int, rows: tuple[str, ...]) -> None:
+def _draw_decor(
+    frame: Frame, tier: int, rows: tuple[str, ...], inks: dict[str, Color] | None = None
+) -> None:
     pixels = frame.load()
     top = TIER_BOARDS[tier] - len(rows)
+    palette = DECOR_INK | (inks or {})
     for dy, row in enumerate(rows):
         for dx, cell in enumerate(row):
-            if cell in DECOR_INK:
-                pixels[DECOR_X + dx, top + dy] = DECOR_INK[cell]
+            if cell in palette:
+                pixels[DECOR_X + dx, top + dy] = palette[cell]
 
 
 def _books_base(view: DayView) -> Frame:
@@ -588,8 +615,8 @@ def _books_base(view: DayView) -> Frame:
     an unread slot the outline of the book to come in the month theme's ring (one quiet tone
     for every slot; Max, 2026-11-09), a plant on the top shelf and a lamp on the lower, all
     on the page's one ground, which the summary below shares. The count is the header's stamp.
-    The lamp is unlit while `view.bandwidth_low` (Max, 2026-11-20: a signal for him alone,
-    with no word or number on the panel)."""
+    The lamp's shade is `lamp_shade(view)` (Max, 2026-11-20: a signal for him alone, with
+    no word or number on the panel; "green, yellow, red ... with gradients between")."""
     frame = new_frame(page_ground(view))
     theme = theme_for(view)
     draw_text(frame, LEFT, 2, "BOOKS", day_accent(view.day_local), SMALL)
@@ -613,7 +640,7 @@ def _books_base(view: DayView) -> Frame:
     for board in TIER_BOARDS:
         fill_rect(frame, 0, board, SIZE - 1, board + 1, WOOD)
     _draw_decor(frame, 0, PLANT)
-    _draw_decor(frame, 1, LAMP_UNLIT if view.bandwidth_low else LAMP)
+    _draw_decor(frame, 1, LAMP, {"y": lamp_shade(view)})
     return frame
 
 

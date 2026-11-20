@@ -70,6 +70,7 @@ WORKOUT_LOAD = "workout_load"
 WEEK_LOAD_BAR = "load_bar"
 SLEEP_HOURS = "sleep_hours"
 BANDWIDTH_LOW = "bandwidth_low"
+BANDWIDTH_LAMP = "bandwidth_lamp"
 STEPS = "steps"
 BOOKS_YTD = "books_ytd"
 SUMMARY_LINE = "summary_device_line"
@@ -119,15 +120,22 @@ class DayView:
     # (day of month, that day's stored wins) for the days of day_local's month before it:
     # the calendar colours a past day by what it earned. Empty when nothing is stored.
     month_wins: tuple[tuple[int, tuple[str, ...]], ...] = ()
-    # The night recovery score's cue (app/metrics/bandwidth.py): the Books lamp is unlit.
-    # False without a reading, so missing data never draws it.
+    # The night recovery score (app/metrics/bandwidth.py), shown only as the colour of the
+    # Books lamp: red while the cue is on, otherwise by the score, and its plain gold
+    # without a reading, so missing data never draws the cue.
     bandwidth_low: bool = False
+    bandwidth_lamp: float | None = None
 
 
 def _number(value: Any) -> float | None:
     if isinstance(value, bool) or not isinstance(value, int | float):
         return None
     return float(value) if math.isfinite(value) else None
+
+
+def _lamp(value: Any) -> float | None:
+    score = _number(value)
+    return score if score is not None and 0.0 <= score <= 100.0 else None
 
 
 def valid_percent(value: float | None) -> bool:
@@ -240,6 +248,7 @@ def view_from_metrics(
         stale_hours=settings.claude_usage.stale_hours,
         city_stale_minutes=city_stale_minutes(settings),
         bandwidth_low=daily.get(BANDWIDTH_LOW) is True,
+        bandwidth_lamp=_lamp(daily.get(BANDWIDTH_LAMP)),
     )
 
 

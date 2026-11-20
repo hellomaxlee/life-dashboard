@@ -23,8 +23,8 @@ from app.metrics.bandwidth import (
 from app.metrics.engine import recompute
 from app.metrics.keys import DAILY_KEYS
 from app.metrics.sleep import SleepFragment, night_spans
-from app.render.palette import GOLD
-from app.render.screens import DECOR_X, LAMP, TIER_BOARDS, UNLIT_SHADE, render_books
+from app.render.palette import GOLD, GREEN, RED, to_oklch
+from app.render.screens import DECOR_X, LAMP, TIER_BOARDS, lamp_shade, render_books
 from app.render.view import DayView
 from app.render.view_db import view_from_db
 from app.summary.payload import build_payload
@@ -179,15 +179,23 @@ def test_yesterdays_cue_is_carried_only_while_today_awaits_its_night():
     assert bandwidth_json(yesterday, hours, nights)["bandwidth_low"] is True
     plain = bandwidth_json(DAY, hours, nights)
     assert (plain["bandwidth"], plain["bandwidth_low"]) == (None, False)
+    assert plain["bandwidth_lamp"] is None
     carried = bandwidth_json(DAY, hours, nights, awaiting_night=True)
     assert (carried["bandwidth"], carried["bandwidth_low"]) == (None, True)
+    assert carried["bandwidth_lamp"] == 20.83
     assert carried["bandwidth_trace"]["carried_from"] == yesterday.isoformat()
     hours[yesterday] = 7.5
-    assert bandwidth_json(DAY, hours, nights, awaiting_night=True)["bandwidth_low"] is False
+    ordinary = bandwidth_json(DAY, hours, nights, awaiting_night=True)
+    assert (ordinary["bandwidth_low"], ordinary["bandwidth_lamp"]) == (False, 41.67)
+    del hours[yesterday], nights[yesterday]
+    nothing = bandwidth_json(DAY, hours, nights, awaiting_night=True)
+    assert (nothing["bandwidth_lamp"], nothing["bandwidth_trace"]["carried_from"]) == (None, None)
+    hours[yesterday], nights[yesterday] = 5.0, NightSignal(57.0, 40, False)
     hours[yesterday] = 5.0
     hours[DAY], nights[DAY] = 7.5, NightSignal(55.0, 40, False)
     arrived = bandwidth_json(DAY, hours, nights, awaiting_night=True)
     assert (arrived["bandwidth"], arrived["bandwidth_low"]) == (50.0, False)
+    assert arrived["bandwidth_lamp"] == 50.0
     del hours[DAY]
     nights[DAY] = NightSignal(None, 3, True)
     assert bandwidth_json(DAY, hours, nights, awaiting_night=True)["bandwidth_low"] is False
@@ -392,7 +400,8 @@ def test_the_engine_scores_stored_nights_and_the_view_carries_only_the_cue(db, s
     db.commit()
     recompute(db, settings, DAY.isoformat(), NOW)
     row = daily(db, DAY)
-    assert (row["bandwidth"], row["bandwidth_low"]) == (29.17, True)
+    assert (row["bandwidth"], row["bandwidth_low"], row["bandwidth_lamp"]) == (29.17, True, 29.17)
+    assert view_from_db(db, settings, DAY.isoformat()).bandwidth_lamp == 29.17
     assert row["bandwidth_trace"]["hr_rows"] == 40
     assert daily(db, DAY - timedelta(days=1))["bandwidth"] is None
     assert view_from_db(db, settings, DAY.isoformat()).bandwidth_low is True
@@ -409,17 +418,19 @@ def test_after_midnight_the_cue_holds_until_the_new_night_or_noon(db, settings):
     tomorrow = DAY + timedelta(days=1)
     recompute(db, settings, tomorrow.isoformat(), datetime(2026, 10, 16, 5, tzinfo=UTC))
     row = daily(db, tomorrow)
-    assert (row["bandwidth"], row["bandwidth_low"]) == (None, True)
+    assert (row["bandwidth"], row["bandwidth_low"], row["bandwidth_lamp"]) == (None, True, 29.17)
     assert row["bandwidth_trace"]["carried_from"] == DAY.isoformat()
     assert view_from_db(db, settings, tomorrow.isoformat()).bandwidth_low is True
     recompute(db, settings, tomorrow.isoformat(), datetime(2026, 10, 16, 16, 1, tzinfo=UTC))
     assert daily(db, tomorrow)["bandwidth_low"] is False
+    assert daily(db, tomorrow)["bandwidth_lamp"] is None
     recompute(db, settings, tomorrow.isoformat(), datetime(2026, 10, 16, 15, 59, tzinfo=UTC))
     assert daily(db, tomorrow)["bandwidth_low"] is True
     later = tomorrow + timedelta(days=1)
     recompute(db, settings, later.isoformat(), datetime(2026, 10, 17, 5, tzinfo=UTC))
     assert daily(db, tomorrow)["bandwidth_low"] is False, "a past day never carries"
     assert daily(db, later)["bandwidth_low"] is False, "a carried cue is not carried again"
+    assert daily(db, later)["bandwidth_lamp"] is None
     store_night(db, tomorrow, 7.5, 55.0)
     db.commit()
     recompute(db, settings, tomorrow.isoformat(), datetime(2026, 10, 16, 12, tzinfo=UTC))
@@ -448,7 +459,7 @@ def test_the_score_is_an_engine_key_and_never_reaches_the_summary_model(db, sett
     assert "29.17" not in text
 
 
-def lamp_shade(view: DayView) -> set:
+def shade_pixels(view: DayView) -> set:
     frame = render_books(view).poster
     top = TIER_BOARDS[1] - len(LAMP)
     return {
@@ -459,18 +470,61 @@ def lamp_shade(view: DayView) -> set:
     }
 
 
+def lamp(score: float | None, low: bool = False) -> tuple[int, int, int]:
+    return lamp_shade(DayView(day_local="2026-11-16", bandwidth_lamp=score, bandwidth_low=low))
+
+
+def test_the_lamp_is_red_at_the_cue_gold_on_an_ordinary_night_and_green_above():
+    assert lamp(None) == GOLD, "no reading is the plain lamp, never a colour"
+    assert lamp(50.0) == GOLD
+    assert lamp(0.0) == lamp(33.33) == RED
+    assert lamp(66.67) == lamp(83.33) == GREEN
+    assert lamp(45.0, low=True) == lamp(None, low=True) == RED, "the cue decides, not the score"
+    assert lamp(33.34) != GOLD and lamp(49.0) != RED
+
+
+def test_between_the_stops_the_lamp_moves_one_way_through_orange_and_lime():
+    """Hue angle in OKLCH rises from red through gold to green, never back."""
+    scores = [100 / 3 + k * (100 / 3) / 40 for k in range(41)]
+    hues = [to_oklch(lamp(score))[2] for score in scores]
+    assert hues == sorted(hues)
+    assert len({lamp(score) for score in scores}) >= 30
+    orange, lime = lamp(41.67), lamp(58.33)
+    assert orange[0] > orange[1] > orange[2] and orange[1] < GOLD[1]
+    assert lime[1] > lime[0] > lime[2] and lime[0] < GOLD[0]
+    for score in scores:
+        assert to_oklch(lamp(score))[1] >= 0.9 * min(to_oklch(c)[1] for c in (RED, GOLD, GREEN))
+
+
+def test_an_impossible_stored_lamp_score_is_no_reading():
+    from app.config import load_settings
+    from app.render.view import view_from_metrics
+
+    for stored in (None, "41", True, -1, 100.5, float("nan")):
+        view = view_from_metrics("2026-11-16", {"bandwidth_lamp": stored}, {}, load_settings())
+        assert view.bandwidth_lamp is None, stored
+    assert (
+        view_from_metrics(
+            "2026-11-16", {"bandwidth_lamp": 41.67}, {}, load_settings()
+        ).bandwidth_lamp
+        == 41.67
+    )
+
+
 @pytest.mark.parametrize("weekday", range(7))
-def test_the_books_lamp_is_unlit_only_while_the_cue_is_on(weekday):
+def test_the_score_changes_the_lamps_shade_and_nothing_else(weekday):
     day = (date(2026, 11, 16) + timedelta(days=weekday)).isoformat()
     view = DayView(day_local=day, books_ytd=7)
-    assert lamp_shade(view) == {GOLD}
-    assert lamp_shade(replace(view, bandwidth_low=True)) == {UNLIT_SHADE}
-    lit = render_books(view).poster
-    unlit = render_books(replace(view, bandwidth_low=True)).poster
-    changed = [
-        (x, y)
-        for x in range(64)
-        for y in range(64)
-        if lit.getpixel((x, y)) != unlit.getpixel((x, y))
-    ]
-    assert len(changed) == sum(row.count("y") for row in LAMP)
+    assert shade_pixels(view) == {GOLD}
+    assert shade_pixels(replace(view, bandwidth_low=True, bandwidth_lamp=29.17)) == {RED}
+    assert shade_pixels(replace(view, bandwidth_lamp=70.0)) == {GREEN}
+    plain = render_books(view).poster
+    for score, low in ((29.17, True), (41.67, False), (70.0, False)):
+        coloured = render_books(replace(view, bandwidth_lamp=score, bandwidth_low=low)).poster
+        changed = [
+            (x, y)
+            for x in range(64)
+            for y in range(64)
+            if plain.getpixel((x, y)) != coloured.getpixel((x, y))
+        ]
+        assert len(changed) == sum(row.count("y") for row in LAMP), score

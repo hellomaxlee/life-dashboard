@@ -40,6 +40,7 @@ DAILY_KEYS = frozenset(
         "wellness_fact",
         "bandwidth",
         "bandwidth_low",
+        "bandwidth_lamp",
         "bandwidth_trace",
     }
     | set(WELLNESS_KEYS.values())

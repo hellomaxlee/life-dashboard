@@ -135,9 +135,24 @@ B &= 50 + \tfrac{25}{3}(-2.5) = 29.17 & &\text{cue on}
 \end{align*}
 
 \section{On the Panel}
-The number is never shown. While the cue is on, the lamp on the lower Books shelf
-is unlit; otherwise it is lit. No word, colour change, or mark elsewhere refers
-to it.
+The number is never shown. It colours the shade of the lamp on the lower Books
+shelf, and nothing else refers to it:
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+Score & Shade \\
+\midrule
+Cue on ($B \le 100/3$) & Red \\
+$100/3 < B < 50$ & Red through orange to gold \\
+$B = 50$, or no reading & Gold, the lamp's own colour \\
+$50 < B < 200/3$ & Gold through lime to green \\
+$B \ge 200/3$ & Green \\
+\bottomrule
+\end{tabular}
+\end{center}
+Between the stops the colour is interpolated in OKLCH. The cue flag, not the
+rounded score, decides red. Until today's night arrives, and no later than noon,
+the lamp keeps yesterday's colour.
 
 \section{On Max's Data}
 The figures from his own nights (how many days had a reading, the range of $B$,

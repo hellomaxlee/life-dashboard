@@ -3,6 +3,15 @@
 Running log, newest first. The Lead reads this to find root causes and prioritize.
 Entry format: `## YYYY-MM-DD · <Title> (<Author>)` followed by terse bullets. Name the fixture combo on render/summary cycles.
 
+## 2026-11-20 · The lamp in green, gold and red (Lucía Ferrer; design Mei-Lin Tsao; data Bartek Zieliński)
+- Max: "Can we actually make the lamp like green, yellow, red? Maybe with gradients between them two."
+- `screens.lamp_shade`: red while the cue is on; from the cue line (33.33) to 50 red through orange to GOLD; from 50 to 66.67 gold through lime to GREEN; green above. Interpolated in OKLCH, like `palette.hue`, so the midpoints keep their chroma. With no reading the shade is GOLD, the lamp as it always was, so a missing night is never a colour and no committed snapshot changed. The unlit shade from this morning is gone.
+- New engine key `bandwidth_lamp`: the score the lamp shows, today's or, while today awaits its night (before noon), yesterday's, so the colour holds past midnight the way the cue does. The view rejects a stored value outside 0 to 100.
+- Mei-Lin's read: GOLD at the middle is a little paler than its neighbours under gamma (its blue channel is lifted; the interpolated oranges and yellows have none). Left as it is: an ordinary night is the lamp people already know.
+- Gates: ruff clean; full suite on this tree 1789 passed. Mutants red, 11 of 11 (PYTHONDONTWRITEBYTECODE, restored from file copies): lamp ignores the cue, no reading drawn red, stops reversed, no gradient, shade not drawn, score not carried, carried past a night, lamp not the score, stored value unchecked, view drops it, key not engine-owned.
+- Fixture combo for the eye test: `travel / all sources / never started / off` (new cell, scratch fixture), the lamp at eleven scores on all seven weekday grounds, raw and under gamma at 1x and 5x: every step is told from its neighbours, and the green shade on Thursday's green ground reads as a pale mint, still a lamp.
+- Not done: not seen on the panel; the mapping's stops (33.33, 50, 66.67) are the score's own landmarks, not fitted to anything. No model calls.
+
 ## 2026-11-20 · Bandwidth: a night recovery score, and a lamp that goes out (Bartek Zieliński; maths Ananya Krishnan; validity Leilani Kahale; display Lucía Ferrer)
 - Max: "create a consolidated bandwidth index"; then "probably overkill ... it can be implemented in a smaller way"; "hire a mathematician onto this team, as well as an expert on biostatistics and digital health. I want them to both argue"; "no values below 0 or [above] 100"; "transmitted in a very subtle way"; "the two items on my two shelves on the bookshelf ... keeping it not salient to other people"; "nothing I have to do manually".
 - Hired (agent files are local, `agents/` is git-ignored): Ananya Krishnan (formal audit) and Leilani Kahale (signal validity), both Associates. Three rounds each as independent agents, read-only on the repo and db: critique of the first draft, rebuttal of each other, audit of the implementation.

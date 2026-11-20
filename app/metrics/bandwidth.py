@@ -12,7 +12,8 @@ and the cue line 100/3 is a z sum of -2, decided on the z sum and not on the rou
 A night whose watch came off before waking (no heart-rate row in the 90 minutes after the
 session ends) saw only part of the night, so neither of its terms can go below 0, and it
 stays out of both histories. Until today's night arrives, and no later than noon, today
-carries yesterday's cue, so the cue does not switch off at midnight.
+carries yesterday's cue and score for the lamp, so neither switches off at midnight.
+`bandwidth_lamp` is the score the Books lamp is coloured by: today's, or the carried one.
 
 Unchecked against how Max felt: it says last night was unlike his usual nights, no more.
 """
@@ -45,8 +46,9 @@ CUE_Z_SUM = -2.0
 
 BANDWIDTH = "bandwidth"
 BANDWIDTH_LOW = "bandwidth_low"
+BANDWIDTH_LAMP = "bandwidth_lamp"
 BANDWIDTH_TRACE = "bandwidth_trace"
-BANDWIDTH_KEYS = frozenset({BANDWIDTH, BANDWIDTH_LOW, BANDWIDTH_TRACE})
+BANDWIDTH_KEYS = frozenset({BANDWIDTH, BANDWIDTH_LOW, BANDWIDTH_LAMP, BANDWIDTH_TRACE})
 
 
 @dataclass(frozen=True)
@@ -174,7 +176,8 @@ def bandwidth_json(
 ) -> dict[str, object]:
     """The day's score, cue and trace, keyed as the daily row stores them. With no term
     present there is no reading: the score is null, never 50, and the cue is off, unless
-    `awaiting_night` (today, before noon, no night yet) and yesterday's cue was on."""
+    `awaiting_night` (today, before noon, no night yet), when yesterday's cue and score
+    are carried for the lamp."""
     sleep = sleep_term(day, sleep_hours, nights)
     sleep_hr = sleep_hr_term(day, nights)
     night = nights.get(day)
@@ -186,15 +189,23 @@ def bandwidth_json(
         "carried_from": None,
     }
     if sleep is None and sleep_hr is None:
-        low = False
+        low, lamp = False, None
         if awaiting_night and day not in sleep_hours and night is None:
             before = day - timedelta(days=1)
-            low = bandwidth_json(before, sleep_hours, nights)[BANDWIDTH_LOW] is True
-            trace["carried_from"] = before.isoformat() if low else None
-        return {BANDWIDTH: None, BANDWIDTH_LOW: low, BANDWIDTH_TRACE: trace}
+            prior = bandwidth_json(before, sleep_hours, nights)
+            low, lamp = prior[BANDWIDTH_LOW] is True, prior[BANDWIDTH]
+            trace["carried_from"] = before.isoformat() if lamp is not None else None
+        return {
+            BANDWIDTH: None,
+            BANDWIDTH_LOW: low,
+            BANDWIDTH_LAMP: lamp,
+            BANDWIDTH_TRACE: trace,
+        }
     z_sum = sum(term.z for term in (sleep, sleep_hr) if term is not None)
+    score = round_half_up(50 + POINTS_PER_Z * z_sum, 2)
     return {
-        BANDWIDTH: round_half_up(50 + POINTS_PER_Z * z_sum, 2),
+        BANDWIDTH: score,
         BANDWIDTH_LOW: round(z_sum, 9) <= CUE_Z_SUM,
+        BANDWIDTH_LAMP: score,
         BANDWIDTH_TRACE: trace,
     }
