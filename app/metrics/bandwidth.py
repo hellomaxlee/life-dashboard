@@ -14,8 +14,12 @@ the cue line 100/3 is a z sum of -2, decided on the z sum and not on the rounded
 A night whose watch came off before waking (no heart-rate row in the 90 minutes after the
 session ends) saw only part of the night, so neither of its terms can go below 0, and it
 stays out of the heart-rate history. Until today's night arrives, and no later than noon,
-today carries yesterday's cue and score for the lamp, so neither switches off at midnight.
-`bandwidth_lamp` is the score the Books lamp is coloured by: today's, or the carried one.
+today carries yesterday's cue and score, so neither switches off at midnight
+(`bandwidth_lamp`: today's, or the carried one).
+
+Since 2026-11-20 the Books lamp is coloured by the fuller score (bandwidth_full.py), of
+which these two terms are the anchors; this score stays stored beside it for comparison
+(`tools.bandwidth`) and nothing displays it.
 
 Unchecked against how Max felt: it says what kind of night last night was, no more.
 """

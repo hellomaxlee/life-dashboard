@@ -1,7 +1,8 @@
-"""The fuller bandwidth score, kept as a shadow (notes.txt § Goal model, "Bandwidth, the
-fuller score"). Max, 2026-11-20: robust "isn't necessarily to decrease the number of
-variables ... partially means defensibility and partially means completeness as a proxy
-for my actual bandwidth"; "build it as a shadow score first".
+"""The fuller bandwidth score, which colours the Books lamp (notes.txt § Goal model,
+"Bandwidth, the fuller score"). Max, 2026-11-20: robust "isn't necessarily to decrease
+the number of variables ... partially means defensibility and partially means
+completeness as a proxy for my actual bandwidth"; built as a shadow first, then, the same
+day: "I would like to switch to the in general fuller score".
 
 Ten terms in five domains, each a number inside [-3, 3] with higher meaning more to give
 (TERM_RANGE has each term's own range), each with a fixed weight in hundredths:
@@ -10,12 +11,13 @@ Ten terms in five domains, each a number inside [-3, 3] with higher meaning more
 
 so B_full is in [0, 87.67] by construction, with no terminal clamp. An absent term adds 0
 and the weights are never renormalised; `weight_present` in the trace says how much of the
-hundred backed the score. A weighted mean of ten terms spreads less than the lamp's sum of
-two, by the ratio of the root-sum-squares of their weights, so the cue line and the colour
-stops are that ratio of the lamp's (CUE_WEIGHTED_SUM, FULL_RED, FULL_GREEN), computed from
-WEIGHTS and never typed in. The cue also needs MIN_CUE_WEIGHT of the hundred present.
-Nothing reads these keys but `tools.bandwidth`: the lamp is still coloured by
-`bandwidth.py`.
+hundred backed the score. A weighted mean of ten terms spreads less than the two-term
+score's sum of two (bandwidth.py), by the ratio of the root-sum-squares of their weights,
+so the cue line and the colour stops are that ratio of the two-term score's
+(CUE_WEIGHTED_SUM, FULL_RED, FULL_GREEN), computed from WEIGHTS and never typed in. The
+cue and the lamp both need MIN_CUE_WEIGHT of the hundred present: a thinner day is the
+plain gold lamp. `bandwidth_full_lamp` is what the lamp is coloured by: today's score, or
+yesterday's while today, before noon, awaits its night.
 
 The weights are priors (reliability on Max's data times a stated guess at relevance), not
 fitted: nothing is logged that they could be fitted to. See the notes for what the two
@@ -77,7 +79,7 @@ DOMAINS: dict[str, tuple[str, ...]] = {
     "movement and light": ("movement", "daylight"),
 }
 POINTS_PER_WEIGHTED_Z = 1 / 6
-# The lamp's score is this form with weights (50, 50) and its cue at a weighted sum of
+# The two-term score is this form with weights (50, 50) and its cue at a weighted sum of
 # -100; a sum of independent terms spreads as the root-sum-square of its weights.
 LAMP_WEIGHTS = (50, 50)
 SPREAD_RATIO = math.hypot(*WEIGHTS.values()) / math.hypot(*LAMP_WEIGHTS)
@@ -111,8 +113,9 @@ ONSET_MIN, ONSET_MAX = -720.0, 720.0
 
 FULL = "bandwidth_full"
 FULL_LOW = "bandwidth_full_low"
+FULL_LAMP = "bandwidth_full_lamp"
 FULL_TRACE = "bandwidth_full_trace"
-FULL_KEYS = frozenset({FULL, FULL_LOW, FULL_TRACE})
+FULL_KEYS = frozenset({FULL, FULL_LOW, FULL_LAMP, FULL_TRACE})
 
 
 @dataclass
@@ -269,20 +272,33 @@ def _trace(name: str, term: Term | None) -> dict[str, object] | None:
     }
 
 
-def full_json(day: date, inputs: FullInputs) -> dict[str, object]:
-    """The day's fuller score, its cue and its trace. It needs last night: with neither
-    the sleep term nor the sleeping heart rate there is no reading, whatever else is on
-    record, because a score of yesterday's steps alone would not be about today."""
+def full_json(day: date, inputs: FullInputs, *, awaiting_night: bool = False) -> dict[str, object]:
+    """The day's fuller score, its cue, what the lamp shows and the trace. It needs last
+    night: with neither the sleep term nor the sleeping heart rate there is no reading,
+    whatever else is on record, because a score of yesterday's steps alone would not be
+    about today. The lamp shows the score only with MIN_CUE_WEIGHT of the hundred present,
+    so a thin day is gold, never red or green; and with `awaiting_night` (today, before
+    noon, no night yet) it carries yesterday's cue and lamp value."""
     found = terms(day, inputs)
     present = sum(WEIGHTS[name] for name, term in found.items() if term is not None)
     trace: dict[str, object] = {name: _trace(name, term) for name, term in found.items()}
     trace["weight_present"] = present
+    trace["carried_from"] = None
     if found["sleep"] is None and found["sleep_hr"] is None:
-        return {FULL: None, FULL_LOW: False, FULL_TRACE: trace}
+        low, lamp = False, None
+        if awaiting_night and day not in inputs.sleep_hours and day not in inputs.nights:
+            before = day - timedelta(days=1)
+            prior = full_json(before, inputs)
+            low, lamp = prior[FULL_LOW] is True, prior[FULL_LAMP]
+            trace["carried_from"] = before.isoformat() if lamp is not None else None
+        return {FULL: None, FULL_LOW: low, FULL_LAMP: lamp, FULL_TRACE: trace}
     weighted = sum(WEIGHTS[name] * term.z for name, term in found.items() if term is not None)
+    score = round_half_up(50 + POINTS_PER_WEIGHTED_Z * weighted, 2)
+    shown = present >= MIN_CUE_WEIGHT
     return {
-        FULL: round_half_up(50 + POINTS_PER_WEIGHTED_Z * weighted, 2),
-        FULL_LOW: present >= MIN_CUE_WEIGHT and round(weighted, 9) <= round(CUE_WEIGHTED_SUM, 9),
+        FULL: score,
+        FULL_LOW: shown and round(weighted, 9) <= round(CUE_WEIGHTED_SUM, 9),
+        FULL_LAMP: score if shown else None,
         FULL_TRACE: trace,
     }
 

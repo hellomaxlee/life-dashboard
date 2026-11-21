@@ -28,6 +28,7 @@ from datetime import date, datetime
 from itertools import pairwise
 from zoneinfo import ZoneInfo
 
+from app.metrics.bandwidth_full import FULL_GREEN, FULL_RED
 from app.metrics.wins import overslept
 from app.render.font import (
     BODY,
@@ -636,9 +637,9 @@ LAMP = (
 )
 DECOR_INK: dict[str, Color] = {"g": GREEN, "p": CORAL, "y": GOLD, "w": TEXT}
 assert len(LAMP) == LAMP_HEIGHT
-# The lamp's shade by the night recovery score: red at the cue line and under, the lamp's
-# own gold on an ordinary night, green a scale unit and more above it.
-LAMP_STOPS: tuple[tuple[float, Color], ...] = ((100 / 3, RED), (50.0, GOLD), (200 / 3, GREEN))
+# The lamp's shade by the bandwidth score: red at the cue line and under, the lamp's own
+# gold on an ordinary day, green as far above 50 as the cue line is below it.
+LAMP_STOPS: tuple[tuple[float, Color], ...] = ((FULL_RED, RED), (50.0, GOLD), (FULL_GREEN, GREEN))
 
 
 def lamp_shade(view: DayView) -> Color:

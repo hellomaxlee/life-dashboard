@@ -69,8 +69,8 @@ WORKOUT_COUNT = "workout_count"
 WORKOUT_LOAD = "workout_load"
 WEEK_LOAD_BAR = "load_bar"
 SLEEP_HOURS = "sleep_hours"
-BANDWIDTH_LOW = "bandwidth_low"
-BANDWIDTH_LAMP = "bandwidth_lamp"
+BANDWIDTH_LOW = "bandwidth_full_low"
+BANDWIDTH_LAMP = "bandwidth_full_lamp"
 STEPS = "steps"
 BOOKS_YTD = "books_ytd"
 SUMMARY_LINE = "summary_device_line"
@@ -120,7 +120,7 @@ class DayView:
     # (day of month, that day's stored wins) for the days of day_local's month before it:
     # the calendar colours a past day by what it earned. Empty when nothing is stored.
     month_wins: tuple[tuple[int, tuple[str, ...]], ...] = ()
-    # The night recovery score (app/metrics/bandwidth.py), shown only as the colour of the
+    # The bandwidth score (app/metrics/bandwidth_full.py), shown only as the colour of the
     # Books lamp: red while the cue is on, otherwise by the score, and its plain gold
     # without a reading, so missing data never draws the cue.
     bandwidth_low: bool = False

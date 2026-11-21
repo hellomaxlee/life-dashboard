@@ -1,11 +1,13 @@
-"""Read the two bandwidth scores side by side: the lamp's, and the fuller shadow score.
+"""Read the two bandwidth scores side by side: the fuller one the Books lamp is coloured
+by, and the two-term score kept for comparison.
 
 python -m tools.bandwidth                 the last 14 days, one line a day
 python -m tools.bandwidth --days 60       further back
 python -m tools.bandwidth --date DATE     that day's trace, term by term
 
 Reads what the engine stored in `daily_metrics`; computes nothing and writes nothing. The
-band named beside each score is the colour the Books lamp shows, or would show, for it.
+band named beside each score is the colour the Books lamp shows (full) or would show
+(two) for it, each on its own stops.
 Uses the live db without migrating it (exit 2 if the schema is behind: run tools.migrate).
 See workflows/bandwidth.md.
 """
@@ -22,7 +24,7 @@ from app.config import load_settings
 from app.db import SchemaMismatch, connect_live
 from app.metrics.bandwidth_full import DOMAINS, FULL_GREEN, FULL_RED, WEIGHTS
 
-LAMP_STOPS = (100 / 3, 200 / 3)
+TWO_STOPS = (100 / 3, 200 / 3)
 FULL_STOPS = (FULL_RED, FULL_GREEN)
 
 
@@ -61,7 +63,7 @@ def day_line(day: str, row: dict) -> str:
     movers = sorted(present.items(), key=lambda item: -abs(item[1]["points"]))[:3]
     told = ", ".join(f"{name} {term['points']:+.1f}" for name, term in movers)
     return (
-        f"{day}  lamp {_fmt(lamp)} {band(lamp, row.get('bandwidth_low') is True, LAMP_STOPS):6}"
+        f"{day}  two {_fmt(lamp)} {band(lamp, row.get('bandwidth_low') is True, TWO_STOPS):6}"
         f"  full {_fmt(full)} {band(full, row.get('bandwidth_full_low') is True, FULL_STOPS):6}"
         f"  {trace.get('weight_present') or 0:3}/100  {told}"
     )

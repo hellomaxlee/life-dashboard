@@ -31,9 +31,9 @@ Small wins and a completed week get a short celebration, sent to the panel as a 
 
 ### The lamp on the bookshelf
 
-The lamp's colour is a score of last night: hours asleep against bands I set (too much sleep costs what too little does), plus my heart rate while asleep against my own last four weeks. Green is a good night, gold a middling one, red a night to go easy after. The maths, with proofs that the score can never leave its range, is in [`additional/bandwidth-index.pdf`](additional/bandwidth-index.pdf).
+The lamp's colour is a score of how much I have to give today, from ten things the watch already records. Most of the weight is last night: hours asleep against bands I set (too much sleep costs what too little does) and my heart rate while asleep against my own last four weeks. The rest is the nights before, how late I fell asleep, sleep stages, HRV, resting heart rate, training load, steps and daylight. Green is a good day, gold a middling one, red a day to go easy. The maths, with proofs that the score can never leave its range, is in [`additional/bandwidth-index.pdf`](additional/bandwidth-index.pdf).
 
-![The night score as a surface: hours asleep by sleeping heart rate, in the lamp's colours](docs/images/bandwidth.png)
+![The two heaviest terms as a surface: hours asleep by sleeping heart rate, in the lamp's colours](docs/images/bandwidth.png)
 
 The plant on the shelf above it grows a little every week the workout streak continues.
 

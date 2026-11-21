@@ -434,7 +434,7 @@ def compute_rows(
         row.update(wellness_json(inputs.wellness, day, settings))
         awaiting = day == today and local_now.date() == today and local_now.time() < NIGHT_UNTIL
         row.update(bandwidth_json(day, sleep_hours_by_day, inputs.nights, awaiting_night=awaiting))
-        row.update(full_json(day, full_inputs))
+        row.update(full_json(day, full_inputs, awaiting_night=awaiting))
         daily[day.isoformat()] = row
     return history, weeks, daily, checks
 

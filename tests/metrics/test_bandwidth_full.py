@@ -1,5 +1,5 @@
-"""The fuller bandwidth score (app/metrics/bandwidth_full.py), a shadow the lamp does not
-read: each term by hand, the range and the cue line derived from the weights, and the
+"""The fuller bandwidth score (app/metrics/bandwidth_full.py), which the Books lamp
+reads: each term by hand, the range and the cue line derived from the weights, and the
 hostile inputs that once stopped the whole engine. The ordinary day used throughout has
 every baseline term at 0 and both sleep terms in the green band:
 30 x 2 + 14 x 2 = 88, B_full = 50 + 88 / 6 = 64.67."""
@@ -35,7 +35,7 @@ from app.metrics.sleep import NightStages, SleepFragment, night_stages
 from app.render.view_db import view_from_db
 from app.summary.payload import build_payload
 from tests.metrics.test_bandwidth import NOW, daily, store_night, stored_history
-from tools.bandwidth import FULL_STOPS, LAMP_STOPS, band, day_line, trace_lines
+from tools.bandwidth import FULL_STOPS, TWO_STOPS, band, day_line, trace_lines
 
 DAY = date(2026, 10, 15)
 YESTERDAY = DAY - timedelta(days=1)
@@ -344,7 +344,7 @@ def test_the_weights_cover_the_domains_and_the_keys_are_the_engines():
     assert FULL_KEYS <= DAILY_KEYS
 
 
-def test_the_engine_stores_the_shadow_and_the_lamp_and_the_summary_never_see_it(db, settings):
+def test_the_engine_stores_it_the_lamp_reads_it_and_the_summary_never_sees_it(db, settings):
     stored_history(db)
     store_night(db, DAY, 5.5, 57.0)
     db.commit()
@@ -357,10 +357,10 @@ def test_the_engine_stores_the_shadow_and_the_lamp_and_the_summary_never_see_it(
     assert trace["sleep_timing"]["z"] == 0.0
     assert trace["weight_present"] == 30 + 14 + 12 + 24
     assert row["bandwidth_full"] == 40.67, "50 + (-60 + 28 + 0 - 24) / 6"
-    assert (row["bandwidth"], row["bandwidth_low"]) == (25.0, True), "the lamp's score is its own"
+    assert (row["bandwidth"], row["bandwidth_low"]) == (25.0, True), "the two-term score is red"
+    assert (row["bandwidth_full_lamp"], row["bandwidth_full_low"]) == (40.67, False)
     view = view_from_db(db, settings, DAY.isoformat())
-    assert (view.bandwidth_lamp, view.bandwidth_low) == (25.0, True)
-    assert not any("full" in name for name in vars(view))
+    assert (view.bandwidth_lamp, view.bandwidth_low) == (40.67, False), "the lamp reads the fuller"
     text = build_payload(db, settings, (DAY + timedelta(days=1)).isoformat()).text()
     assert "bandwidth" not in text and "40.67" not in text
     before = daily(db, DAY)
@@ -368,9 +368,67 @@ def test_the_engine_stores_the_shadow_and_the_lamp_and_the_summary_never_see_it(
     assert daily(db, DAY) == before
 
 
+def test_the_lamp_needs_sixty_of_the_hundred_so_a_thin_day_is_gold():
+    full = full_json(DAY, ordinary())
+    assert full["bandwidth_full_lamp"] == full["bandwidth_full"] == ORDINARY
+    thin = full_json(DAY, FullInputs(sleep_hours={DAY: 7.5}, tz=TZ))
+    assert (thin["bandwidth_full"], thin["bandwidth_full_lamp"]) == (60.0, None)
+    worn = {DAY: NightSignal(None, 0, False)}
+    short = full_json(DAY, FullInputs(sleep_hours={DAY: 4.5}, nights=worn, tz=TZ))
+    assert short["bandwidth_full"] == 35.0 < FULL_RED
+    assert (short["bandwidth_full_lamp"], short["bandwidth_full_low"]) == (None, False)
+    edge = replace(ordinary(), stages={}, nights={}, hrv_ms={}, resting_hr={}, load_chronic={})
+    assert full_json(DAY, edge)["bandwidth_full_trace"]["weight_present"] == 62
+    assert full_json(DAY, edge)["bandwidth_full_lamp"] is not None
+    under = replace(edge, daylight_min={}, steps={})
+    assert full_json(DAY, under)["bandwidth_full_trace"]["weight_present"] == 56
+    assert full_json(DAY, under)["bandwidth_full_lamp"] is None
+
+
+def test_before_the_night_arrives_today_carries_yesterdays_lamp_and_cue():
+    base = changed(sleep_hours={YESTERDAY: 4.5}, nights={YESTERDAY: NightSignal(61.0, 40, False)})
+    for name in ("sleep_hours", "nights", "stages", "onsets"):
+        getattr(base, name).pop(DAY)
+    bad = full_json(YESTERDAY, base)
+    assert bad["bandwidth_full_low"] is True and bad["bandwidth_full"] < FULL_RED
+    plain = full_json(DAY, base)
+    assert (plain["bandwidth_full"], plain["bandwidth_full_low"]) == (None, False)
+    assert plain["bandwidth_full_lamp"] is None
+    carried = full_json(DAY, base, awaiting_night=True)
+    assert (carried["bandwidth_full"], carried["bandwidth_full_low"]) == (None, True)
+    assert carried["bandwidth_full_lamp"] == bad["bandwidth_full"]
+    assert carried["bandwidth_full_trace"]["carried_from"] == YESTERDAY.isoformat()
+    arrived = full_json(DAY, ordinary(), awaiting_night=True)
+    assert (arrived["bandwidth_full_lamp"], arrived["bandwidth_full_low"]) == (ORDINARY, False)
+    assert arrived["bandwidth_full_trace"]["carried_from"] is None
+    worn = replace(base, nights={**base.nights, DAY: NightSignal(None, 3, False)})
+    assert full_json(DAY, worn, awaiting_night=True)["bandwidth_full_low"] is False
+
+
+def test_after_midnight_the_lamp_holds_through_the_engine_until_noon(db, settings):
+    stored_history(db)
+    store_night(db, DAY, 4.5, 61.0)
+    db.commit()
+    tomorrow = DAY + timedelta(days=1)
+    recompute(db, settings, tomorrow.isoformat(), datetime(2026, 10, 16, 5, tzinfo=UTC))
+    assert daily(db, DAY)["bandwidth_full"] == 27.67, "50 + (-90 + 28 + 0 - 72) / 6"
+    row = daily(db, tomorrow)
+    assert (row["bandwidth_full"], row["bandwidth_full_low"]) == (None, True)
+    assert row["bandwidth_full_lamp"] == 27.67
+    view = view_from_db(db, settings, tomorrow.isoformat())
+    assert (view.bandwidth_lamp, view.bandwidth_low) == (27.67, True)
+    recompute(db, settings, tomorrow.isoformat(), datetime(2026, 10, 16, 16, 1, tzinfo=UTC))
+    row = daily(db, tomorrow)
+    assert (row["bandwidth_full_low"], row["bandwidth_full_lamp"]) == (False, None)
+    later = tomorrow + timedelta(days=1)
+    recompute(db, settings, later.isoformat(), datetime(2026, 10, 17, 5, tzinfo=UTC))
+    assert daily(db, tomorrow)["bandwidth_full_low"] is False, "a past day never carries"
+    assert daily(db, later)["bandwidth_full_lamp"] is None, "a carried cue is not carried again"
+
+
 def test_the_tool_names_each_score_by_its_own_stops():
-    assert band(None, False, LAMP_STOPS) == "none"
-    assert [band(v, False, LAMP_STOPS) for v in (33.33, 40.0, 50.0, 60.0, 66.67)] == [
+    assert band(None, False, TWO_STOPS) == "none"
+    assert [band(v, False, TWO_STOPS) for v in (33.33, 40.0, 50.0, 60.0, 66.67)] == [
         "red",
         "orange",
         "gold",
@@ -388,7 +446,7 @@ def test_the_tool_names_each_score_by_its_own_stops():
     out = full_json(DAY, changed(sleep_hours={DAY: 5.5}))
     row = {"bandwidth": 33.33, "bandwidth_low": True, **out}
     line = day_line(DAY.isoformat(), row)
-    assert "lamp  33.3 red" in line and "full  44.7 orange" in line and "100/100" in line
+    assert "two  33.3 red" in line and "full  44.7 orange" in line and "100/100" in line
     assert "sleep -10.0" in line
     lines = trace_lines(DAY.isoformat(), row)
     assert any(text.startswith("50 + the points = 44.67; stored 44.67") for text in lines)

@@ -22,13 +22,13 @@ from app.metrics.bandwidth import (
     night_signals,
     sleep_band_z,
 )
+from app.metrics.bandwidth_full import FULL_GREEN, FULL_RED
 from app.metrics.engine import recompute
 from app.metrics.keys import DAILY_KEYS
 from app.metrics.sleep import SleepFragment, night_spans
 from app.render.palette import GOLD, GREEN, RED, to_oklch
 from app.render.screens import DECOR_X, LAMP, TIER_BOARDS, lamp_shade, render_books
 from app.render.view import DayView
-from app.render.view_db import view_from_db
 from app.summary.payload import build_payload
 
 DAY = date(2026, 10, 15)
@@ -419,20 +419,17 @@ def daily(db, day: date) -> dict:
 NOW = datetime(2026, 10, 15, 16, tzinfo=UTC)
 
 
-def test_the_engine_scores_stored_nights_and_the_view_carries_only_the_cue(db, settings):
+def test_the_engine_scores_stored_nights_and_stores_them_idempotently(db, settings):
     stored_history(db)
     store_night(db, DAY, 5.5, 57.0)
     db.commit()
     recompute(db, settings, DAY.isoformat(), NOW)
     row = daily(db, DAY)
     assert (row["bandwidth"], row["bandwidth_low"], row["bandwidth_lamp"]) == (25.0, True, 25.0)
-    assert view_from_db(db, settings, DAY.isoformat()).bandwidth_lamp == 25.0
     assert row["bandwidth_trace"]["hr_rows"] == 40
     before_history = daily(db, DAY - timedelta(days=1))
     assert before_history["bandwidth"] == 66.67, "7.5 h scores with no heart-rate history yet"
     assert before_history["bandwidth_trace"]["sleep_hr"] is None
-    assert view_from_db(db, settings, DAY.isoformat()).bandwidth_low is True
-    assert view_from_db(db, settings, (DAY - timedelta(days=1)).isoformat()).bandwidth_low is False
     before = daily(db, DAY)
     recompute(db, settings, DAY.isoformat(), NOW)
     assert daily(db, DAY) == before
@@ -447,7 +444,6 @@ def test_after_midnight_the_cue_holds_until_the_new_night_or_noon(db, settings):
     row = daily(db, tomorrow)
     assert (row["bandwidth"], row["bandwidth_low"], row["bandwidth_lamp"]) == (None, True, 25.0)
     assert row["bandwidth_trace"]["carried_from"] == DAY.isoformat()
-    assert view_from_db(db, settings, tomorrow.isoformat()).bandwidth_low is True
     recompute(db, settings, tomorrow.isoformat(), datetime(2026, 10, 16, 16, 1, tzinfo=UTC))
     assert daily(db, tomorrow)["bandwidth_low"] is False
     assert daily(db, tomorrow)["bandwidth_lamp"] is None
@@ -505,19 +501,21 @@ def lamp(score: float | None, low: bool = False) -> tuple[int, int, int]:
 def test_the_lamp_is_red_at_the_cue_gold_on_an_ordinary_night_and_green_above():
     assert lamp(None) == GOLD, "no reading is the plain lamp, never a colour"
     assert lamp(50.0) == GOLD
-    assert lamp(0.0) == lamp(33.33) == RED
-    assert lamp(66.67) == lamp(83.33) == GREEN
+    assert lamp(0.0) == lamp(FULL_RED) == RED
+    assert lamp(FULL_GREEN) == lamp(87.67) == GREEN
     assert lamp(45.0, low=True) == lamp(None, low=True) == RED, "the cue decides, not the score"
-    assert lamp(33.34) != GOLD and lamp(49.0) != RED
+    assert lamp(FULL_RED + 0.01) not in (RED, GOLD) and lamp(49.0) not in (RED, GOLD)
+    assert lamp(FULL_GREEN - 0.01) not in (GREEN, GOLD)
+    assert lamp(37.0) == RED and lamp(63.0) == GREEN, "the stops are the fuller score's"
 
 
 def test_between_the_stops_the_lamp_moves_one_way_through_orange_and_lime():
     """Hue angle in OKLCH rises from red through gold to green, never back."""
-    scores = [100 / 3 + k * (100 / 3) / 40 for k in range(41)]
+    scores = [FULL_RED + k * (FULL_GREEN - FULL_RED) / 40 for k in range(41)]
     hues = [to_oklch(lamp(score))[2] for score in scores]
     assert hues == sorted(hues)
     assert len({lamp(score) for score in scores}) >= 30
-    orange, lime = lamp(41.67), lamp(58.33)
+    orange, lime = lamp((FULL_RED + 50) / 2), lamp((FULL_GREEN + 50) / 2)
     assert orange[0] > orange[1] > orange[2] and orange[1] < GOLD[1]
     assert lime[1] > lime[0] > lime[2] and lime[0] < GOLD[0]
     for score in scores:
@@ -529,14 +527,10 @@ def test_an_impossible_stored_lamp_score_is_no_reading():
     from app.render.view import view_from_metrics
 
     for stored in (None, "41", True, -1, 100.5, float("nan")):
-        view = view_from_metrics("2026-11-16", {"bandwidth_lamp": stored}, {}, load_settings())
+        view = view_from_metrics("2026-11-16", {"bandwidth_full_lamp": stored}, {}, load_settings())
         assert view.bandwidth_lamp is None, stored
-    assert (
-        view_from_metrics(
-            "2026-11-16", {"bandwidth_lamp": 41.67}, {}, load_settings()
-        ).bandwidth_lamp
-        == 41.67
-    )
+    stored = {"bandwidth_full_lamp": 41.67, "bandwidth_lamp": 70.0}
+    assert view_from_metrics("2026-11-16", stored, {}, load_settings()).bandwidth_lamp == 41.67
 
 
 @pytest.mark.parametrize("weekday", range(7))
@@ -547,7 +541,7 @@ def test_the_score_changes_the_lamps_shade_and_nothing_else(weekday):
     assert shade_pixels(replace(view, bandwidth_low=True, bandwidth_lamp=29.17)) == {RED}
     assert shade_pixels(replace(view, bandwidth_lamp=70.0)) == {GREEN}
     plain = render_books(view).poster
-    for score, low in ((29.17, True), (41.67, False), (70.0, False)):
+    for score, low in ((29.17, True), (44.0, False), (70.0, False)):
         coloured = render_books(replace(view, bandwidth_lamp=score, bandwidth_low=low)).poster
         changed = [
             (x, y)

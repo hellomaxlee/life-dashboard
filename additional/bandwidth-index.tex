@@ -16,8 +16,12 @@
 \maketitle
 
 \section*{Status}
-Implemented in \texttt{app/metrics/bandwidth.py} and stored per day in
-\texttt{daily\_metrics}. It replaces the first draft, which a formal audit and a
+Two scores are stored per day in \texttt{daily\_metrics}. The two-term score of
+Sections 1 to 5 (\texttt{app/metrics/bandwidth.py}) came first and coloured the
+lamp for a day. Since 20 November 2026 the lamp is coloured by the ten-term score
+of Section~\ref{sec:full} (\texttt{app/metrics/bandwidth\_full.py}), whose two
+heaviest terms are the two-term score's; where Sections 1 to 5 say ``the lamp'',
+read the two-term score. The two-term score replaced the first draft, which a formal audit and a
 signal-validity review took apart (Section~\ref{sec:dropped}). Sleep is scored on
 bands Max set himself; sleeping heart rate is compared with his own previous four
 weeks. The score has not been checked against how he felt, and no self-report
@@ -162,11 +166,13 @@ $\ge 0$, so $z_s + z_h \ge 0 > -2$. With no term present the cue is off unless
 carried, and a carried cue rests on yesterday's reading.
 \end{proof}
 
-\section{The Fuller Score, a Shadow}
+\section{The Fuller Score, Which the Lamp Shows}\label{sec:full}
 Max, 20 November 2026: robust ``isn't necessarily to decrease the number of
 variables \dots\ partially means defensibility and partially means completeness
 as a proxy for my actual bandwidth''. A second score with ten terms is stored
-beside the first. Nothing displays it; the lamp still shows the two-term score.
+beside the first. It was built as a shadow and, the same day, Max switched the
+lamp to it. The two-term score of the sections above is kept for comparison and
+nothing displays it; its two terms are the fuller score's anchors.
 \begin{equation}
 B_{\text{full}} = 50 + \frac{1}{6} \sum_i w_i z_i, \qquad \sum_i w_i = 100
 \end{equation}
@@ -202,13 +208,16 @@ Each $z_i$ lies in its own range above, so $\sum w_i z_i \in [-300, 226]$.
 \paragraph{The Cue Line Follows from the Weights.} A weighted mean of ten terms
 spreads less than a sum of two. If the terms were independent with equal spread,
 the spread of $\sum w_i z_i$ would be proportional to $\sqrt{\sum w_i^2}$. The
-lamp's score is the same form with weights $(50, 50)$ and its cue at $-100$, so
+two-term score is the same form with weights $(50, 50)$ and its cue at $-100$, so
 \begin{equation}
 \ell = -100 \cdot \frac{\sqrt{\sum w_i^2}}{\sqrt{50^2 + 50^2}} = -100 \cdot
 \frac{\sqrt{1890}}{\sqrt{5000}} \approx -61.48
 \end{equation}
 and the cue is on when $\sum w_i z_i \le \ell$ with at least 60 of the hundred
 present: $B_{\text{full}} \le 39.75$. Green starts at the mirror image, 60.25.
+The lamp reads the score under the same condition: with less than 60 of the
+hundred present it is the plain gold lamp, never red or green. Before noon, with
+no night yet, it carries yesterday's value and cue.
 Either anchor term reaches the line alone: $30 \cdot (-3) = -90$ and
 $24 \cdot (-3) = -72$.
 
@@ -237,18 +246,19 @@ B &= 50 + \tfrac{25}{3}(-3) = 25.00 & &\text{cue on}
 The same heart rate after 7.5 h gives $z_s = +2$ and $B = 58.33$.
 
 \section{On the Panel}
-The number is never shown. It colours the shade of the lamp on the lower Books
-shelf, and nothing else refers to it:
+The number is never shown. The fuller score $B_{\text{full}}$ colours the shade
+of the lamp on the lower Books shelf, and nothing else refers to it. With
+$r = 39.75$ and $g = 60.25$, the stops derived from the weights:
 \begin{center}
 \begin{tabular}{ll}
 \toprule
 Score & Shade \\
 \midrule
-Cue on ($B \le 100/3$) & Red \\
-$100/3 < B < 50$ & Red through orange to gold \\
-$B = 50$, or no reading & Gold, the lamp's own colour \\
-$50 < B < 200/3$ & Gold through lime to green \\
-$B \ge 200/3$ & Green \\
+Cue on ($B_{\text{full}} \le r$) & Red \\
+$r < B_{\text{full}} < 50$ & Red through orange to gold \\
+$B_{\text{full}} = 50$, no reading, or under 60 of 100 present & Gold, the lamp's own colour \\
+$50 < B_{\text{full}} < g$ & Gold through lime to green \\
+$B_{\text{full}} \ge g$ & Green \\
 \bottomrule
 \end{tabular}
 \end{center}
