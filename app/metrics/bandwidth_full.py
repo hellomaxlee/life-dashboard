@@ -29,6 +29,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
+from itertools import pairwise
 from zoneinfo import ZoneInfo
 
 from app.metrics.bandwidth import (
@@ -55,9 +56,9 @@ WEIGHTS: dict[str, int] = {
     "sleep_hr": 24,
     "hrv": 4,
     "resting_hr": 3,
-    "load": 2,
-    "movement": 4,
-    "daylight": 2,
+    "load": 4,
+    "movement": 3,
+    "daylight": 1,
 }
 TERM_RANGE: dict[str, tuple[float, float]] = {
     "sleep": (-3.0, 2.0),
@@ -67,7 +68,7 @@ TERM_RANGE: dict[str, tuple[float, float]] = {
     "sleep_hr": (-3.0, 3.0),
     "hrv": (-3.0, 3.0),
     "resting_hr": (-3.0, 3.0),
-    "load": (-3.0, 0.0),
+    "load": (-3.0, 1.5),
     "movement": (-3.0, 3.0),
     "daylight": (-3.0, 3.0),
 }
@@ -96,6 +97,13 @@ ONSET_Z_MAX = 1.0
 LN_HRV_FLOOR = 0.10
 RHR_FLOOR_BPM = 2.0
 RHR_MIN_BPM, RHR_MAX_BPM = 30.0, 120.0
+# A day's effort load as a number, Max's priors (2026-11-20: "exercise can rejuvenate me,
+# but overtraining, of course, is bad for bandwidth"; a moderate session ends at about 100
+# and the lift lasts two days): nothing for none, +1 from the quality bar of 60 to 100,
+# back to 0 at 140, and -1 for every 40 past that, down to -3 at 260.
+SESSION_KNOTS = ((0.0, 0.0), (60.0, 1.0), (100.0, 1.0), (140.0, 0.0), (260.0, -3.0))
+SESSION_BEFORE_SHARE = 0.5
+SESSION_MAX_LOAD = 2000.0
 LOAD_BALANCE_EVEN = 1.0
 LOAD_BALANCE_PER_Z = 0.25
 LOAD_BALANCE_MAX = 10.0
@@ -128,6 +136,7 @@ class FullInputs:
     resting_hr: dict[date, float] = field(default_factory=dict)
     load_balance: dict[date, float | None] = field(default_factory=dict)
     load_chronic: dict[date, float | None] = field(default_factory=dict)
+    load_trimp: dict[date, float] = field(default_factory=dict)
     steps: dict[date, int] = field(default_factory=dict)
     daylight_min: dict[date, float] = field(default_factory=dict)
     tz: str = "America/New_York"
@@ -219,17 +228,45 @@ def resting_hr_term(day: date, inputs: FullInputs) -> Term | None:
     return _robust(valid, day - timedelta(days=1), RHR_FLOOR_BPM, -1.0)
 
 
-def load_term(day: date, inputs: FullInputs) -> Term | None:
-    """Overreach only: yesterday's acute load over chronic, 0 at even or under, one unit
-    down for every quarter over. Training less than usual is not a cost here."""
-    yesterday = day - timedelta(days=1)
-    balance, chronic = inputs.load_balance.get(yesterday), inputs.load_chronic.get(yesterday)
+def session_z(load: float) -> float:
+    """SESSION_KNOTS joined by straight lines, flat past the last."""
+    for (lo, below), (hi, above) in pairwise(SESSION_KNOTS):
+        if load <= hi:
+            return below + (above - below) * (load - lo) / (hi - lo)
+    return SESSION_KNOTS[-1][1]
+
+
+def _session(inputs: FullInputs, day: date) -> float | None:
+    load = inputs.load_trimp.get(day)
+    if not _finite(load) or not 0 <= load <= SESSION_MAX_LOAD:
+        return None
+    return session_z(load)
+
+
+def _overreach(inputs: FullInputs, day: date) -> float:
+    """The week against his usual: `day`'s acute load over chronic, 0 at even or under, one
+    unit for every quarter over. Nothing while chronic load is under LOAD_MIN_CHRONIC, when
+    the ratio is over almost nothing."""
+    balance, chronic = inputs.load_balance.get(day), inputs.load_chronic.get(day)
     if not _finite(balance) or not 0 <= balance <= LOAD_BALANCE_MAX:
-        return None
+        return 0.0
     if not _finite(chronic) or not LOAD_MIN_CHRONIC <= chronic <= LOAD_MAX_CHRONIC:
+        return 0.0
+    return max(0.0, balance - LOAD_BALANCE_EVEN) / LOAD_BALANCE_PER_Z
+
+
+def load_term(day: date, inputs: FullInputs) -> Term | None:
+    """Two-sided: yesterday's effort load on SESSION_KNOTS, plus half of the day before's
+    (the lift, and the cost, last two days), less the week's overreach. A moderate session
+    is a credit, none is nothing, a hard one or a week well over his usual is a cost.
+    Absent without yesterday's load; the day before's counts as none when missing."""
+    yesterday = day - timedelta(days=1)
+    last = _session(inputs, yesterday)
+    if last is None:
         return None
-    over = max(0.0, balance - LOAD_BALANCE_EVEN) / LOAD_BALANCE_PER_Z
-    return Term(balance, -min(3.0, over), LOAD_BALANCE_EVEN, LOAD_BALANCE_PER_Z)
+    before = _session(inputs, yesterday - timedelta(days=1)) or 0.0
+    z = last + SESSION_BEFORE_SHARE * before - _overreach(inputs, yesterday)
+    return Term(inputs.load_trimp[yesterday], max(-3.0, z))
 
 
 def movement_term(day: date, inputs: FullInputs) -> Term | None:
@@ -307,3 +344,4 @@ assert sum(WEIGHTS.values()) == 100
 assert set(TERM_RANGE) == set(WEIGHTS)
 assert sorted(name for names in DOMAINS.values() for name in names) == sorted(WEIGHTS)
 assert MIN_HISTORY >= 2
+assert max(z for _, z in SESSION_KNOTS) * (1 + SESSION_BEFORE_SHARE) == TERM_RANGE["load"][1]

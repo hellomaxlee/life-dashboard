@@ -393,6 +393,7 @@ def compute_rows(
         resting_hr=inputs.wellness.get("resting_hr", {}),
         load_balance={day: load.balance for day, load in load_by_day.items()},
         load_chronic={day: load.chronic for day, load in load_by_day.items()},
+        load_trimp={day: load.trimp for day, load in load_by_day.items()},
         steps=inputs.steps,
         daylight_min=inputs.wellness.get("daylight_min", {}),
         tz=tz,

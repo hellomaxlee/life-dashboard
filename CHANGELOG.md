@@ -3,6 +3,14 @@
 Running log, newest first. The Lead reads this to find root causes and prioritize.
 Entry format: `## YYYY-MM-DD · <Title> (<Author>)` followed by terse bullets. Name the fixture combo on render/summary cycles.
 
+## 2026-11-20 · A two-sided load term: a moderate session is a credit, a hard one a cost (Bartek Zieliński)
+- Max: "how exercise can rejuvenate me, but overtraining, of course, is bad for bandwidth"; of a moderate session ending at a load of about 100 and a lift of two days, "those numbers sound right, build the two-sided load term; but honestly this shouldnt affect metrics too much".
+- `bandwidth_full.load_term`: yesterday's effort load on `SESSION_KNOTS` (0 at none, +1 from 60 to 100, 0 at 140, −3 at 260, straight lines), plus half of the day before's, less the week's overreach (the old term, still gated on chronic load of 20), floored at −3; range [−3, +1.5]. Absent only without yesterday's load; a day with no workout is a term at 0, so it now counts toward `weight_present`. The engine feeds `load_trimp` per day.
+- Weights: load 2 to 4, steps 4 to 3, daylight 2 to 1. Kept small at his word: a moderate session is worth +0.67 of a point the next day and +0.33 the day after; the worst the term can do is −2 points. The score's range is unchanged ([0, 87.67]); the derived cue line moves from −61.48 to −61.51 and the stops stay 39.75 and 60.25 to two places.
+- The knots are Max's priors on nine workouts of history, too few to fit; not reviewed by Ananya or Leilani.
+- Gates: ruff clean; full suite on this tree 1913 passed. Mutants red, 14 of 14 (PYTHONDONTWRITEBYTECODE, restored from file copies): credit ending at 120, no credit, cost starting later, the day before in full, ignored, or three days back, no floor, overreach ignored or counted on a thin chronic load, unbounded session load, a missing load scored as none, today's load, the old weight, the engine feeding no load.
+- No render change beyond the score, so no fixture cycle. Spec table and cue arithmetic updated, PDF rebuilt. No model calls.
+
 ## 2026-11-20 · The lamp switched to the fuller bandwidth score (Bartek Zieliński; display Lucía Ferrer)
 - Max, having seen the two scores side by side: "I would like to switch to the in general fuller score though." Also raised, not built: "how exercise can rejuvenate me, but overtraining, of course, is bad for bandwidth" (recorded as open in `notes.txt`; the load term counts overreach only, at weight 2, and has been absent on every day).
 - The Books lamp is now coloured by the ten-term score. `full_json` gained `bandwidth_full_lamp` (a new engine key) and `awaiting_night`; `view.py` reads `bandwidth_full_lamp` and `bandwidth_full_low`; `screens.LAMP_STOPS` are `FULL_RED` (39.75), 50, `FULL_GREEN` (60.25), imported from the weights and not typed in. The gradients and `lamp_shade` are otherwise as they were.

@@ -22,11 +22,13 @@ from app.metrics.bandwidth_full import (
     FULL_KEYS,
     FULL_RED,
     MIN_CUE_WEIGHT,
+    SESSION_KNOTS,
     TERM_RANGE,
     WEIGHTS,
     FullInputs,
     full_json,
     onset_minutes,
+    session_z,
     terms,
 )
 from app.metrics.engine import recompute
@@ -60,6 +62,7 @@ def ordinary(nights: int = 30) -> FullInputs:
         resting_hr={d: 60.0 for d in days},
         load_balance={d: 1.0 for d in days},
         load_chronic={d: 30.0 for d in days},
+        load_trimp={d: 0.0 for d in days},
         steps={d: 8000 for d in days},
         daylight_min={d: 40.0 for d in days},
         tz=TZ,
@@ -122,9 +125,37 @@ CASES = {
         63.33,
     ),
     "yesterday's resting heart rate 4 bpm up: z -2": (changed(resting_hr={YESTERDAY: 64.0}), 63.67),
-    "yesterday's load balance 1.5: z -2": (changed(load_balance={YESTERDAY: 1.5}), 64.0),
-    "yesterday 3000 steps short: z -2": (changed(steps={YESTERDAY: 5000}), 63.33),
-    "yesterday 20 minutes less daylight: z -2": (changed(daylight_min={YESTERDAY: 20.0}), 64.0),
+    "yesterday's load balance 1.5: z -2 on weight 4": (
+        changed(load_balance={YESTERDAY: 1.5}),
+        63.33,
+    ),
+    "a moderate session yesterday: z +1": (changed(load_trimp={YESTERDAY: 80.0}), 65.33),
+    "a moderate session two days ago: half of +1": (
+        changed(load_trimp={YESTERDAY - timedelta(days=1): 80.0}),
+        65.0,
+    ),
+    "moderate sessions on both days: +1.5, the most": (
+        changed(load_trimp={YESTERDAY: 60.0, YESTERDAY - timedelta(days=1): 100.0}),
+        65.67,
+    ),
+    "a hard session yesterday, load 220: z -2": (changed(load_trimp={YESTERDAY: 220.0}), 63.33),
+    "a hard session two days ago, load 220: half of -2": (
+        changed(load_trimp={YESTERDAY - timedelta(days=1): 220.0}),
+        64.0,
+    ),
+    "a session three days ago is spent": (
+        changed(load_trimp={YESTERDAY - timedelta(days=2): 220.0}),
+        ORDINARY,
+    ),
+    "a moderate session in an overreaching week: +1 - 2": (
+        changed(load_trimp={YESTERDAY: 80.0}, load_balance={YESTERDAY: 1.5}),
+        64.0,
+    ),
+    "yesterday 3000 steps short: z -2 on weight 3": (changed(steps={YESTERDAY: 5000}), 63.67),
+    "yesterday 20 minutes less daylight: z -2 on weight 1": (
+        changed(daylight_min={YESTERDAY: 20.0}),
+        64.33,
+    ),
 }
 
 
@@ -134,13 +165,36 @@ def test_each_term_moves_the_score_by_its_weight(case):
     assert score(inputs) == expected
 
 
-def test_training_under_his_usual_load_is_not_a_cost_and_a_thin_chronic_load_is_no_term():
+def test_the_session_knots_are_his_priors_and_the_term_stops_at_minus_three():
+    assert SESSION_KNOTS == ((0.0, 0.0), (60.0, 1.0), (100.0, 1.0), (140.0, 0.0), (260.0, -3.0))
+    assert [session_z(x) for x in (0, 30, 60, 100, 120, 140, 180, 260, 900)] == [
+        0.0,
+        0.5,
+        1.0,
+        1.0,
+        0.5,
+        0.0,
+        -1.0,
+        -3.0,
+        -3.0,
+    ]
+    both = changed(load_trimp={YESTERDAY: 300.0, YESTERDAY - timedelta(days=1): 300.0})
+    assert terms(DAY, both)["load"].z == -3.0, "-3 - 1.5 stops at the term's floor"
+    assert TERM_RANGE["load"] == (-3.0, 1.5)
+
+
+def test_training_under_his_usual_is_no_cost_and_a_thin_chronic_load_has_no_week_part():
     assert score(changed(load_balance={YESTERDAY: 0.4})) == ORDINARY
     thin = full_json(DAY, changed(load_balance={YESTERDAY: 3.0}, load_chronic={YESTERDAY: 19.9}))
     assert thin["bandwidth_full"] == ORDINARY
-    assert thin["bandwidth_full_trace"]["load"] is None
-    assert thin["bandwidth_full_trace"]["weight_present"] == 98
-    assert score(changed(load_balance={YESTERDAY: 3.0}, load_chronic={YESTERDAY: 20.0})) == 63.67
+    assert thin["bandwidth_full_trace"]["load"]["z"] == 0.0, "one workout after a quiet month"
+    assert thin["bandwidth_full_trace"]["weight_present"] == 100
+    assert score(changed(load_balance={YESTERDAY: 3.0}, load_chronic={YESTERDAY: 20.0})) == 62.67
+    unknown = full_json(DAY, replace(ordinary(), load_trimp={}))
+    assert unknown["bandwidth_full_trace"]["load"] is None, "no load on record is no term"
+    assert unknown["bandwidth_full_trace"]["weight_present"] == 96
+    one_day = replace(ordinary(), load_trimp={YESTERDAY: 80.0})
+    assert terms(DAY, one_day)["load"].z == 1.0, "the day before missing counts as none"
 
 
 def test_recent_nights_needs_two_of_the_three_and_leaves_last_night_out():
@@ -177,7 +231,7 @@ def test_the_cue_line_and_the_colour_stops_come_from_the_weights():
     assert pytest.approx(50 + 100 * ratio / 6) == FULL_GREEN
     assert sum(WEIGHTS.values()) == 100
     assert (round(CUE_WEIGHTED_SUM, 2), round(FULL_RED, 2), round(FULL_GREEN, 2)) == (
-        -61.48,
+        -61.51,
         39.75,
         60.25,
     )
@@ -191,7 +245,7 @@ def test_each_anchor_term_can_reach_the_cue_alone():
 
 
 def test_the_cue_is_on_at_the_line_and_needs_sixty_of_the_hundred_present():
-    """4.5 h is -3: 30 x -3 + 28 = -62, under -61.48. 4.6 h is -2.9: -59, over it."""
+    """4.5 h is -3: 30 x -3 + 28 = -62, under -61.51. 4.6 h is -2.9: -59, over it."""
     on = full_json(DAY, changed(sleep_hours={DAY: 4.5}))
     assert (on["bandwidth_full"], on["bandwidth_full_low"]) == (39.67, True)
     off = full_json(DAY, changed(sleep_hours={DAY: 4.6}))
@@ -225,6 +279,7 @@ def test_the_attainable_range_is_what_the_term_ranges_say():
         hrv_ms={YESTERDAY: 5.0},
         resting_hr={YESTERDAY: 100.0},
         load_balance={YESTERDAY: 5.0},
+        load_trimp={YESTERDAY: 400.0},
         steps={YESTERDAY: 0},
         daylight_min={YESTERDAY: 0.0},
     )
@@ -235,6 +290,7 @@ def test_the_attainable_range_is_what_the_term_ranges_say():
         onsets={DAY: onset(DAY, -300)},
         hrv_ms={YESTERDAY: 250.0},
         resting_hr={YESTERDAY: 31.0},
+        load_trimp={YESTERDAY: 80.0, YESTERDAY - timedelta(days=1): 80.0},
         steps={YESTERDAY: 60000},
         daylight_min={YESTERDAY: 600.0},
     )
@@ -244,8 +300,7 @@ def test_the_attainable_range_is_what_the_term_ranges_say():
 TERM_OF = {
     "hrv_ms": "hrv",
     "resting_hr": "resting_hr",
-    "load_balance": "load",
-    "load_chronic": "load",
+    "load_trimp": "load",
     "steps": "movement",
     "daylight_min": "daylight",
 }
@@ -253,7 +308,8 @@ HOSTILE = (float("nan"), float("inf"), float("-inf"), -5.0, 1e26, 1e308, 10**30)
 
 
 @pytest.mark.parametrize(
-    "field", ["hrv_ms", "resting_hr", "load_balance", "load_chronic", "steps", "daylight_min"]
+    "field",
+    ["hrv_ms", "resting_hr", "load_balance", "load_chronic", "load_trimp", "steps", "daylight_min"],
 )
 @pytest.mark.parametrize("value", HOSTILE)
 def test_an_impossible_value_is_an_absent_term_and_never_stops_the_engine(field, value):
@@ -261,7 +317,10 @@ def test_an_impossible_value_is_an_absent_term_and_never_stops_the_engine(field,
     out = full_json(DAY, changed(**{field: {YESTERDAY: value}}))
     assert json.dumps(out, allow_nan=False)
     assert 0.0 <= out["bandwidth_full"] <= 87.67
-    assert out["bandwidth_full_trace"][TERM_OF[field]] is None, "not scored as a real value"
+    if field in TERM_OF:
+        assert out["bandwidth_full_trace"][TERM_OF[field]] is None, "not scored as a real value"
+    else:
+        assert out["bandwidth_full_trace"]["load"]["z"] == 0.0, "no week part, the sessions stand"
     wild_history = changed(**{field: {DAY - timedelta(days=5): value}})
     assert json.dumps(full_json(DAY, wild_history), allow_nan=False)
 
@@ -293,6 +352,8 @@ def test_every_score_is_in_range_and_every_term_in_its_own_whatever_the_inputs()
             inputs.resting_hr[day] = pick(45, 80)
             inputs.load_balance[day] = rng.choice((None, pick(0, 3)))
             inputs.load_chronic[day] = rng.choice((None, pick(0, 80)))
+            if rng.random() < 0.9:
+                inputs.load_trimp[day] = rng.choice((0.0, pick(0, 400)))
             inputs.steps[day] = pick(0, 25000)
             inputs.daylight_min[day] = pick(0, 200)
         out = full_json(DAY, inputs)
@@ -355,7 +416,8 @@ def test_the_engine_stores_it_the_lamp_reads_it_and_the_summary_never_sees_it(db
     assert trace["sleep_hr"]["z"] == -1.0
     assert trace["recent_nights"]["z"] == 2.0
     assert trace["sleep_timing"]["z"] == 0.0
-    assert trace["weight_present"] == 30 + 14 + 12 + 24
+    assert trace["weight_present"] == 30 + 14 + 12 + 24 + 4
+    assert trace["load"]["z"] == 0.0, "no workout on record is a term at 0"
     assert row["bandwidth_full"] == 40.67, "50 + (-60 + 28 + 0 - 24) / 6"
     assert (row["bandwidth"], row["bandwidth_low"]) == (25.0, True), "the two-term score is red"
     assert (row["bandwidth_full_lamp"], row["bandwidth_full_low"]) == (40.67, False)
@@ -377,10 +439,13 @@ def test_the_lamp_needs_sixty_of_the_hundred_so_a_thin_day_is_gold():
     short = full_json(DAY, FullInputs(sleep_hours={DAY: 4.5}, nights=worn, tz=TZ))
     assert short["bandwidth_full"] == 35.0 < FULL_RED
     assert (short["bandwidth_full_lamp"], short["bandwidth_full_low"]) == (None, False)
-    edge = replace(ordinary(), stages={}, nights={}, hrv_ms={}, resting_hr={}, load_chronic={})
-    assert full_json(DAY, edge)["bandwidth_full_trace"]["weight_present"] == 62
+    edge = replace(ordinary(), stages={}, nights={}, hrv_ms={}, resting_hr={})
+    assert full_json(DAY, edge)["bandwidth_full_trace"]["weight_present"] == 64
     assert full_json(DAY, edge)["bandwidth_full_lamp"] is not None
     under = replace(edge, daylight_min={}, steps={})
+    assert full_json(DAY, under)["bandwidth_full_trace"]["weight_present"] == 60
+    assert full_json(DAY, under)["bandwidth_full_lamp"] is not None, "sixty is enough"
+    under = replace(under, load_trimp={})
     assert full_json(DAY, under)["bandwidth_full_trace"]["weight_present"] == 56
     assert full_json(DAY, under)["bandwidth_full_lamp"] is None
 
@@ -435,7 +500,7 @@ def test_the_tool_names_each_score_by_its_own_stops():
         "lime",
         "green",
     ]
-    assert [band(v, False, FULL_STOPS) for v in (39.75, 44.0, 50.0, 57.0, 60.25)] == [
+    assert [band(v, False, FULL_STOPS) for v in (39.74, 44.0, 50.0, 57.0, 60.26)] == [
         "red",
         "orange",
         "gold",
