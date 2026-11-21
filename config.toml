@@ -24,7 +24,7 @@ target_hours = 7.0
 max_hours = 9.0
 
 [books]
-target_per_year = 12
+target_per_year = 6
 fallback_to_date_added = true
 
 [wellness]

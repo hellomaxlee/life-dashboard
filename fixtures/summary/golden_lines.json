@@ -67,7 +67,7 @@
       "daily_metrics": {"quality_workout": false, "workout_count": 0, "workout_load": null, "sleep_hours": 7.3, "sleep_win": true, "steps": 5900, "books_ytd": 1, "book_finished_today": true, "wins": ["sleep", "book"]},
       "weekly_metrics": {"quality_workouts": 1, "week_hit": null, "weeks_hit_streak": 2},
       "book": {"id": "gr-1", "title": "Little Fires Everywhere", "author": "Celeste Ng", "read_at": "2026-10-22"},
-      "line": "A book ends the way a habit grows: a page at a time, unremarkably. Finished *Little Fires Everywhere*, 1 of 12 this year."
+      "line": "A book ends the way a habit grows: a page at a time, unremarkably. Finished *Little Fires Everywhere*, 1 of 6 this year."
     },
     {
       "cell": "train / all-sources / alive / base (second dot)",

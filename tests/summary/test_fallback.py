@@ -137,7 +137,7 @@ def test_payload_rounds_to_what_the_line_may_say(db, settings):
     assert payload.data["day"]["sleep_hours"] == 7.4
     assert payload.data["week"]["dots_word"] == "third"
     assert "wellness_fact" not in payload.data
-    assert payload.data["books"] == {"ytd": 3, "target": 12}
+    assert payload.data["books"] == {"ytd": 3, "target": 6}
 
 
 def test_payload_takes_workout_minutes_from_activities_when_the_engine_did_not_write_them(

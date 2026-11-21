@@ -518,6 +518,8 @@ TIER_BOARDS = (24, 41)
 TIER_HEIGHTS = (13, 11, 14, 12, 13, 10, 12, 14, 11, 13, 10, 14)
 TIER_WIDTH_SWING = (0, -1, 1, 0, 1, -1)
 SHELF_RIGHT = 46
+# A spine wider than this reads as a box, not a book: a small goal leaves shelf to spare.
+SLOT_MAX_WIDTH = 7
 DECOR_X = 54
 PLANT_POT = (
     ".ppppp.",
@@ -677,7 +679,8 @@ def books_stamp(view: DayView) -> str:
 def shelf_slots(target: int) -> list[tuple[int, int, int, int]]:
     """(tier, x0, width, height) of every slot, in reading order: the first half of the
     target on the top shelf, the rest on the lower. Six to a shelf get widths that vary by a
-    pixel; more than fit that way get one even width, never under one pixel."""
+    pixel; more than fit that way get one even width, never under one pixel; fewer keep a
+    book's width (SLOT_MAX_WIDTH) and leave the rest of the shelf bare."""
     slots = max(target, 1)
     upper = (slots + 1) // 2
     out = []
@@ -685,7 +688,7 @@ def shelf_slots(target: int) -> list[tuple[int, int, int, int]]:
         if not count:
             continue
         room = SHELF_RIGHT - LEFT + 1
-        even = max(1, (room - (count - 1)) // count)
+        even = min(SLOT_MAX_WIDTH, max(1, (room - (count - 1)) // count))
         swing = TIER_WIDTH_SWING if even >= 5 else (0,)
         x = LEFT
         for index in range(count):

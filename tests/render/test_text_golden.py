@@ -185,7 +185,7 @@ def test_books_screen_text_and_pages_race_week(monkeypatch, settings):
     view, now = load(RACE_WEEK, settings)
     drawn = record_text(monkeypatch)
     clip = render_screen("books", view, now)
-    assert drawn[:2] == [("BOOKS", 2, 2, S, 1), ("10 OF 12", 33, 2, S, 1)]
+    assert drawn[:2] == [("BOOKS", 2, 2, S, 1), ("10 OF 6", 37, 2, S, 1)]
     assert drawn[2][2] == 45, "nothing else above the summary: the count is the stamp"
     assert page_lines(drawn) == [
         ["Finished", "Jazz"],
@@ -202,7 +202,7 @@ def test_books_screen_text_and_pages_week_41(monkeypatch, settings):
     view, now = load(WEEK_41, settings)
     drawn = record_text(monkeypatch)
     render_screen("books", view, now)
-    assert drawn[:2] == [("BOOKS", 2, 2, S, 1), ("3 OF 12", 37, 2, S, 1)]
+    assert drawn[:2] == [("BOOKS", 2, 2, S, 1), ("3 OF 6", 41, 2, S, 1)]
     assert page_lines(drawn) == [
         ["Second dot", "this week,"],
         ["7.4 h of", "sleep. What"],

@@ -45,7 +45,7 @@ def test_invented_number_fails_grounding_and_the_same_line_with_the_payload_numb
 def test_grounding_formatting_rules(db, settings):
     payload = payload_for(db, settings, golden_cases()[0])
     numbers = payload.numbers()
-    assert {118.0, 7.4, 3.0, 4.0, 12.0, 7.0, 8412.0} <= numbers
+    assert {118.0, 7.4, 3.0, 4.0, 6.0, 7.0, 8412.0} <= numbers
     assert gate.ungrounded_numbers("load 118.0 and 118", numbers) == []
     assert gate.ungrounded_numbers("7 h target, 7.4 h slept", numbers) == []
     assert gate.ungrounded_numbers("8,412 steps", numbers) == []

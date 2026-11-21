@@ -59,7 +59,7 @@ CONTRASTIVE_LINES = (
     (
         "no workout on record / all sources / alive / base",
         "A book ends the way a habit grows: a page at a time, unremarkably. "
-        "Finished *Little Fires Everywhere*, 1 of 12 this year.",
+        "Finished *Little Fires Everywhere*, 1 of 6 this year.",
     ),
     (
         "train / all sources / alive / base",
@@ -155,7 +155,7 @@ STABLE_SYSTEM_PROMPT = (
     + '\n\nLines he would hate: "Don\'t let the streak die!" / "Only one more and you\'re '
     'done!" / "You slacked off yesterday." / "Be a beast." / "As Marcus Aurelius said, ..." '
     "with words that are not a bank entry / any quote from memory / a recap such as "
-    '"Third dot, load 118, 7.4 h of sleep, 3 of 12 books." / "Rest day Saturday, 12547 steps." '
+    '"Third dot, load 118, 7.4 h of sleep, 3 of 6 books." / "Rest day Saturday, 12547 steps." '
     "/ any line with a number that is not in the payload.\n"
 )
 

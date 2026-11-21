@@ -140,8 +140,10 @@ def test_every_unread_slot_is_an_outline_in_the_month_themes_ring(settings):
     """Max, 2026-11-09: one tone for unread slots instead of a tint of each spine-to-be; since
     2026-11-15 the slot is the outline of the book to come, on a two-shelf bookcase."""
     view, _ = load(WEEK_41, settings)
-    slots = shelf_slots(12)
-    assert [tier for tier, *_ in slots] == [0] * 6 + [1] * 6, "two shelves of six"
+    slots = shelf_slots(view.books_target)
+    assert view.books_target == 6
+    assert [tier for tier, *_ in slots] == [0] * 3 + [1] * 3, "two shelves of three"
+    assert [tier for tier, *_ in shelf_slots(12)] == [0] * 6 + [1] * 6, "or of six"
     for case in (view, replace(view, month_feature=None)):
         ring = theme_for(case).ring
         for read in (0, 3, 7, 12, 15, None):

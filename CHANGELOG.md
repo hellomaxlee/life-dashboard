@@ -3,6 +3,15 @@
 Running log, newest first. The Lead reads this to find root causes and prioritize.
 Entry format: `## YYYY-MM-DD · <Title> (<Author>)` followed by terse bullets. Name the fixture combo on render/summary cycles.
 
+## 2026-11-20 · Six books a year, and spines that stay book-shaped (Lucía Ferrer; design Mei-Lin Tsao)
+- Max: "Can you change the goal to be 6 books instead of 12? I wonder how this will work out with the 2 shelves. Figure it out."
+- `config.toml`: `books.target_per_year` 12 to 6. The summary prompt's two example lines and the golden line that cited "of 12" now say "of 6" (the gate grounds the goal in the payload).
+- The shelves: six slots split three and three, and at the old rule each was a 14 px slab. `screens.SLOT_MAX_WIDTH = 7` caps the even width, so a small goal draws three book-shaped spines a shelf (7, 6, 8 px) from the left and leaves the rest of the shelf bare; twelve and more are drawn exactly as before (tested). The stamp reads "2 OF 6". Past the goal the stamp counts on ("10 OF 6") and the shelf stays at six lit spines.
+- Snapshots: the ten Books snapshots regenerated, each compared old over new; diffs inside the stamp and the two shelves only (box 2,2 to 62,41). Five no-feature digests re-pinned, Books only. Text goldens, the view test and the fallback payload test moved to 6.
+- Gates: ruff clean; full suite on this tree 1914 passed. Mutants red, 2 of 2 (no cap; cap at 10).
+- Fixture combos for the eye test: the real 2026-11-20 at 0, 2, 3, 6 and 8 read against a goal of 6 and beside the goal of 12, raw and under gamma, and all ten Books snapshots old over new.
+- Not done: the README's Books image still shows a goal of 12; not seen on the panel. No model calls.
+
 ## 2026-11-20 · A two-sided load term: a moderate session is a credit, a hard one a cost (Bartek Zieliński)
 - Max: "how exercise can rejuvenate me, but overtraining, of course, is bad for bandwidth"; of a moderate session ending at a load of about 100 and a lift of two days, "those numbers sound right, build the two-sided load term; but honestly this shouldnt affect metrics too much".
 - `bandwidth_full.load_term`: yesterday's effort load on `SESSION_KNOTS` (0 at none, +1 from 60 to 100, 0 at 140, −3 at 260, straight lines), plus half of the day before's, less the week's overreach (the old term, still gated on chronic load of 20), floored at −3; range [−3, +1.5]. Absent only without yesterday's load; a day with no workout is a term at 0, so it now counts toward `weight_present`. The engine feeds `load_trimp` per day.

@@ -136,10 +136,10 @@ def test_books_shelf_counts_spines(settings):
     for read in (0, 3, 12, 15):
         frame = render_books(replace(view, books_ytd=read)).poster
         lit_spines = 0
-        for index, (tier, x0, _width, _height) in enumerate(shelf_slots(12)):
+        for index, (tier, x0, _width, _height) in enumerate(shelf_slots(view.books_target)):
             if frame.getpixel((x0, TIER_BOARDS[tier] - 1)) == SPINES[index % len(SPINES)]:
                 lit_spines += 1
-        assert lit_spines == min(read, 12)
+        assert lit_spines == min(read, view.books_target) == min(read, 6)
 
 
 def test_today_states(settings):
@@ -357,3 +357,21 @@ def test_the_parked_zz_never_touches_the_as_of_line(settings):
                 expect.putpixel(at, SECONDARY)
             assert ImageChops.difference(expect.crop(row), parked.crop(row)).getbbox() is None
     assert shortened >= 4
+
+
+def test_a_small_goal_keeps_book_shaped_spines_and_leaves_shelf_to_spare():
+    """Max, 2026-11-20: six books a year, not twelve. Three slots a shelf at the width a
+    twelve-book shelf gives them, not three slabs filling it."""
+    six = shelf_slots(6)
+    assert [(tier, x0, width) for tier, x0, width, _ in six] == [
+        (0, 2, 7),
+        (0, 10, 6),
+        (0, 17, 8),
+        (1, 2, 7),
+        (1, 10, 6),
+        (1, 17, 8),
+    ]
+    assert [width for _, _, width, _ in shelf_slots(12)] == [6, 5, 7, 6, 7, 5] * 2
+    for target in range(1, 13):
+        assert max(width for _, _, width, _ in shelf_slots(target)) <= 8, target
+    assert len(shelf_slots(40)) == 40, "a large goal is unchanged: one even width"

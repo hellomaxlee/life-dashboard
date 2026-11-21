@@ -33,7 +33,7 @@ def test_fixture_builds_the_expected_view(settings):
         steps=8412,
         as_of_utc="2026-09-30T22:10:00Z",
         books_ytd=3,
-        books_target=12,
+        books_target=6,
         summary_line="Second dot this week, 7.4 h of sleep. What you repeat is what you become.",
         claude=ClaudeUsage(41.2, "2026-10-03T20:00:00Z", "2026-09-30T21:40:00Z"),
         stale_hours=24,
