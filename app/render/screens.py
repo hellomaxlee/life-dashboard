@@ -639,7 +639,19 @@ LAMP = (
     "...w...",
     "..www..",
 )
-DECOR_INK: dict[str, Color] = {"g": GREEN, "p": CORAL, "y": GOLD, "w": TEXT}
+DECOR_INK: dict[str, Color] = {"g": GREEN, "p": CORAL, "y": GOLD, "w": TEXT, "d": LEAF_DARK}
+# The lower shelf's tenant while a small goal leaves it bare (Max, 2026-11-22: "fill the
+# second row with a bookworm or something else for now"): a worm in glasses at an open book.
+BOOKWORM = (
+    "...............ggg........",
+    "..............ggggg.......",
+    "..............gwgwg.......",
+    "......ggg.....ggggg.......",
+    ".....ggdgg.....ggd..ww.ww.",
+    "ggdggg...ggdg.dgg..wwwwwww",
+    "ggdgg.....gdggdgg..ppppppp",
+)
+BOOKWORM_X = 8
 assert len(LAMP) == LAMP_HEIGHT
 # The lamp's shade by the bandwidth score: red at the cue line and under, the lamp's own
 # gold on an ordinary day, green as far above 50 as the cue line is below it.
@@ -706,7 +718,11 @@ def shelf_slots(target: int) -> list[tuple[int, int, int, int]]:
 
 
 def _draw_decor(
-    frame: Frame, tier: int, rows: tuple[str, ...], inks: dict[str, Color] | None = None
+    frame: Frame,
+    tier: int,
+    rows: tuple[str, ...],
+    inks: dict[str, Color] | None = None,
+    x0: int = DECOR_X,
 ) -> None:
     pixels = frame.load()
     top = TIER_BOARDS[tier] - len(rows)
@@ -714,7 +730,7 @@ def _draw_decor(
     for dy, row in enumerate(rows):
         for dx, cell in enumerate(row):
             if cell in palette:
-                pixels[DECOR_X + dx, top + dy] = palette[cell]
+                pixels[x0 + dx, top + dy] = palette[cell]
 
 
 def _books_base(view: DayView) -> Frame:
@@ -731,7 +747,8 @@ def _books_base(view: DayView) -> Frame:
     draw_text_right(frame, RIGHT, 2, books_stamp(view), TEXT, SMALL)
     read = _count(view.books_ytd) or 0
     pixels = frame.load()
-    for number, (tier, x0, width, height) in enumerate(shelf_slots(view.books_target)):
+    slots = shelf_slots(view.books_target)
+    for number, (tier, x0, width, height) in enumerate(slots):
         bottom = TIER_BOARDS[tier] - 1
         top = bottom - height + 1
         x1 = x0 + width - 1
@@ -752,6 +769,8 @@ def _books_base(view: DayView) -> Frame:
         pixels[x, y] = LEAF_DARK if _mix(x, y) % 3 == 0 else GREEN
     _draw_decor(frame, 0, plant_rows(streak))
     _draw_decor(frame, 1, LAMP, {"y": lamp_shade(view)})
+    if all(tier == 0 for tier, *_ in slots):
+        _draw_decor(frame, 1, BOOKWORM, x0=BOOKWORM_X)
     return frame
 
 

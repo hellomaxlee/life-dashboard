@@ -37,7 +37,7 @@
   },
   "race-week__all-sources__broken-last-week__base/books": {
     "frames": 5,
-    "sha256": "8b5486710f7caea52c013ed64cf5f666596055017c292f23df956f3bac440045"
+    "sha256": "4c4463942b854cb95879cdd480a16b3188f33ea8269f3d52729e63985d88ca8c"
   },
   "race-week__all-sources__broken-last-week__base/city": {
     "frames": 1,
@@ -57,7 +57,7 @@
   },
   "race-week__workout-without-hr__never-started__peak/books": {
     "frames": 6,
-    "sha256": "df3ae7f670100591be6cb806001fce585b0f461d7ef20742d82940a655273d3d"
+    "sha256": "93f0a98c6b0a8dc98d5392b3ea1a1805e8de89c09eeb50c6da11d7002a5b3d12"
   },
   "race-week__workout-without-hr__never-started__peak/city": {
     "frames": 1,
@@ -77,7 +77,7 @@
   },
   "rest__health-delayed__alive__peak/books": {
     "frames": 5,
-    "sha256": "b9257be391274f535f5035d76be06f1964d5a0909698f5eaaf0d9886e47ea9d5"
+    "sha256": "cea561bc7c45605a8fa464fe51248f9753765b51b6c18fef8ffc59656fa5ec36"
   },
   "rest__health-delayed__alive__peak/city": {
     "frames": 2,
@@ -97,7 +97,7 @@
   },
   "rest__health-delayed__broken-last-week__off/books": {
     "frames": 5,
-    "sha256": "f7991014e5932188e55053ab5846843ad3b002b78f04d2d01b300d6c26236472"
+    "sha256": "250d8de3984074e4e8d812aed19bc48ac079a7f1d4620b72619be89e9fdae9c5"
   },
   "rest__health-delayed__broken-last-week__off/city": {
     "frames": 1,
@@ -117,7 +117,7 @@
   },
   "rest__sleep-missing__broken-last-week__base/books": {
     "frames": 4,
-    "sha256": "648e77023b5cec737e2c88a6e2a053c2de09f1396d121bc6f706084dacaaaa06"
+    "sha256": "c9841395f41b9d4fe6bf67118d9e87a0d266529876b2147c76c888935189bec4"
   },
   "rest__sleep-missing__broken-last-week__base/city": {
     "frames": 1,
@@ -137,7 +137,7 @@
   },
   "train__all-sources__alive__base/books": {
     "frames": 4,
-    "sha256": "0880a16a78e224090bfe81493101b5b13ad4f53dda9c35c96e65ee798b948b9c"
+    "sha256": "183be7435742a07bf626b44fdf677cc53ad5d8d141e06145fbea9614768e2202"
   },
   "train__all-sources__alive__base/city": {
     "frames": 4,
@@ -157,7 +157,7 @@
   },
   "train__all-sources__alive__peak/books": {
     "frames": 5,
-    "sha256": "0337c72f1998ac76d16b32dfc0cec33801832050a442e536f727b1354ab41aaa"
+    "sha256": "fdd35120b53c320277c4395aa685c06e9853e797f489abef067254804a8862be"
   },
   "train__all-sources__alive__peak/city": {
     "frames": 2,
@@ -177,7 +177,7 @@
   },
   "travel__health-delayed__alive__off/books": {
     "frames": 6,
-    "sha256": "aee2ebfcf0bfa275848c5c6217fa059728aaa9bd5e02158a7a22782db6b2e797"
+    "sha256": "85c9f7f5e9c5aaec1ea3524cd4d211816e7018c2da95499f2740a4eebe702a81"
   },
   "travel__health-delayed__alive__off/city": {
     "frames": 2,
@@ -217,7 +217,7 @@
   },
   "travel__workout-without-hr__broken-last-week__off/books": {
     "frames": 7,
-    "sha256": "33863d73135d69fb4a298d5c0c5601b2b9092c18c724db235dde8d205caef115"
+    "sha256": "7bf3219dd192151d6aa398434ef22c6cb7ddd9a61db637e6ad6d355c6d612fdb"
   },
   "travel__workout-without-hr__broken-last-week__off/city": {
     "frames": 1,

@@ -3,6 +3,15 @@
 Running log, newest first. The Lead reads this to find root causes and prioritize.
 Entry format: `## YYYY-MM-DD · <Title> (<Author>)` followed by terse bullets. Name the fixture combo on render/summary cycles.
 
+## 2026-11-22 · A bookworm on the bare lower shelf (Lucía Ferrer)
+- Max: "fill the second row with a bookworm or something else for now".
+- `screens.BOOKWORM`: a green worm with two white eyes, humped along the shelf, at an open book (white pages, coral cover), 26 by 7 px from x 8 on the lower shelf. Drawn only while no book slot sits on that shelf (a goal of six or fewer); a goal of seven and more has books there and no worm. Static; decoration only, reads no metric. The lamp and its shade are untouched.
+- Snapshots: nine Books snapshots compared old over new and regenerated, each differing inside the worm's box only (8,34 to 34,41); the 2027 fixture (goal 12) is unchanged. Five no-feature digests re-pinned, Books only, every other screen asserted unchanged.
+- Gates: ruff clean; full suite on this tree 1924 passed. Mutants red, 3 of 3 (PYTHONDONTWRITEBYTECODE, restored from a file copy): worm never drawn, always drawn, drawn elsewhere.
+- Fixture combo for the eye test: `rest / health delayed / alive / peak` (streak 76, the plant overgrown) on four weekday grounds at 0, 2, 4 and 6 read, and at a goal of 12, raw and under gamma at 1x and 5x. At 1x it reads as a small green creature beside a book; the eyes are two single LEDs.
+- Also answered, no code: why Today shows no sleep and no workout. Tonight's seven pushes parsed; they carry no sleep record for 11-21 (the Watch's first heart-rate sample that day is 11:21, so it was off overnight) or for 11-22 (heart rate and HRV run 00:02 to 10:33, so the Watch was on, but Health sent no sleep session). No push has carried a workout since 2026-11-10 (the 11-08 run); the judge read 11-19 to 11-22 and credited none.
+- Not done: not seen on the panel; motion. No model calls by this change (the recompute after the push ran the judge on its own).
+
 ## 2026-11-22 · Six books on one shelf, twelve next year, and why the pushes stopped (Lucía Ferrer; framing Ingrid Halvorsen)
 - Max: "Let's make all six books on one shelf?"; "and then set the goal for NEXT year to be 12 books"; "why did the dashboard stop opudating again? is it becausre the receiver changed port again?"; later "oh yeah it needed to push to .171".
 - The shelf: `screens.ONE_SHELF_MAX = 6`. A goal of up to six is one row on the top shelf, exactly the top row of a twelve-book case (widths 6, 5, 7, 6, 7, 5), and the lower shelf holds only the lamp; seven and more split as before, twelve is unchanged.
