@@ -242,7 +242,7 @@ def view_from_metrics(
         steps=steps if steps is not None else _whole(stored_steps),
         as_of_utc=_utc_iso(as_of_utc),
         books_ytd=_whole(daily.get(BOOKS_YTD)),
-        books_target=settings.books.target_per_year,
+        books_target=settings.books.target_for(date.fromisoformat(day_local).year),
         summary_line=summary.strip() if isinstance(summary, str) and summary.strip() else None,
         claude=claude if claude is not None else claude_from_metrics(daily),
         stale_hours=settings.claude_usage.stale_hours,

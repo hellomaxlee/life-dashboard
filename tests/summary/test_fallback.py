@@ -140,6 +140,15 @@ def test_payload_rounds_to_what_the_line_may_say(db, settings):
     assert payload.data["books"] == {"ytd": 3, "target": 6}
 
 
+def test_payload_goal_is_for_the_year_of_the_day_described(db, settings):
+    """The line shown on New Year's Day describes December 31st: last year's goal."""
+    assert settings.books.target_for(2026) == 6 and settings.books.target_for(2027) == 12
+    last = payload_mod.build_payload(db, settings, "2027-01-01")
+    assert last.data["describes"] == "2026-12-31" and last.data["books"]["target"] == 6
+    first = payload_mod.build_payload(db, settings, "2027-01-02")
+    assert first.data["describes"] == "2027-01-01" and first.data["books"]["target"] == 12
+
+
 def test_payload_takes_workout_minutes_from_activities_when_the_engine_did_not_write_them(
     db, settings
 ):

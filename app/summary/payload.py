@@ -356,7 +356,7 @@ def build_payload(conn: sqlite3.Connection, settings: Settings, shown_day: str) 
         "load": _load_block(day_row),
         "books": {
             "ytd": _num((day_row or {}).get("books_ytd"), 0),
-            "target": settings.books.target_per_year,
+            "target": settings.books.target_for(day.year),
         },
         "targets": {
             "sleep_hours": _truncated(settings.sleep_target_hours),

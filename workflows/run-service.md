@@ -86,6 +86,17 @@ push fails silently until the phone's automation is edited.
 
 Check the current IP: `ipconfig getifaddr en0`.
 
+**Private Wi-Fi address (found 2026-11-22).** This Mac joins the network under a private
+address (`ifconfig en0 | grep ether` printed `c6:7d:...`, not the hardware `cc:08:...` that
+`networksetup -listallhardwareports` shows), and the router's reservation is bound to
+whichever address it saw. If System Settings > Wi-Fi > Details (this network) > Private
+Wi-Fi Address is **Rotating**, the address changes, the reservation stops matching and the
+router hands out another IP: the Mac has been seen at `.171` and at `.160`, and pushes sent
+to the other one fail silently (no push from 2026-11-20 16:29 to 2026-11-22 20:06, when Max
+pointed the phone back at `.171`). Set it to **Fixed** or **Off**, then bind the address
+`ifconfig en0 | grep ether` prints to `192.168.1.171` in the router. The mode itself was not
+readable from a session (root-only preference); Max checks it in Settings.
+
 ## 8. Sleep: the Mac must be awake to receive a push
 
 A sleeping Mac drops the POST. Pushes come every 6 hours, so two automations

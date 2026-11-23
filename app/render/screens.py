@@ -520,6 +520,8 @@ TIER_WIDTH_SWING = (0, -1, 1, 0, 1, -1)
 SHELF_RIGHT = 46
 # A spine wider than this reads as a box, not a book: a small goal leaves shelf to spare.
 SLOT_MAX_WIDTH = 7
+# The most spines one shelf holds at a book's width: a goal this small needs no second shelf.
+ONE_SHELF_MAX = 6
 DECOR_X = 54
 PLANT_POT = (
     ".ppppp.",
@@ -677,12 +679,14 @@ def books_stamp(view: DayView) -> str:
 
 
 def shelf_slots(target: int) -> list[tuple[int, int, int, int]]:
-    """(tier, x0, width, height) of every slot, in reading order: the first half of the
-    target on the top shelf, the rest on the lower. Six to a shelf get widths that vary by a
-    pixel; more than fit that way get one even width, never under one pixel; fewer keep a
-    book's width (SLOT_MAX_WIDTH) and leave the rest of the shelf bare."""
+    """(tier, x0, width, height) of every slot, in reading order. A goal of up to
+    ONE_SHELF_MAX is one row on the top shelf and the lower is left to the lamp (Max,
+    2026-11-22: "all six books on one shelf"); a larger one puts its first half on the top
+    shelf and the rest on the lower. Six to a shelf get widths that vary by a pixel; more
+    than fit that way get one even width, never under one pixel; fewer keep a book's width
+    (SLOT_MAX_WIDTH) and leave the rest of the shelf bare."""
     slots = max(target, 1)
-    upper = (slots + 1) // 2
+    upper = slots if slots <= ONE_SHELF_MAX else (slots + 1) // 2
     out = []
     for tier, count in enumerate((upper, slots - upper)):
         if not count:

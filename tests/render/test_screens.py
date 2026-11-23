@@ -360,18 +360,23 @@ def test_the_parked_zz_never_touches_the_as_of_line(settings):
 
 
 def test_a_small_goal_keeps_book_shaped_spines_and_leaves_shelf_to_spare():
-    """Max, 2026-11-20: six books a year, not twelve. Three slots a shelf at the width a
-    twelve-book shelf gives them, not three slabs filling it."""
-    six = shelf_slots(6)
-    assert [(tier, x0, width) for tier, x0, width, _ in six] == [
-        (0, 2, 7),
-        (0, 10, 6),
-        (0, 17, 8),
-        (1, 2, 7),
-        (1, 10, 6),
-        (1, 17, 8),
-    ]
-    assert [width for _, _, width, _ in shelf_slots(12)] == [6, 5, 7, 6, 7, 5] * 2
+    """Max, 2026-11-20: six books a year, not twelve, at the width a twelve-book shelf gives
+    them. Max, 2026-11-22: "all six books on one shelf": a goal of up to six is the top row
+    of a twelve-book case and the lower shelf holds only the lamp; seven and more split."""
+    twelve = shelf_slots(12)
+    assert [width for _, _, width, _ in twelve] == [6, 5, 7, 6, 7, 5] * 2
+    assert [tier for tier, *_ in twelve] == [0] * 6 + [1] * 6
+    assert shelf_slots(6) == twelve[:6], "six are the top shelf of twelve"
+    for target in range(1, 7):
+        slots = shelf_slots(target)
+        assert len(slots) == target
+        assert {tier for tier, *_ in slots} == {0}, target
+    three = shelf_slots(3)
+    assert [(x0, width) for _, x0, width, _ in three] == [(2, 7), (10, 6), (17, 8)]
+    seven = shelf_slots(7)
+    assert [tier for tier, *_ in seven] == [0] * 4 + [1] * 3, "past six, two shelves again"
     for target in range(1, 13):
         assert max(width for _, _, width, _ in shelf_slots(target)) <= 8, target
+        for _, x0, width, _ in shelf_slots(target):
+            assert x0 + width - 1 <= 46, (target, "clear of the plant and the lamp")
     assert len(shelf_slots(40)) == 40, "a large goal is unchanged: one even width"

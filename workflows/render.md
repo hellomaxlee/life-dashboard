@@ -66,7 +66,7 @@ legible on what it is laid on (`palette.legible_on`), and a colour that is itsel
 status red, an alert amber) is drawn exactly on a band made to carry it (`screens.band`). A
 structural tone (a bar's track, a day to come) is a recess of the page (`screens.slot`), never
 black. Today has two hills along its foot; Books is a two-shelf bookcase with the count in its
-header; the Month calendar draws each day gone as a whole cell in what it earned (gold a workout,
+header (a goal of six or fewer sits on the top shelf alone); the Month calendar draws each day gone as a whole cell in what it earned (gold a workout,
 violet sleep, a teal corner a book, grey for none) from the stored `wins`. Celebrations stay on
 black. `tests/render/test_grounds.py` is the gate for the pages as the panel shows them; most other
 render tests run on black through the `no_scenery` fixture.

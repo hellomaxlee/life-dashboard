@@ -38,6 +38,12 @@ class WellnessConfig:
 class BooksConfig:
     target_per_year: int
     fallback_to_date_added: bool
+    target_by_year: tuple[tuple[int, int], ...] = ()
+
+    def target_for(self, year: int) -> int:
+        """The goal for one calendar year: its own entry in `[books.target_by_year]`, else
+        `target_per_year`. An entry holds for that year only."""
+        return dict(self.target_by_year).get(year, self.target_per_year)
 
 
 @dataclass(frozen=True)
@@ -211,6 +217,19 @@ def _flag(key: str, value: object) -> bool:
     return value
 
 
+def _books_targets(value: object) -> tuple[tuple[int, int], ...]:
+    key = "books.target_by_year"
+    if not isinstance(value, dict):
+        raise _fail(key, value, "a table of year = books")
+    out = []
+    for year, target in value.items():
+        whole = isinstance(target, int) and not isinstance(target, bool) and target >= 1
+        if not (str(year).isdigit() and len(str(year)) == 4 and whole):
+            raise _fail(f"{key}.{year}", target, "a four-digit year = a whole number of books")
+        out.append((int(year), target))
+    return tuple(sorted(out))
+
+
 def _clock(key: str, value: object) -> str:
     parts = value.split(":") if isinstance(value, str) else []
     if len(parts) != 2 or not all(part.isdigit() for part in parts):
@@ -376,6 +395,7 @@ def load_settings(config_path: Path | None = None) -> Settings:
         books=BooksConfig(
             target_per_year=int(raw["books"]["target_per_year"]),
             fallback_to_date_added=bool(raw["books"]["fallback_to_date_added"]),
+            target_by_year=_books_targets(raw["books"].get("target_by_year", {})),
         ),
         wellness=WellnessConfig(
             baseline_days=int(raw["wellness"]["baseline_days"]),

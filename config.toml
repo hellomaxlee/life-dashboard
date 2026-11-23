@@ -27,6 +27,11 @@ max_hours = 9.0
 target_per_year = 6
 fallback_to_date_added = true
 
+# A year with its own goal; any year not named here uses target_per_year (Max, 2026-11-22:
+# "set the goal for NEXT year to be 12 books").
+[books.target_by_year]
+2027 = 12
+
 [wellness]
 baseline_days = 28
 

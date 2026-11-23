@@ -3,6 +3,9 @@ from __future__ import annotations
 import json
 from dataclasses import replace
 
+import pytest
+
+from app.config import DEFAULT_CONFIG_PATH, load_settings
 from app.render.view import ClaudeUsage, DayView, view_from_metrics, week_start
 from app.render.view_db import view_from_db
 from app.timeutil import from_utc_iso
@@ -54,6 +57,38 @@ def test_wrong_types_become_missing_not_numbers(settings):
     view = view_from_metrics("2026-09-30", daily, weekly, settings)
     assert view == view_from_metrics("2026-09-30", {}, {}, settings)
     assert view.week_dots is None and view.sleep_hours is None and view.summary_line is None
+
+
+def test_the_books_goal_is_the_one_set_for_the_days_own_year(settings):
+    """Max, 2026-11-22: "set the goal for NEXT year to be 12 books"; this year's stays 6."""
+    assert settings.books.target_by_year == ((2027, 12),)
+    assert view_from_metrics("2026-12-31", {}, {}, settings).books_target == 6
+    assert view_from_metrics("2027-01-01", {}, {}, settings).books_target == 12
+    assert view_from_metrics("2027-12-31", {}, {}, settings).books_target == 12
+    assert view_from_metrics("2028-01-01", {}, {}, settings).books_target == 6
+    other = replace(settings, books=replace(settings.books, target_by_year=((2026, 9),)))
+    assert view_from_metrics("2026-12-31", {}, {}, other).books_target == 9
+    assert view_from_metrics("2027-01-01", {}, {}, other).books_target == 6
+
+
+@pytest.mark.parametrize(
+    "entry", ["2027 = 0", '2027 = "12"', "2027 = 12.5", "2027 = true", "27 = 12", "next = 12"]
+)
+def test_a_bad_yearly_books_goal_stops_the_boot(tmp_path, entry):
+    text = DEFAULT_CONFIG_PATH.read_text()
+    assert "2027 = 12\n" in text
+    path = tmp_path / "config.toml"
+    path.write_text(text.replace("2027 = 12\n", entry + "\n"))
+    with pytest.raises(ValueError, match="books.target_by_year"):
+        load_settings(path)
+
+
+def test_no_yearly_table_means_one_goal_for_every_year(tmp_path):
+    text = DEFAULT_CONFIG_PATH.read_text()
+    path = tmp_path / "config.toml"
+    path.write_text(text.replace("[books.target_by_year]\n2027 = 12\n", ""))
+    books = load_settings(path).books
+    assert books.target_by_year == () and books.target_for(2027) == books.target_per_year
 
 
 def test_week_starts_monday():
