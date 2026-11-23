@@ -1,0 +1,479 @@
+from __future__ import annotations
+
+import os
+import re
+import tomllib
+from dataclasses import dataclass
+from pathlib import Path
+from zoneinfo import ZoneInfo
+
+from dotenv import load_dotenv
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+DEFAULT_CONFIG_PATH = REPO_ROOT / "config.toml"
+
+
+@dataclass(frozen=True)
+class WorkoutConfig:
+    load_bar: float
+    recalibrate_months: int
+    calibration_min_runs: int
+    calibrate: bool = True
+
+
+@dataclass(frozen=True)
+class WellnessBands:
+    hrv_pct: float
+    rhr_bpm: float
+    daylight_min: float
+
+
+@dataclass(frozen=True)
+class WellnessConfig:
+    baseline_days: int
+    bands: WellnessBands
+
+
+@dataclass(frozen=True)
+class BooksConfig:
+    target_per_year: int
+    fallback_to_date_added: bool
+    target_by_year: tuple[tuple[int, int], ...] = ()
+
+    def target_for(self, year: int) -> int:
+        """The goal for one calendar year: its own entry in `[books.target_by_year]`, else
+        `target_per_year`. An entry holds for that year only."""
+        return dict(self.target_by_year).get(year, self.target_per_year)
+
+
+@dataclass(frozen=True)
+class ClaudeUsageConfig:
+    path: Path
+    stale_hours: int
+
+
+@dataclass(frozen=True)
+class PullConfig:
+    health_interval_hours: int
+    goodreads: str
+
+
+@dataclass(frozen=True)
+class ServerConfig:
+    host: str
+    port: int
+
+
+@dataclass(frozen=True)
+class StorageConfig:
+    db_path: Path
+    raw_dir: Path
+
+
+@dataclass(frozen=True)
+class DedupeConfig:
+    start_window_min: float
+    duration_tolerance_pct: float
+
+
+@dataclass(frozen=True)
+class IngestConfig:
+    hr_incomplete_ratio: float
+    sleep_gap_min: float
+    dedupe: DedupeConfig
+
+
+@dataclass(frozen=True)
+class SummaryConfig:
+    model: str
+    monthly_cap_usd: float
+    time: str = "06:50"
+    price_input_per_mtok: float = 4.0
+    price_output_per_mtok: float = 20.0
+    price_cache_read_per_mtok: float = 0.20
+    price_cache_write_per_mtok: float = 5.0
+    similarity_threshold: float = 0.5
+
+
+@dataclass(frozen=True)
+class SchedulerConfig:
+    enabled: bool
+    usage_poll_seconds: int
+    usage_min_read_seconds: int
+
+
+@dataclass(frozen=True)
+class BackupConfig:
+    dir: Path
+    time: str
+    keep: int
+
+
+@dataclass(frozen=True)
+class DeviceConfig:
+    pixoo_host: str = ""
+    screen_seconds: int = 6
+    brightness: int = 100
+    night_brightness: int = 10
+    night_from: str = "22:00"
+    night_until: str = "05:30"
+    fetch_clips: bool = False
+
+
+@dataclass(frozen=True)
+class MetricsConfig:
+    recompute_minutes: int = 15
+    rollover_time: str = "00:05"
+    week_close_grace_hours: float = 12.0
+    max_sample_gap_s: int = 300
+    wellness_priority: tuple[str, ...] = ("hrv_ms", "resting_hr", "daylight_min")
+
+
+@dataclass(frozen=True)
+class CityConfig:
+    """The city panel (app/city/): which lines to watch and where the weather is for.
+    `latitude` and `longitude` are a neighbourhood, rounded to two decimals; never an address."""
+
+    enabled: bool = False
+    latitude: float = 40.77
+    longitude: float = -73.94
+    subway: tuple[str, ...] = ()
+    subway_weekday: tuple[str, ...] = ()
+    subway_weekend: tuple[str, ...] = ()
+    bus: tuple[str, ...] = ()
+    transit_poll_minutes: int = 5
+    weather_poll_minutes: int = 30
+    stale_minutes: int = 45
+
+
+@dataclass(frozen=True)
+class Settings:
+    home_tz: str
+    hr_max: int
+    zones_pct: tuple[float, ...]
+    workout: WorkoutConfig
+    week_target: int
+    sleep_target_hours: float
+    sleep_max_hours: float
+    books: BooksConfig
+    wellness: WellnessConfig
+    claude_usage: ClaudeUsageConfig
+    pull: PullConfig
+    server: ServerConfig
+    storage: StorageConfig
+    ingest: IngestConfig
+    summary: SummaryConfig
+    health_export_token: str
+    goodreads_rss_url: str
+    scheduler: SchedulerConfig
+    backup: BackupConfig
+    device: DeviceConfig = DeviceConfig()
+    anthropic_api_key: str = ""
+    metrics: MetricsConfig = MetricsConfig()
+    city: CityConfig = CityConfig()
+    judge_model: str = ""
+
+
+def _resolve(path_str: str) -> Path:
+    path = Path(path_str)
+    return path if path.is_absolute() else REPO_ROOT / path
+
+
+_ON = {"1", "true", "yes"}
+_OFF = {"0", "false", "no"}
+
+
+def _env_switch(name: str, default: bool) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    word = value.strip().lower()
+    if word not in _ON | _OFF:
+        raise ValueError(f"{name} must be one of 1/true/yes or 0/false/no, not {value!r}")
+    return word in _ON
+
+
+def _fail(key: str, value: object, want: str) -> ValueError:
+    return ValueError(f"config {key} must be {want}, not {value!r}")
+
+
+def _whole(key: str, value: object, minimum: int) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
+        raise _fail(key, value, f"a whole number of at least {minimum}")
+    return value
+
+
+def _number(key: str, value: object, minimum: float, maximum: float | None = None) -> float:
+    ok = isinstance(value, int | float) and not isinstance(value, bool) and value >= minimum
+    if not ok or (maximum is not None and value > maximum):
+        top = "" if maximum is None else f" and at most {maximum}"
+        raise _fail(key, value, f"a number of at least {minimum}{top}")
+    return float(value)
+
+
+def _flag(key: str, value: object) -> bool:
+    if not isinstance(value, bool):
+        raise _fail(key, value, "true or false (no quotes)")
+    return value
+
+
+def _books_targets(value: object) -> tuple[tuple[int, int], ...]:
+    key = "books.target_by_year"
+    if not isinstance(value, dict):
+        raise _fail(key, value, "a table of year = books")
+    out = []
+    for year, target in value.items():
+        whole = isinstance(target, int) and not isinstance(target, bool) and target >= 1
+        if not (str(year).isdigit() and len(str(year)) == 4 and whole):
+            raise _fail(f"{key}.{year}", target, "a four-digit year = a whole number of books")
+        out.append((int(year), target))
+    return tuple(sorted(out))
+
+
+def _clock(key: str, value: object) -> str:
+    parts = value.split(":") if isinstance(value, str) else []
+    if len(parts) != 2 or not all(part.isdigit() for part in parts):
+        raise _fail(key, value, "a time written HH:MM")
+    if int(parts[0]) > 23 or int(parts[1]) > 59:
+        raise _fail(key, value, "a time written HH:MM")
+    return value
+
+
+def _percent(key: str, value: object) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 100:
+        raise _fail(key, value, "a whole number from 0 to 100")
+    return value
+
+
+def _timezone(key: str, value: object) -> str:
+    try:
+        ZoneInfo(str(value))
+    except Exception as exc:
+        raise _fail(key, value, "an IANA timezone name") from exc
+    return str(value)
+
+
+def _folder(key: str, value: object) -> Path:
+    if not isinstance(value, str) or not value.strip():
+        raise _fail(key, value, "a directory path")
+    return _resolve(value)
+
+
+def _summary_config(raw: dict) -> SummaryConfig:
+    def price(name: str, default: float) -> float:
+        return _number(f"summary.{name}", raw.get(name, default), 0)
+
+    return SummaryConfig(
+        model=str(raw["model"]),
+        monthly_cap_usd=_number("summary.monthly_cap_usd", raw["monthly_cap_usd"], 0),
+        time=_clock("summary.time", raw.get("time", "06:50")),
+        price_input_per_mtok=price("price_input_per_mtok", 4.0),
+        price_output_per_mtok=price("price_output_per_mtok", 20.0),
+        price_cache_read_per_mtok=price("price_cache_read_per_mtok", 0.20),
+        price_cache_write_per_mtok=price("price_cache_write_per_mtok", 5.0),
+        similarity_threshold=_number(
+            "summary.similarity_threshold", raw.get("similarity_threshold", 0.5), 0, 1
+        ),
+    )
+
+
+WELLNESS_FACT_METRICS = ("hrv_ms", "resting_hr", "daylight_min")
+
+
+def _priority(key: str, value: object) -> tuple[str, ...]:
+    names = tuple(value) if isinstance(value, list) else None
+    ok = names is not None and all(isinstance(n, str) for n in names)
+    if not ok or len(set(names)) != len(names) or not set(names) <= set(WELLNESS_FACT_METRICS):
+        raise _fail(key, value, f"a list of distinct names from {list(WELLNESS_FACT_METRICS)}")
+    return names
+
+
+def _metrics(raw: dict) -> MetricsConfig:
+    section = raw.get("metrics", {})
+    defaults = MetricsConfig()
+    return MetricsConfig(
+        recompute_minutes=_whole(
+            "metrics.recompute_minutes", section.get("recompute_minutes", 15), 1
+        ),
+        rollover_time=_clock(
+            "metrics.rollover_time", section.get("rollover_time", defaults.rollover_time)
+        ),
+        week_close_grace_hours=_number(
+            "metrics.week_close_grace_hours",
+            section.get("week_close_grace_hours", defaults.week_close_grace_hours),
+            0,
+        ),
+        max_sample_gap_s=_whole(
+            "metrics.max_sample_gap_s", section.get("max_sample_gap_s", 300), 1
+        ),
+        wellness_priority=_priority(
+            "metrics.wellness_priority",
+            section.get("wellness_priority", list(defaults.wellness_priority)),
+        ),
+    )
+
+
+_LINE_NAME = re.compile(r"^[A-Z0-9]{1,5}\+?$")
+
+
+def _lines(key: str, value: object) -> tuple[str, ...]:
+    names = tuple(value) if isinstance(value, list) else None
+    ok = names is not None and all(isinstance(n, str) and _LINE_NAME.match(n) for n in names)
+    if not ok or len(set(names)) != len(names):
+        raise _fail(key, value, 'a list of distinct line names such as ["N", "Q69"]')
+    return names
+
+
+def _coordinate(key: str, value: object, limit: float) -> float:
+    number = _number(key, value, -limit, limit)
+    if round(number, 2) != number:
+        raise _fail(key, value, "rounded to two decimals (a neighbourhood, not an address)")
+    return number
+
+
+def _city(raw: dict) -> CityConfig:
+    section = raw.get("city", {})
+    defaults = CityConfig()
+
+    def lines(name: str) -> tuple[str, ...]:
+        return _lines(f"city.{name}", section.get(name, []))
+
+    def minutes(name: str, top: int) -> int:
+        value = _whole(f"city.{name}", section.get(name, getattr(defaults, name)), 1)
+        if value > top:
+            raise _fail(f"city.{name}", value, f"a whole number from 1 to {top}")
+        return value
+
+    subway, weekday, weekend = lines("subway"), lines("subway_weekday"), lines("subway_weekend")
+    for name, group in (("subway_weekday", weekday), ("subway_weekend", weekend)):
+        if set(group) & set(subway):
+            raise _fail(f"city.{name}", list(group), "lines that are not also in city.subway")
+    return CityConfig(
+        enabled=_env_switch(
+            "LIFE_CITY_ENABLED", _flag("city.enabled", section.get("enabled", False))
+        ),
+        latitude=_coordinate("city.latitude", section.get("latitude", defaults.latitude), 90),
+        longitude=_coordinate("city.longitude", section.get("longitude", defaults.longitude), 180),
+        subway=subway,
+        subway_weekday=weekday,
+        subway_weekend=weekend,
+        bus=lines("bus"),
+        transit_poll_minutes=minutes("transit_poll_minutes", 60),
+        weather_poll_minutes=minutes("weather_poll_minutes", 180),
+        stale_minutes=minutes("stale_minutes", 24 * 60),
+    )
+
+
+def load_settings(config_path: Path | None = None) -> Settings:
+    """Load config.toml into a frozen Settings.
+
+    Environment overrides: LIFE_CONFIG_PATH (file), LIFE_DB_PATH, LIFE_RAW_DIR (storage),
+    LIFE_BACKUP_DIR, LIFE_PIXOO_HOST (empty = no device), LIFE_SCHEDULER_ENABLED and
+    LIFE_CITY_ENABLED (1/true/yes or 0/false/no),
+    HEALTH_EXPORT_TOKEN, GOODREADS_RSS_URL, ANTHROPIC_API_KEY (secrets, from .env or the env).
+    """
+    load_dotenv(REPO_ROOT / ".env")
+    path = config_path or Path(os.environ.get("LIFE_CONFIG_PATH", DEFAULT_CONFIG_PATH))
+    with path.open("rb") as fh:
+        raw = tomllib.load(fh)
+
+    dedupe = raw["ingest"]["dedupe"]
+    bands = raw["wellness"]["bands"]
+    return Settings(
+        home_tz=_timezone("home_tz", raw["home_tz"]),
+        hr_max=int(raw["hr_max"]),
+        zones_pct=tuple(float(p) for p in raw["zones"]["pct"]),
+        workout=WorkoutConfig(
+            load_bar=float(raw["workout"]["load_bar"]),
+            recalibrate_months=int(raw["workout"]["recalibrate_months"]),
+            calibration_min_runs=int(raw["workout"]["calibration_min_runs"]),
+            calibrate=_flag("workout.calibrate", raw["workout"].get("calibrate", True)),
+        ),
+        week_target=int(raw["week"]["target"]),
+        sleep_target_hours=float(raw["sleep"]["target_hours"]),
+        sleep_max_hours=float(raw["sleep"]["max_hours"]),
+        books=BooksConfig(
+            target_per_year=int(raw["books"]["target_per_year"]),
+            fallback_to_date_added=bool(raw["books"]["fallback_to_date_added"]),
+            target_by_year=_books_targets(raw["books"].get("target_by_year", {})),
+        ),
+        wellness=WellnessConfig(
+            baseline_days=int(raw["wellness"]["baseline_days"]),
+            bands=WellnessBands(
+                hrv_pct=float(bands["hrv_pct"]),
+                rhr_bpm=float(bands["rhr_bpm"]),
+                daylight_min=float(bands["daylight_min"]),
+            ),
+        ),
+        claude_usage=ClaudeUsageConfig(
+            path=_resolve(raw["claude_usage"]["path"]),
+            stale_hours=int(raw["claude_usage"]["stale_hours"]),
+        ),
+        pull=PullConfig(
+            health_interval_hours=int(raw["pull"]["health_interval_hours"]),
+            goodreads=str(raw["pull"]["goodreads"]),
+        ),
+        server=ServerConfig(host=raw["server"]["host"], port=int(raw["server"]["port"])),
+        storage=StorageConfig(
+            db_path=_resolve(os.environ.get("LIFE_DB_PATH", raw["storage"]["db_path"])),
+            raw_dir=_resolve(os.environ.get("LIFE_RAW_DIR", raw["storage"]["raw_dir"])),
+        ),
+        ingest=IngestConfig(
+            hr_incomplete_ratio=_number(
+                "ingest.hr_incomplete_ratio", raw["ingest"]["hr_incomplete_ratio"], 0, 1
+            ),
+            sleep_gap_min=_number(
+                "ingest.sleep_gap_min", raw["ingest"].get("sleep_gap_min", 60), 0
+            ),
+            dedupe=DedupeConfig(
+                start_window_min=_number(
+                    "ingest.dedupe.start_window_min", dedupe["start_window_min"], 0
+                ),
+                duration_tolerance_pct=_number(
+                    "ingest.dedupe.duration_tolerance_pct", dedupe["duration_tolerance_pct"], 0
+                ),
+            ),
+        ),
+        summary=_summary_config(raw["summary"]),
+        health_export_token=os.environ.get("HEALTH_EXPORT_TOKEN", "").strip(),
+        goodreads_rss_url=os.environ.get("GOODREADS_RSS_URL", "").strip(),
+        scheduler=SchedulerConfig(
+            enabled=_env_switch(
+                "LIFE_SCHEDULER_ENABLED", _flag("scheduler.enabled", raw["scheduler"]["enabled"])
+            ),
+            usage_poll_seconds=_whole(
+                "scheduler.usage_poll_seconds", raw["scheduler"]["usage_poll_seconds"], 1
+            ),
+            usage_min_read_seconds=_whole(
+                "scheduler.usage_min_read_seconds", raw["scheduler"]["usage_min_read_seconds"], 0
+            ),
+        ),
+        backup=BackupConfig(
+            dir=_folder("backup.dir", os.environ.get("LIFE_BACKUP_DIR", raw["backup"]["dir"])),
+            time=_clock("backup.time", raw["backup"]["time"]),
+            keep=_whole("backup.keep", raw["backup"]["keep"], 1),
+        ),
+        device=DeviceConfig(
+            pixoo_host=str(
+                os.environ.get("LIFE_PIXOO_HOST", raw.get("device", {}).get("pixoo_host", ""))
+            ).strip(),
+            screen_seconds=int(raw.get("device", {}).get("screen_seconds", 6)),
+            brightness=_percent("device.brightness", raw.get("device", {}).get("brightness", 100)),
+            night_brightness=_percent(
+                "device.night_brightness", raw.get("device", {}).get("night_brightness", 10)
+            ),
+            night_from=_clock(
+                "device.night_from", raw.get("device", {}).get("night_from", "22:00")
+            ),
+            night_until=_clock(
+                "device.night_until", raw.get("device", {}).get("night_until", "05:30")
+            ),
+            fetch_clips=_flag(
+                "device.fetch_clips", raw.get("device", {}).get("fetch_clips", False)
+            ),
+        ),
+        anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY", "").strip(),
+        metrics=_metrics(raw),
+        city=_city(raw),
+        judge_model=str(raw.get("judge", {}).get("model", "")),
+    )

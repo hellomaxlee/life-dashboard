@@ -1,24 +1,24 @@
 # CLAUDE.md
 
 ## Project
-life-dashboard: a single-user life dashboard that turns Max's training, sleep, and reading into a glanceable picture of progress, first on a LAN web page and then on a 64x64 pixel-matrix display (Pixoo-64 class; device not yet chosen). The backend ingests Apple Health (via Health Auto Export REST push), Strava, and a Goodreads RSS shelf; computes training load, streaks, and counts against stated goals; renders device-agnostic frames; and writes one short daily summary in a balanced, wisdom-leaning voice that favors sustainable habits over streak anxiety. Runs on an always-on home box (Raspberry Pi or Mac mini). Personal only.
+life-dashboard: a single-user life dashboard that turns Max's training, sleep, and reading into a glanceable picture of progress, on a LAN web page and on a Divoom Pixoo-64 (connected 2026-10-04 at 192.168.1.185; local API on port 9000, see `workflows/run-service.md` section 15). The backend ingests Apple Health (via Health Auto Export REST push) and a Goodreads RSS shelf; computes weekly quality-workout counts, a weeks-hit streak, daily small wins, and training load against stated goals; renders device-agnostic frames and short celebration clips; and writes one short daily summary in a balanced, wisdom-leaning voice that favors sustainable habits over streak anxiety. Runs on Max's Mac now, a Raspberry Pi later. Personal only.
 
 **Done means:**
-1. A day's Health Auto Export push, a Strava sync, and a Goodreads poll land in SQLite idempotently; replaying the same payloads changes no metric.
-2. The same workout recorded by both Apple Watch and Strava is one activity everywhere; no metric double-counts it.
-3. Training load (acute, chronic, balance), active-day streaks with explicit rest days, and books-this-year match hand-computed golden cases.
-4. A 64x64 frame for today renders in the browser at 1x and 8x, is legible at 1x under LED gamma, and reaches a physical device through an adapter.
+1. A day's Health Auto Export push and a Goodreads poll land in SQLite idempotently; replaying the same payloads changes no metric.
+2. The same workout reported by two HealthKit source apps (Watch and a phone app that writes to Health) is one activity everywhere; no metric double-counts it.
+3. Quality-workout counts per week, the weeks-hit streak, daily wins, training load (acute, chronic, balance), and books-this-year match hand-computed golden cases.
+4. Every rotation screen and both celebration clips render in the browser at 1x and 8x, are legible at 1x under LED gamma, and reach the Pixoo through an adapter.
 5. The daily summary cites only numbers present in the metrics table, stays within a configured monthly budget, and falls back to rule-based copy when the model is unavailable.
 6. The service survives a restart and a power cut with no data loss; a backup restores to an identical metrics table.
 
-**Non-goals:** multi-user or auth; a phone app; coaching plans or workout prescription; strength-set logging; replacing Strava or the Health app as the system of record for raw data.
+**Non-goals:** multi-user or auth; a phone app; coaching plans or workout prescription; strength-set logging; any Strava integration or import (its API needs a paid subscription; Apple Health has everything the goal model needs); replacing the Health app as the system of record for raw data.
 
 ## Stack
 Python 3.12 · uv · FastAPI · SQLite (stdlib `sqlite3`, hand-written migrations) · APScheduler · httpx · Pillow (frames) · pytest · ruff
 - SQLite over Postgres: one user, one box, one file to back up.
 - Pillow over a browser canvas: frames are PNG bytes the device adapters transport; no browser in the render path.
 - LLM: Anthropic SDK, model id pinned in `config.toml`, never hardcoded; load `/claude-api` before choosing or changing it.
-- Health Auto Export (iOS) pushes JSON to `POST /ingest/health`; Strava via OAuth + polling (webhooks optional later); Goodreads via the public `read` shelf RSS.
+- Health Auto Export (iOS) pushes JSON to `POST /ingest/health`; Goodreads via the public `read` shelf widget (the shelf RSS was retired by Goodreads around 2026-10-28).
 
 ## Commands
 | Task | Command |
@@ -29,21 +29,24 @@ Python 3.12 · uv · FastAPI · SQLite (stdlib `sqlite3`, hand-written migration
 | Lint/format | `uv run ruff check --fix . && uv run ruff format .` |
 | Render a frame | `uv run python -m tools.render --date YYYY-MM-DD --scale 8` |
 | Replay raw archive | `uv run python -m tools.replay --since YYYY-MM-DD` |
-| Sync sources now | `uv run python -m tools.sync --source strava\|goodreads` |
+| Sync sources now | `uv run python -m tools.sync --source goodreads` |
+| Read the bandwidth scores | `uv run python -m tools.bandwidth --days 14` |
 
 ## Code Style
 ruff is the authority (format + lint). Type hints on every public function. No comments where the name says it. Timestamps stored as UTC ISO strings, displayed in the home timezone from config. Small modules named for the thing they own: `app/ingest/`, `app/metrics/`, `app/render/`, `app/summary/`, `app/web/`.
 
 ## Invariants
 Rules that survive any refactor. Break one and the dashboard is wrong even if the tests pass.
-- **Health data stays home.** Raw samples never leave the LAN. Outbound calls are Strava and Goodreads pulls and the summary call, which sends daily aggregates only, never raw samples or sub-day timestamps. An egress test enforces the allowlist.
-- **One canonical activity.** A workout seen in Health and Strava merges into one record with both provenances kept; no metric counts it twice.
-- **Raw before parsed.** Every inbound payload is archived verbatim in `data/raw/` before parsing, so any metric can be recomputed from scratch.
-- **Day boundaries are home-timezone local.** A sleep session belongs to the day you wake. Rest days are declared, and a declared rest day never breaks a streak.
+- **Health data stays home.** Raw samples never leave the LAN. Outbound calls are the Goodreads pull; the summary call, which sends daily aggregates only, never raw samples or sub-day timestamps; the monthly feature call, which sends no personal data at all; and the city panel's public feeds (MTA service alerts, Open-Meteo, National Weather Service), which receive nothing but coordinates rounded to two decimals. The street address is in no file and no request. An egress test enforces the allowlist.
+- **One canonical activity.** A workout reported by more than one HealthKit source (Watch, a phone app) merges into one record with every provenance kept; no metric counts it twice.
+- **Raw before parsed.** Every inbound payload is archived verbatim in `data/raw/` before parsing, so any metric can be recomputed from scratch. The city panel's transit and weather feeds are display-only, feed no metric, and are stored as the latest parsed snapshot only.
+- **Day and week boundaries are America/New_York local.** Weeks run Monday to Sunday. A sleep session belongs to the day you wake.
+- **Progress is weekly.** A quality workout is any type whose effort load (minutes in each HR zone, weighted 1 to 5, zones as percent of max HR 189) meets the load bar, set to what 30 minutes mostly in zone 2 costs (60; Max, 2026-10-05; calibration from runs is off). No HR samples, no credit. Three per week is the target; the streak counts weeks that hit it. Any day without one is rest, and rest never breaks anything. A manual override, recorded with its note and time, credits a day's quality workout when the feed cannot; so does a judged credit, where the model, as a fitness coach, reads the day's heart-rate bouts (duration and intensity only, never timestamps or samples) and credits a sustained effort but not a brief spike (Max, 2026-10-07); a scored activity or an override always takes precedence, a judged yes is never revoked by the model, and Max can remove it on `/workouts`. See `notes.txt § Goal model`.
+- **Bandwidth is for Max alone.** The bandwidth score (`app/metrics/bandwidth_full.py`, ten terms; `notes.txt § Goal model`, "Bandwidth, the fuller score") shows on the panel only as the colour of the Books lamp's shade (red at the cue, gold on a middling day, with no reading or with under 60 of its 100 weight present, green on a good one; sleep is scored on Max's own bands, in which oversleeping counts against): no number, word or other mark, nothing in the summary payload, and missing data never draws the cue. Its range holds by construction, never by a clamp on the result.
 - **Every displayed number traces to a metrics row.** The model never computes or invents a figure; a grounding gate rejects any summary whose numbers are not in its payload.
-- **The frame is device-agnostic.** Renderers emit a 64x64 RGB frame; adapters only transport. Legibility is judged at 1x under LED gamma, never at browser zoom.
+- **The frame is device-agnostic.** Renderers emit a 64x64 RGB frame or a clip of them with per-frame durations; adapters only transport. Legibility is judged at 1x under LED gamma, never at browser zoom.
 - **The display never blanks.** Model unavailable or over budget means rule-based copy, not an empty frame.
-- **Voice: balanced, sustainable, no shame.** Rest counts as progress. Streak-anxiety copy ("don't break the chain") and moralizing are banned by a ban list the summary gate enforces.
+- **Voice: balanced, sustainable, no shame.** Rest counts as progress. Wins are celebrated on the device; misses are shown plainly, never nagged. Streak-anxiety copy ("don't break the chain") and moralizing are banned by a ban list the summary gate enforces. The line is practical philosophy first; the day's data is context, not the subject. No impersonation of any named person; a direct quote is welcome with its author named, but only verbatim from the checked quote bank (`app/summary/quotes.py`), never from the model's memory. A day with no workout on record is never called a rest day. Repetition is controlled by lens rotation, a recent-lines memory, and a similarity gate. See `notes.txt § Voice brief`.
 
 ## Working Rules
 - Verify by execution. A claim of "fixed" names the command, fixture, or measurement that proved it.
@@ -63,13 +66,13 @@ Rules that survive any refactor. Break one and the dashboard is wrong even if th
 Source of truth: `/agent-creation` (roster contract) and `/performance-review` (review cycle).
 - **Lead:** Ingrid Halvorsen. Reads `CHANGELOG.md` and `notes.txt` first, frames the task as verifiable claims, sets acceptance criteria before work starts, closes issues only after verification.
 - **No Engagement Partner** (personal, single-user; no cost or market dimension beyond the model budget, which Ingrid owns).
-- **Arbitration:** Bartek Zieliński owns data-truth and metric-semantics calls; Lucía Ferrer owns display, legibility, and hardware calls; Ingrid owns what-counts-as-progress and the summary's voice (Theodora drafts, Ingrid ratifies); Ingrid resolves cross-cutting calls. Device purchase is Max's call only.
+- **Arbitration:** Bartek Zieliński owns data-truth and metric-semantics calls; Lucía Ferrer owns display, legibility, and hardware calls (Mei-Lin Tsao drafts colour and design, `notes.txt § Design`; Lucía ratifies what the panel can show); Ingrid owns what-counts-as-progress and the summary's voice (Theodora drafts, Ingrid ratifies); Ingrid resolves cross-cutting calls. Device purchase is Max's call only.
 - **Flow:** Lead frames → Associates build → Managers QA → a Manager commits + pushes to `dev` → one bullet per contributing agent's log and one CHANGELOG entry.
 - **Branching:** `dev` is the working branch. `main` is never committed to directly (pre-push hook blocks it); promote via `dev → main` PR only when Max asks.
 - **Review** every 15 pushes or via `/performance-review`.
 
 ## Iteration Rule
-Every render or summary test cycle uses a NEW fixture combination across: day type (train / rest / race-week / travel) × data completeness (all sources / Strava missing / sleep missing / Health delayed) × streak state (alive / broken yesterday / never started) × season position (base / peak / off). Name the combo in the CHANGELOG entry. See `/rotate-fixture`. Reason: the frame layout and the summary voice fail differently in each cell; a fixture reused twice hides the cells it never touched.
+Every render or summary test cycle uses a NEW fixture combination across: day type (train / rest / race-week / travel) × data completeness (all sources / workout without HR / sleep missing / Health delayed) × streak state (alive / broken last week / never started) × season position (base / peak / off). Name the combo in the CHANGELOG entry. See `/rotate-fixture`. Reason: the frame layout and the summary voice fail differently in each cell; a fixture reused twice hides the cells it never touched.
 
 ## Project-Local Skills (`.claude/skills/`)
 - **ship-dev** — ruff → pytest → CHANGELOG → agent logs → push to `dev` only.
@@ -77,8 +80,8 @@ Every render or summary test cycle uses a NEW fixture combination across: day ty
 - **source-replay** — replay archived raw payloads through ingest and diff the metrics table; the idempotency and dedupe proof.
 
 ## Structure
-- `app/` — FastAPI service: `ingest/`, `metrics/`, `render/`, `summary/`, `web/`, `main.py`
-- `tools/` — CLIs per workflow (`render`, `replay`, `sync`, `backup`); `workflows/` — one markdown spec per tool
+- `app/` — FastAPI service: `ingest/`, `metrics/`, `render/`, `summary/`, `month/` (monthly feature), `city/` (transit and weather), `jobs/`, `web/`, `main.py`
+- `tools/` — CLIs per workflow (`render`, `replay`, `sync`, `backup`, `summary`, `month`, `city`, `pixoo_check`, `bandwidth`); `workflows/` — one markdown spec per tool
 - `fixtures/` — sanitized raw payloads and golden metric cases; `tests/` — pytest
 - `data/` — SQLite db, `raw/` archive, backups (git-ignored)
 - `agents/` — `[Role] First Last.md`; `agents/_old/` fired/demoted; `agents/performance/` reviews
@@ -87,4 +90,4 @@ Every render or summary test cycle uses a NEW fixture combination across: day ty
 - `CHANGELOG.md` — one dated entry per push, newest first
 
 ## GitHub
-No remote yet. When one exists, use the `gh` CLI against it. Issue closure: the last comment states testing extent, verification method, and reason for closure.
+Remote: `https://github.com/hellomaxlee/life-dashboard.git` (private), `origin`. Working branch `dev` tracks `origin/dev`; promote via `dev → main` PR. Use the `gh` CLI against it. Issue closure: the last comment states testing extent, verification method, and reason for closure.

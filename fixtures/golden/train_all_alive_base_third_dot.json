@@ -1,0 +1,131 @@
+{
+  "name": "train / all sources / alive / base: third dot this week, load 118",
+  "cell": "train / all sources / alive / base",
+  "comment": [
+    "Zones at hr_max 189 (round half up of 189 x pct): Z1 95-112, Z2 113-131, Z3 132-150, Z4 151-169, Z5 170+.",
+    "Samples are one per minute from the start; each covers one minute (the last one runs to the workout end).",
+    "Lifts 2026-09-14..09-25 Mon/Wed/Fri 18:00, 40 min at 140 bpm: 40 min Z3 x3 = 120 >= bar 100 -> 3 dots each week.",
+    "R-2026-09-28: 20 min @140 (Z3 x3 = 60) + 20 min @155 (Z4 x4 = 80) = 140 (3.5 mi, not a calibration run).",
+    "L-2026-09-30: 10 @100 (Z1 = 10) + 20 @140 (Z3 = 60) + 15 @155 (Z4 = 60) = 130.",
+    "R-2026-10-02: 10 @100 (10) + 14 @120 (Z2 x2 = 28) + 20 @140 (60) + 5 @155 (20) = 118 -> third dot; ends 07:49 EDT = 11:49Z.",
+    "Only one run >= 4 mi with samples (R-2026-10-02, 4.05 mi) so the bar stays the placeholder 100.",
+    "Streak: weeks 09-14 and 09-21 closed with 3 dots = 2; week 09-28 is in progress (today Fri 10-02) so week_hit is null and the streak stays 2.",
+    "Sleep 25560 s / 3600 = 7.1 h >= 7.0 -> sleep win. Wins ordered sleep, workout, book.",
+    "Books: one read_at 2026-03-10 -> books_ytd 1 on every day of 2026 after it."
+  ],
+  "today_local": "2026-10-02",
+  "now_utc": "2026-10-02T16:00:00Z",
+  "inputs": {
+    "activities": [
+      {
+        "repeat_weekly": {
+          "id_prefix": "L-",
+          "from": "2026-09-14",
+          "to": "2026-09-27",
+          "weekdays": [0, 2, 4],
+          "time": "18:00",
+          "type": "lift",
+          "minutes": 40,
+          "hr": [[40, 140]]
+        }
+      },
+      {
+        "id": "R-2026-09-28",
+        "type": "run",
+        "start_local": "2026-09-28 07:00",
+        "minutes": 40,
+        "distance_mi": 3.5,
+        "hr": [[20, 140], [20, 155]]
+      },
+      {
+        "id": "L-2026-09-30",
+        "type": "lift",
+        "start_local": "2026-09-30 18:00",
+        "minutes": 45,
+        "hr": [[10, 100], [20, 140], [15, 155]]
+      },
+      {
+        "id": "R-2026-10-02",
+        "type": "run",
+        "start_local": "2026-10-02 07:00",
+        "minutes": 49,
+        "distance_mi": 4.05,
+        "hr": [[10, 100], [14, 120], [20, 140], [5, 155]]
+      }
+    ],
+    "sleep": [
+      {
+        "wake_day": "2026-10-02",
+        "start_local": "2026-10-01 23:20",
+        "end_local": "2026-10-02 06:26",
+        "asleep_h": 7.1
+      }
+    ],
+    "steps": {"2026-10-02": 8200},
+    "books": [
+      {"id": "b1", "title": "Meditations", "read_at": "2026-03-10", "date_added": "2026-01-02"}
+    ],
+    "health_pushes_utc": ["2026-09-28T10:00:00Z", "2026-10-02T12:00:00Z"]
+  },
+  "expected": {
+    "daily": {
+      "2026-10-02": {
+        "quality_workout": true,
+        "workout_count": 1,
+        "workout_load": 118.0,
+        "workout_ids": ["R-2026-10-02"],
+        "sleep_hours": 7.1,
+        "sleep_win": true,
+        "steps": 8200,
+        "books_ytd": 1,
+        "book_finished_today": false,
+        "wins": ["sleep", "workout"],
+        "load_trimp": 118.0
+      },
+      "2026-10-01": {
+        "quality_workout": false,
+        "workout_count": 0,
+        "workout_load": null,
+        "workout_ids": [],
+        "load_trimp": 0.0,
+        "sleep_hours": null,
+        "sleep_win": false,
+        "steps": null,
+        "wins": []
+      },
+      "2026-09-30": {
+        "quality_workout": true,
+        "workout_load": 130.0,
+        "load_trimp": 130.0,
+        "wins": ["workout"]
+      },
+      "2026-09-28": {
+        "quality_workout": true,
+        "workout_load": 140.0
+      }
+    },
+    "weekly": {
+      "2026-09-28": {
+        "quality_workouts": 3,
+        "week_hit": null,
+        "weeks_hit_streak": 2,
+        "week_complete_at": "2026-10-02T11:49:00Z",
+        "load_bar": 100.0,
+        "load_bar_source": "placeholder"
+      },
+      "2026-09-21": {
+        "quality_workouts": 3,
+        "week_hit": true,
+        "weeks_hit_streak": 2,
+        "week_complete_at": "2026-09-25T22:40:00Z"
+      },
+      "2026-09-14": {
+        "quality_workouts": 3,
+        "week_hit": true,
+        "weeks_hit_streak": 1,
+        "week_complete_at": "2026-09-18T22:40:00Z"
+      }
+    },
+    "load_bar_history": []
+  }
+}

@@ -1,0 +1,86 @@
+% Shared by bandwidth-index.tex, bandwidth-figure.tex and the private full copy.
+% The functions restate app/metrics/bandwidth.py (SLEEP_KNOTS, the heart-rate clamp, B).
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\usepgfplotslibrary{fillbetween}
+\definecolor{lampred}{RGB}{255,0,0}
+\definecolor{lampgold}{RGB}{255,200,40}
+\definecolor{lampgreen}{RGB}{60,220,90}
+\pgfplotsset{
+  colormap={lamp}{color(0)=(lampred) color(1)=(lampred) color(2)=(lampred)
+    color(3)=(lampgold) color(4)=(lampgreen) color(5)=(lampgreen) color(6)=(lampgreen)},
+}
+\pgfmathdeclarefunction{zs}{1}{\pgfmathparse{%
+  (#1<=4.5)*(-3)
+  + and(#1>4.5,#1<=5.5)*(-3+(#1-4.5))
+  + and(#1>5.5,#1<=6)*(-2+4*(#1-5.5))
+  + and(#1>6.5,#1<=7)*(4*(#1-6.5))
+  + and(#1>7,#1<=8.5)*2
+  + and(#1>8.5,#1<=9)*(2-4*(#1-8.5))
+  + and(#1>9.5,#1<=10)*(-4*(#1-9.5))
+  + and(#1>10,#1<=11)*(-2-(#1-10))
+  + (#1>11)*(-3)}}
+\pgfmathdeclarefunction{zh}{1}{\pgfmathparse{max(-3,min(3,-(#1)/2))}}
+\pgfmathdeclarefunction{bw}{2}{\pgfmathparse{50+25/3*(zs(#1)+zh(#2))}}
+\newcommand{\bandsfigure}[2]{%
+\begin{tikzpicture}
+\begin{axis}[
+  width=#1, height=#2,
+  xmin=4, xmax=12, ymin=0, ymax=100,
+  xlabel={Hours Asleep}, ylabel={$B$},
+  xtick={4,5,5.5,6,6.5,7,8.5,9,9.5,10,11,12},
+  xticklabel style={font=\footnotesize},
+  ytick={0,33.33,50,66.67,100}, yticklabels={0,33.3,50,66.7,100},
+  axis on top, clip=true]
+  \addplot[draw=none, fill=lampred, fill opacity=0.85] coordinates {(4,0) (5.5,0) (5.5,100) (4,100)} \closedcycle;
+  \addplot[draw=none, left color=lampred, right color=lampgold, fill opacity=0.85] coordinates {(5.5,0) (6,0) (6,100) (5.5,100)} \closedcycle;
+  \addplot[draw=none, fill=lampgold, fill opacity=0.85] coordinates {(6,0) (6.5,0) (6.5,100) (6,100)} \closedcycle;
+  \addplot[draw=none, left color=lampgold, right color=lampgreen, fill opacity=0.85] coordinates {(6.5,0) (7,0) (7,100) (6.5,100)} \closedcycle;
+  \addplot[draw=none, fill=lampgreen, fill opacity=0.85] coordinates {(7,0) (8.5,0) (8.5,100) (7,100)} \closedcycle;
+  \addplot[draw=none, left color=lampgreen, right color=lampgold, fill opacity=0.85] coordinates {(8.5,0) (9,0) (9,100) (8.5,100)} \closedcycle;
+  \addplot[draw=none, fill=lampgold, fill opacity=0.85] coordinates {(9,0) (9.5,0) (9.5,100) (9,100)} \closedcycle;
+  \addplot[draw=none, left color=lampgold, right color=lampred, fill opacity=0.85] coordinates {(9.5,0) (10,0) (10,100) (9.5,100)} \closedcycle;
+  \addplot[draw=none, fill=lampred, fill opacity=0.85] coordinates {(10,0) (12,0) (12,100) (10,100)} \closedcycle;
+  \addplot[black, line width=1.6pt, domain=4:12, samples=321] {bw(x,0)};
+  \addplot[black, dashed, line width=0.7pt, domain=4:12, samples=2] {100/3};
+\end{axis}
+\end{tikzpicture}}
+\newcommand{\surfacefigure}[2]{%
+\begin{tikzpicture}
+\begin{axis}[
+  width=#1, height=#2,
+  view={22}{36}, y dir=reverse,
+  xlabel={Hours Asleep}, ylabel={Heart Rate Over His Median (bpm)}, zlabel={$B$},
+  xlabel style={sloped}, ylabel style={sloped},
+  xmin=4, xmax=12, ymin=-7, ymax=7, zmin=0, zmax=100,
+  xtick={4,5.5,7,8.5,10,12}, ytick={-6,-4,-2,0,2,4,6}, ztick={0,33.3,50,66.7,100},
+  point meta min=0, point meta max=100,
+  colormap name=lamp, colorbar,
+  colorbar style={ytick={0,33.3,50,66.7,100}, ylabel={$B$}},
+  grid=major, grid style={gray!30}]
+  \addplot3[surf, shader=faceted interp, faceted color=white, line width=0.15pt,
+    domain=4:12, y domain=-7:7, samples=65, samples y=15] {bw(x,y)};
+  \addplot3[black, line width=1.4pt, domain=4:12, samples=161, samples y=1] (x, 0, {bw(x,0)+0.6});
+\end{axis}
+\end{tikzpicture}}
+\newcommand{\mapfigure}[2]{%
+\begin{tikzpicture}
+\begin{axis}[
+  width=#1, height=#2,
+  view={0}{90},
+  xlabel={Hours Asleep}, ylabel={Heart Rate Over His Median (bpm)},
+  xmin=4, xmax=12, ymin=-7, ymax=7,
+  xtick={4,5,5.5,6,6.5,7,8.5,9,9.5,10,11,12}, xticklabel style={font=\footnotesize},
+  ytick={-6,-4,-2,0,2,4,6},
+  point meta min=0, point meta max=100,
+  colormap name=lamp, colorbar,
+  colorbar style={ytick={0,33.3,50,66.7,100}, ylabel={$B$}},
+  axis on top]
+  \addplot3[surf, shader=interp, domain=4:12, y domain=-7:7, samples=129, samples y=57] {bw(x,y)};
+  \addplot3[black, line width=1.1pt, domain=4:12, samples=321, samples y=1]
+    (x, {max(-7,min(7, 2*(zs(x)+2)))}, 100);
+  \node[font=\footnotesize\bfseries] at (axis cs:4.75,4.8,100) {cue on};
+  \node[font=\footnotesize\bfseries] at (axis cs:11.2,4.8,100) {cue on};
+  \node[font=\footnotesize\bfseries] at (axis cs:7.75,-4.8,100) {green band: never red};
+\end{axis}
+\end{tikzpicture}}

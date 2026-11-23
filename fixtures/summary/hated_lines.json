@@ -1,0 +1,153 @@
+{
+  "_about": "Lines Max would hate (notes.txt § Voice brief) plus the gate's other negative cases. Each is checked against the payload of golden case 0 (train / all-sources / alive / base, load 118, sleep 7.4) unless `case` names another golden case, and must FAIL with a reason starting with `reason`.",
+  "cases": [
+    {
+      "line": "Don't let the streak die!",
+      "reason": "ban: 'don't break the chain'"
+    },
+    {
+      "line": "Don't let the streak die.",
+      "reason": "ban: 'don't break the chain'"
+    },
+    {
+      "line": "Third dot this week, load 118. Well done!",
+      "reason": "ban: exclamation mark"
+    },
+    {
+      "line": "Only one more and you're done!",
+      "reason": "ban: 'only N left'"
+    },
+    {
+      "line": "You slacked off yesterday.",
+      "reason": "ban: 'slacked'"
+    },
+    {
+      "line": "As Marcus Aurelius said, what stands in the way becomes the way.",
+      "reason": "names: 'marcus aurelius' named without a verbatim quote-bank entry"
+    },
+    {
+      "line": "\"We suffer more often in imagination than in reality.\" - Epictetus",
+      "reason": "names: that quotation is Seneca's in the bank, not 'epictetus'"
+    },
+    {
+      "line": "\"We suffer more often in imagination than in reality.\"",
+      "reason": "names: that quotation is Seneca's in the bank; name its author"
+    },
+    {
+      "line": "\"We suffer more in imagination than in reality.\" - Seneca",
+      "reason": "names: the words in quotation marks are not a quote-bank entry"
+    },
+    {
+      "line": "\"The day was yours, and so is the rest.\" - Seneca",
+      "reason": "names: the words in quotation marks are not a quote-bank entry"
+    },
+    {
+      "line": "\"We are what we repeatedly do. Excellence, then, is not an act, but a habit.\" - Aristotle",
+      "reason": "names: the words in quotation marks are not a quote-bank entry"
+    },
+    {
+      "line": "\"Stay hungry. Stay foolish.\" - Steve Jobs",
+      "reason": "names: the words in quotation marks are not a quote-bank entry"
+    },
+    {
+      "line": "Steve Jobs would call that focus.",
+      "reason": "names: living or modern person 'steve jobs'"
+    },
+    {
+      "line": "The Dalai Lama says begin again.",
+      "reason": "names: living or modern person 'dalai lama'"
+    },
+    {
+      "line": "Luck is what happens when preparation meets opportunity. - Seneca",
+      "reason": "names: 'seneca' named without a verbatim quote-bank entry"
+    },
+    {
+      "line": "Begin again, without drama. - Thich Nhat Hanh",
+      "reason": "names: 'thich nhat hanh' named without a verbatim quote-bank entry"
+    },
+    {
+      "line": "We suffer more often in imagination than in reality.",
+      "reason": "names: a bank quotation by Seneca without its quotation marks and author"
+    },
+    {
+      "line": "\"A journey of a thousand miles begins with a single step.\" - Lao Tzu. Load 124.",
+      "reason": "grounding: 124 not in payload"
+    },
+    {
+      "line": "Rest day Saturday, 8412 steps, sleep 7.4 h; the week is where the habit lives.",
+      "reason": "rest: 'rest day' claims he rested or did not train"
+    },
+    {
+      "line": "No workout yesterday, 7.4 h of sleep. Rest is where the training lands.",
+      "case": 1,
+      "reason": "rest: 'no workout' claims he rested or did not train"
+    },
+    {
+      "line": "You rested yesterday, and that counts.",
+      "case": 1,
+      "reason": "rest: 'you rested' claims he rested or did not train"
+    },
+    {
+      "line": "Be a beast.",
+      "reason": "ban: 'beast'"
+    },
+    {
+      "line": "Third dot this week, load 124. What you repeat is what you become.",
+      "reason": "grounding: 124 not in payload"
+    },
+    {
+      "line": "Third dot this week, load 118 and 9,900 steps. Steady.",
+      "reason": "grounding: 9900 not in payload"
+    },
+    {
+      "line": "Third dot this week, load 118. Nice work 💪",
+      "reason": "ban: emoji"
+    },
+    {
+      "line": "What a week, load 118. How steady you were.",
+      "reason": "ban: second exclamatory clause"
+    },
+    {
+      "line": "Third dot this week, load 118. You need to keep this up.",
+      "reason": "ban: 'you need to'"
+    },
+    {
+      "line": "Third dot this week, load 118. No days off, as Goggins would say.",
+      "reason": "ban: 'no days off'"
+    },
+    {
+      "line": "Third dot this week, load 118. Goggins would approve.",
+      "reason": "names: living or modern person 'goggins'"
+    },
+    {
+      "line": "Third dot this week, load 118. Your HRV says the week landed.",
+      "reason": "wellness: 'hrv' with no band crossing today"
+    },
+    {
+      "line": "Steady is the whole point, and the point is to keep it steady, every single day you can, which is most of them, and on the days you cannot the point is still there waiting, unbothered, exactly where you left it the last time you looked for it.",
+      "reason": "length: 243 chars, limit 220"
+    },
+    {
+      "line": "One dot last week. The streak is gone; nothing to do but begin.",
+      "case": 3,
+      "reason": "hard-days: 'streak' after a broken week"
+    },
+    {
+      "line": "One dot last week. Next week is a clean sheet.",
+      "case": 3,
+      "reason": "hard-days: 'next week' after a broken week"
+    },
+    {
+      "line": "Four dots this week, load 118. Steady.",
+      "reason": "grounding: four not in payload"
+    },
+    {
+      "line": "You crushed it, load 118.",
+      "reason": "ban: 'crush'"
+    },
+    {
+      "line": "Keep the chain going, load 118.",
+      "reason": "ban: 'keep the streak'"
+    }
+  ]
+}

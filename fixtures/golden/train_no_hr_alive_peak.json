@@ -1,0 +1,87 @@
+{
+  "name": "train / workout without HR / alive / peak: a 52-minute session with no heart-rate data, so no dot",
+  "cell": "train / workout without HR / alive / peak",
+  "comment": [
+    "Lifts 2026-09-28..10-04 Mon/Wed/Fri 40 min at 140 = 120 -> week 09-28 hit, streak 1.",
+    "S-2026-10-08: 52 min, no HR samples -> no zones, no load: quality false, workout_load null, load_trimp 0, but it is still counted (workout_count 1, in workout_ids).",
+    "I-2026-10-07: 45 min with only 2 minutes of samples at 140, flagged hr_incomplete by ingest -> treated like no samples: no dot, workout_load null, load_trimp 0 (its 2 x 3 = 6 is never credited).",
+    "Sleep 10-08: 27360 s = 7.6 h >= 7.0 -> the only win."
+  ],
+  "today_local": "2026-10-08",
+  "now_utc": "2026-10-08T16:00:00Z",
+  "inputs": {
+    "activities": [
+      {
+        "repeat_weekly": {
+          "id_prefix": "L-",
+          "from": "2026-09-28",
+          "to": "2026-10-04",
+          "weekdays": [0, 2, 4],
+          "time": "18:00",
+          "type": "lift",
+          "minutes": 40,
+          "hr": [[40, 140]]
+        }
+      },
+      {
+        "id": "I-2026-10-07",
+        "type": "lift",
+        "start_local": "2026-10-07 18:00",
+        "minutes": 45,
+        "hr": [[2, 140]],
+        "hr_incomplete": true
+      },
+      {
+        "id": "S-2026-10-08",
+        "type": "functional_strength_training",
+        "start_local": "2026-10-08 07:00",
+        "minutes": 52,
+        "hr": null
+      }
+    ],
+    "sleep": [
+      {
+        "wake_day": "2026-10-08",
+        "start_local": "2026-10-07 23:00",
+        "end_local": "2026-10-08 06:50",
+        "asleep_h": 7.6
+      }
+    ],
+    "health_pushes_utc": ["2026-10-05T10:00:00Z", "2026-10-08T12:00:00Z"]
+  },
+  "expected": {
+    "daily": {
+      "2026-10-08": {
+        "quality_workout": false,
+        "workout_count": 1,
+        "workout_load": null,
+        "workout_ids": ["S-2026-10-08"],
+        "load_trimp": 0.0,
+        "sleep_hours": 7.6,
+        "sleep_win": true,
+        "wins": ["sleep"]
+      },
+      "2026-10-07": {
+        "quality_workout": false,
+        "workout_count": 1,
+        "workout_load": null,
+        "workout_ids": ["I-2026-10-07"],
+        "load_trimp": 0.0,
+        "wins": []
+      }
+    },
+    "weekly": {
+      "2026-10-05": {
+        "quality_workouts": 0,
+        "week_hit": null,
+        "weeks_hit_streak": 1,
+        "week_complete_at": null
+      },
+      "2026-09-28": {
+        "quality_workouts": 3,
+        "week_hit": true,
+        "weeks_hit_streak": 1
+      }
+    }
+  }
+}

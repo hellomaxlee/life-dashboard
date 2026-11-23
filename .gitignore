@@ -9,3 +9,9 @@ __pycache__/
 data/
 !data/.gitkeep
 .DS_Store
+.claude/worktrees/
+/*.png
+.vscode/
+agents/
+.claude/settings.local.json
+.playwright-cli/

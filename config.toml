@@ -1,0 +1,151 @@
+# life-dashboard configuration. Every key here is cited by notes.txt § Goal model.
+home_tz = "America/New_York"
+hr_max = 189
+
+[zones]
+pct = [0.50, 0.60, 0.70, 0.80, 0.90]
+
+[workout]
+# The bar is what 30 minutes mostly in zone 2 costs: 30 min x zone-2 weight 2 = 60
+# (Max, 2026-10-05; was a 4-mile run, placeholder 100). With `calibrate = false` the bar
+# is never moved by the run-based calibration.
+load_bar = 60
+recalibrate_months = 3
+calibration_min_runs = 3
+calibrate = false
+
+[week]
+target = 3
+
+[sleep]
+target_hours = 7.0
+# A night shown as more than this is over the band: yellow on the frame and not a sleep win
+# (Max, 2026-10-09).
+max_hours = 9.0
+
+[books]
+target_per_year = 6
+fallback_to_date_added = true
+
+# A year with its own goal; any year not named here uses target_per_year (Max, 2026-11-22:
+# "set the goal for NEXT year to be 12 books").
+[books.target_by_year]
+2027 = 12
+
+[wellness]
+baseline_days = 28
+
+[wellness.bands]
+hrv_pct = -20
+rhr_bpm = 5
+daylight_min = 20
+
+[claude_usage]
+path = "data/claude_usage.json"
+stale_hours = 24
+
+[pull]
+health_interval_hours = 6
+goodreads = "06:30"
+
+[server]
+host = "0.0.0.0"
+port = 8080
+
+[storage]
+db_path = "data/life.db"
+raw_dir = "data/raw"
+
+[ingest]
+hr_incomplete_ratio = 0.25
+# Sleep-stage segments closer than this (minutes, end to next start) are one session.
+sleep_gap_min = 60
+
+[ingest.dedupe]
+start_window_min = 5
+duration_tolerance_pct = 10
+
+[summary]
+# Model id is pinned here, never in code. Prices are USD per million tokens at the pinned
+# model's first-party rate; the spend counter and the cap check use them.
+model = "claude-opus-5-5"
+# Raised from 3 on 2026-11-15 (Max, on the month feature: "feel free to spend more on fixing
+# that"). Still a hard stop.
+monthly_cap_usd = 5
+time = "06:50"
+price_input_per_mtok = 4.0
+price_output_per_mtok = 20.0
+price_cache_read_per_mtok = 0.20
+price_cache_write_per_mtok = 5.0
+similarity_threshold = 0.5
+
+# The judged workout (app/metrics/judge.py): the model that reads a day's heart-rate
+# aggregates. Spend is counted against the [summary] cap above, priced at this model's own
+# rate (app/summary/spend.py RATES; an id missing there is priced at the [summary] rates,
+# which overstate every cheaper model's, so the cap errs safe). Pinned here, never in code.
+[judge]
+model = "claude-haiku-4-5"
+
+[scheduler]
+enabled = true
+usage_poll_seconds = 30
+usage_min_read_seconds = 900
+
+[backup]
+dir = "data/backups"
+time = "03:15"
+keep = 14
+
+# Metrics engine (notes.txt § Goal model). Recomputes every day's and week's rows from the
+# stored tables on an interval and at the day rollover; a late push is picked up by the next run.
+[metrics]
+recompute_minutes = 15
+rollover_time = "00:05"
+# A week closes after the first health push following Monday 00:00 local, or after this many
+# hours with no push at all.
+week_close_grace_hours = 12
+# Seconds one HR sample may stand for before the rest of the gap is unscored.
+max_sample_gap_s = 300
+# Which band crossing becomes the day's one wellness fact when several cross.
+wellness_priority = ["hrv_ms", "resting_hr", "daylight_min"]
+
+# Pixoo-64 on the LAN (port 9000). Empty = no device; nothing is ever pushed.
+[device]
+pixoo_host = "192.168.1.185"
+# Seconds a still screen stays up (3 or more). The Books screen stays until its summary has
+# paged through once; a small-win sparkle is five stills sent one by one (about 9 s on the
+# panel) and the week-complete party six (about 10 s).
+screen_seconds = 6
+# Panel brightness, 0 to 100: `night_brightness` from `night_from` until `night_until`
+# (home timezone), `brightness` the rest of the day. Equal times = never dimmed. Max,
+# 2026-10-09: the day level down from 100 to the old night level, 3, then "back up to 5",
+# then 25 ("still very dim"), then 50 ("brightness 50 when awake"); the night level 1, the
+# lowest that is not 0.
+brightness = 50
+night_brightness = 1
+night_from = "22:00"
+night_until = "05:30"
+# false: every screen is uploaded as stills, 1.45 s each, with no loading cycle (nothing is
+# sent as an animation any more). true: the panel fetches every screen from this service as a GIF in a fifth of a
+# second, but as of 2026-10-06 it then shows its own cloud channel ("HOT" heart) instead of
+# the GIF, whatever the GIF's form. Leave false until a watched test shows a fetched GIF.
+fetch_clips = false
+
+# The city panel (workflows/city.md): MTA service alerts for the lines Max rides and the
+# day's weather. Display-only; nothing here is a metric. latitude/longitude are Astoria
+# rounded to two decimals (about a kilometre) on purpose: they are sent to the two weather
+# services, so no street address goes here.
+[city]
+enabled = true
+latitude = 40.77
+longitude = -73.94
+# Shown every day; then the weekday-only or the weekend-only lines (Saturday and Sunday in
+# the home timezone are the weekend); then the buses.
+subway = ["N", "W"]
+subway_weekday = ["M"]
+subway_weekend = ["F"]
+bus = ["Q103", "Q66", "Q69", "B62"]
+transit_poll_minutes = 5
+weather_poll_minutes = 30
+# The renderer treats a snapshot older than this as stale.
+stale_minutes = 45

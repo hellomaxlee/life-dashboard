@@ -1,0 +1,382 @@
+from __future__ import annotations
+
+import io
+import json
+import string
+from dataclasses import replace
+
+import pytest
+from PIL import Image, ImageChops
+
+from app.render.adapters.file import FileAdapter, gif_bytes, png_bytes
+from app.render.celebrate import WIN_LABELS, celebrations_for, party_clip, sparkle_clip
+from app.render.font import BODY, SMALL, draw_text, text_width
+from app.render.frame import SIZE, Clip, new_frame, still, upscale
+from app.render.gamma import led_gamma, led_lut
+from app.render.palette import RED, SECONDARY, SPINES
+from app.render.rotation import PAGED_FRAME_MS, rotation_clips
+from app.render.screens import (
+    AS_OF_Y,
+    LEFT,
+    TIER_BOARDS,
+    ZZ,
+    ZZ_X,
+    as_of_label,
+    parked_as_of,
+    render_books,
+    render_parked,
+    render_today,
+    shelf_slots,
+    sleep_text,
+    today_facts,
+)
+from app.render.theme import theme_for
+from app.render.view import DayView
+from app.timeutil import from_utc_iso
+from tests.render import (
+    COMBOS,
+    DAYS,
+    NO_READING,
+    RED_91,
+    REQUIRED_COMBOS,
+    STALE,
+    WEEK_41,
+    load,
+    rotation,
+)
+
+NOW = from_utc_iso("2026-10-02T16:00:00Z")
+
+
+pytestmark = pytest.mark.usefixtures("no_scenery")
+
+
+def lit(frame: Image.Image) -> int:
+    return sum(1 for pixel in frame.get_flattened_data() if pixel != (0, 0, 0))
+
+
+def test_clip_contract_rejects_bad_frames():
+    good = new_frame()
+    assert still(good).durations_ms == (8000,)
+    with pytest.raises(ValueError):
+        Clip((), ())
+    with pytest.raises(ValueError):
+        Clip((good,), (100, 100))
+    with pytest.raises(ValueError):
+        Clip((good,), (0,))
+    with pytest.raises(ValueError):
+        Clip((Image.new("RGB", (32, 32)),), (100,))
+    with pytest.raises(ValueError):
+        Clip((Image.new("RGBA", (64, 64)),), (100,))
+
+
+def test_the_display_never_blanks_on_an_empty_view():
+    clips = rotation(DayView(day_local="2026-10-02"), NOW)
+    assert list(clips) == ["today", "city", "week", "month", "books"]
+    for name, clip in clips.items():
+        for frame in clip.frames:
+            assert frame.size == (SIZE, SIZE) and frame.mode == "RGB"
+            assert lit(frame) > 150, name
+            assert lit(led_gamma(frame, brightness=0.2)) > 150, name
+    assert len(clips["week"].frames) == 1
+
+
+@pytest.mark.parametrize("combo", COMBOS)
+def test_every_screen_and_clip_renders_at_1x_and_8x(combo, settings):
+    view, now = load(combo, settings)
+    clips = rotation_clips(view, now) + [(c.name, c.clip) for c in celebrations_for(view)]
+    assert [name for name, _ in clips] == [
+        "today",
+        "city",
+        "week",
+        "month",
+        "books",
+        "sparkle",
+        "party",
+    ]
+    for _, clip in clips:
+        for scale in (1, 8):
+            still_image = Image.open(io.BytesIO(png_bytes(clip.poster, scale)))
+            assert still_image.size == (64 * scale, 64 * scale)
+            assert still_image.convert("RGB").getpixel((5 * scale, 5 * scale)) == (
+                clip.poster.getpixel((5, 5))
+            )
+        big = upscale(led_gamma(clip.poster), 8)
+        assert big.size == (512, 512)
+
+
+def test_gif_round_trips_frames_and_durations(settings):
+    view, now = load(STALE, settings)
+    clip = rotation(view, now)["week"]
+    for scale in (1, 8):
+        gif = Image.open(io.BytesIO(gif_bytes(clip, scale)))
+        assert gif.size == (64 * scale, 64 * scale)
+        assert gif.n_frames == len(clip.frames)
+        total = 0
+        for index in range(gif.n_frames):
+            gif.seek(index)
+            total += gif.info["duration"]
+            if scale == 1:
+                same = ImageChops.difference(gif.convert("RGB"), clip.frames[index]).getbbox()
+                assert same is None, index
+        assert total == clip.total_ms
+
+
+def test_file_adapter_writes_poster_and_gif(tmp_path, settings):
+    view, now = load(WEEK_41, settings)
+    clips = rotation(view, now)
+    assert [p.name for p in FileAdapter(tmp_path).send(clips["week"], "week")] == ["week.png"]
+    written = FileAdapter(tmp_path, scale=8, transform=led_gamma).send(clips["books"], "books")
+    assert [p.name for p in written] == ["books.png", "books.gif"]
+    assert Image.open(written[0]).size == (512, 512)
+
+
+def test_books_shelf_counts_spines(settings):
+    view, _ = load(WEEK_41, settings)
+    for read in (0, 3, 12, 15):
+        frame = render_books(replace(view, books_ytd=read)).poster
+        lit_spines = 0
+        for index, (tier, x0, _width, _height) in enumerate(shelf_slots(view.books_target)):
+            if frame.getpixel((x0, TIER_BOARDS[tier] - 1)) == SPINES[index % len(SPINES)]:
+                lit_spines += 1
+        assert lit_spines == min(read, view.books_target) == min(read, 6)
+
+
+def test_today_states(settings):
+    view, _ = load(WEEK_41, settings)
+    assert as_of_label(view) == "AS OF 6:10PM"
+    delayed, _ = load(STALE, settings)
+    assert as_of_label(delayed) == "AS OF TUE 10:10P"
+    assert as_of_label(replace(view, as_of_utc=None)) is None
+    winter = replace(view, day_local="2026-01-15", as_of_utc="2026-01-15T23:10:00Z")
+    assert as_of_label(winter) == "AS OF 6:10PM"
+
+    green, sky = (60, 220, 90), (80, 170, 255)
+    met = render_today(view).poster
+    assert met.getpixel((2, 27)) == green
+    short, _ = load(RED_91, settings)
+    frame = render_today(short).poster
+    assert frame.getpixel((2, 27)) == sky
+    assert not any(p == RED for p in frame.get_flattened_data())
+    missing, _ = load(NO_READING, settings)
+    assert render_today(missing).poster.getpixel((2, 27)) == theme_for(missing).track
+    for any_view in (view, short, missing):
+        assert render_today(any_view).poster.getpixel((44, 25)) == (255, 255, 255)
+
+
+def test_sleep_is_truncated_never_rounded_up():
+    assert sleep_text(6.96) == "6.9"
+    assert sleep_text(7.0) == "7.0"
+    assert sleep_text(7.4) == "7.4"
+    assert sleep_text(8.2) == "8.2"
+
+
+def test_celebrations_are_deterministic_colourful_and_short():
+    for build in (lambda: sparkle_clip("sleep"), lambda: party_clip(3, 3)):
+        first, second = build(), build()
+        assert [f.tobytes() for f in first.frames] == [f.tobytes() for f in second.frames]
+        colours = {p for frame in first.frames for p in frame.get_flattened_data()}
+        assert len(colours) > 20
+        assert first.total_ms <= 6000
+        assert all(lit(frame) > 20 for frame in first.frames)
+        assert min(first.durations_ms) >= PAGED_FRAME_MS, "steps, sent as stills: no loading"
+    assert len(sparkle_clip().frames) == 5
+    assert sparkle_clip().total_ms == 1500, "five steps of 300 ms: about 9 s on the panel"
+    assert len(party_clip().frames) == 6
+    assert party_clip(5, 5).poster.size == (64, 64)
+
+
+def test_fonts_cover_what_the_screens_print():
+    for char in string.printable:
+        if char in "\t\n\r\x0b\x0c":
+            continue
+        assert char in BODY.glyphs, char
+    for font in (BODY, SMALL):
+        for char, rows in font.glyphs.items():
+            assert len(rows) == font.height, char
+            assert len({len(row) for row in rows}) == 1, char
+    for char in "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 :.,%<-/":
+        assert char in SMALL.glyphs, char
+    shapes = [SMALL.glyphs[c] for c in SMALL.glyphs if c != " "]
+    assert len(set(shapes)) == len(shapes)
+    assert SMALL.glyph("a") == SMALL.glyph("A")
+    assert SMALL.glyph("é") == SMALL.glyph("?")
+
+
+def test_text_width_matches_drawn_extent():
+    for font, text in ((SMALL, "RESETS IN 3D"), (BODY, "Second dot, 7.4 h")):
+        frame = Image.new("RGB", (200, 20))
+        end = draw_text(frame, 3, 2, text, (255, 255, 255), font)
+        box = frame.getbbox()
+        assert box[0] == 3
+        assert box[2] - box[0] == text_width(text, font)
+        assert end == 3 + text_width(text, font) + 1
+    assert text_width("RESETS IN 3D", SMALL) <= 60
+    assert text_width("AS OF TUE 22:10", SMALL) <= 60
+    assert text_width("WORKOUT DONE", SMALL) <= 64 - 14
+
+
+def test_led_gamma_curve():
+    lut = led_lut()
+    assert lut[0] == 0 and lut[255] == 255
+    assert lut == sorted(lut)
+    assert lut[34] == round(255 * (34 / 255) ** (1 / 2.2)) == 102
+    assert led_lut(panel_gamma=2.2) == list(range(256))
+    night = led_lut(brightness=0.2)
+    assert night[4] == 0 and night[5] > 0
+    frame = new_frame((34, 36, 54))
+    shown = led_gamma(frame)
+    assert shown.size == (64, 64) and shown.mode == "RGB"
+    assert shown.getpixel((0, 0)) == (lut[34], lut[36], lut[54])
+    assert frame.getpixel((0, 0)) == (34, 36, 54)
+    with pytest.raises(ValueError):
+        led_lut(brightness=1.5)
+
+
+def test_fixture_files_name_their_cell_and_cover_the_required_states(settings):
+    paths = sorted(DAYS.glob("*.json"))
+    assert {p.stem for p in paths} >= set(REQUIRED_COMBOS)
+    assert {p.stem for p in paths} == set(COMBOS)
+    used = []
+    for path in paths:
+        assert len(path.stem.split("__")) == 4
+        record = json.loads(path.read_text())
+        assert record["combo"].lower().replace(" / ", "__").replace(" ", "-") == path.stem.lower()
+        line = record["daily_metrics"].get("summary_device_line", "")
+        assert len(line) <= 110
+        assert "!" not in line
+        used.append(record["daily_metrics"].get("claude_week_used_pct"))
+    assert 41.2 in used and None in used
+
+
+def test_a_night_over_nine_hours_is_yellow_and_not_a_sleep_win():
+    from app.render.celebrate import earned_wins
+    from app.render.palette import GREEN, SKY, YELLOW
+    from app.render.screens import sleep_goal_label
+
+    def number_colours(hours: float) -> set:
+        frame = today_facts(DayView(day_local="2026-10-02", sleep_hours=hours))
+        return {frame.getpixel((x, y)) for x in range(16, 62) for y in range(9, 24)}
+
+    for hours, colour, win in (
+        (6.96, SKY, False),
+        (7.0, GREEN, True),
+        (9.09, GREEN, True),
+        (9.1, YELLOW, False),
+        (9.83, YELLOW, False),
+    ):
+        view = DayView(day_local="2026-10-02", sleep_hours=hours)
+        assert number_colours(hours) == {(0, 0, 0), colour}, hours
+        assert ("sleep" in earned_wins(view)) is win, hours
+    view = DayView(day_local="2026-10-02", sleep_hours=8.0)
+    assert sleep_goal_label(view) == "GOAL 7-9H"
+    frame = render_today(view).poster
+    assert [frame.getpixel((x, 25)) for x in (2 + 42, 2 + 54)] == [(255, 255, 255)] * 2, (
+        "a tick at each end of the band"
+    )
+
+
+@pytest.mark.parametrize("win", ["workout", "sleep", "book"])
+def test_every_sparkle_step_is_a_different_picture(win, monkeypatch):
+    from tests.render import record_text
+
+    drawn = record_text(monkeypatch)
+    frames = sparkle_clip(win).frames
+    for step, (before, after) in enumerate(zip(frames, frames[1:], strict=False)):
+        moved = ImageChops.difference(before, after).convert("L").point(lambda v: 255 if v else 0)
+        assert moved.histogram()[255] >= 100, f"step {step} to {step + 1} barely moves"
+    texts = [text for text, *_ in drawn]
+    for line in WIN_LABELS[win]:
+        assert texts.count(line) == 3, "the win's own label arrives with step 3"
+    assert "SMALL WIN" not in texts, "no subtitle under the label (Max, 2026-11-15)"
+    label_rows = {y for text, _x, y, *_ in drawn if text in WIN_LABELS[win]}
+    assert max(label_rows) == 57, "the label sits on the bottom line"
+    assert frames[0].crop((20, 14, 44, 34)).getbbox() is not None, "the icon pops in at home"
+    assert frames[0].crop((26, 36, 38, SIZE)).getbbox() is None, (
+        "no streak trails below the icon (Max, 2026-11-09)"
+    )
+    if win == "workout":
+        assert frames[-1].getpixel((32, 27)) == (0, 0, 0), "the disc carries its check mark"
+    assert frames[1].crop((0, 0, SIZE, 4)).getbbox() is not None, "the rays reach the edge"
+
+
+ZZ_LIT = {
+    (ZZ_X + x, AS_OF_Y + y) for y, row in enumerate(ZZ) for x, ch in enumerate(row) if ch == "#"
+}
+ZZ_CLEAR = 2
+PARKED_AS_OF_CASES = (
+    ("2026-09-30T16:59:00Z", "AS OF 12:59PM"),
+    ("2026-09-28T16:59:00Z", "AS OF MON 12:59P"),
+    ("2026-09-24T16:59:00Z", "AS OF THU 12:59P"),
+    ("2026-09-26T02:10:00Z", "AS OF FRI 10:10P"),
+    ("2025-08-31T15:30:00Z", "AS OF 395D AGO"),
+)
+
+
+def parked_views(settings) -> list[tuple[str, DayView, object]]:
+    """Every fixture as it is, plus the widest as-of lines Today can print: the same-day clock,
+    the weekday form at its longest, and a stale push a year old."""
+    cases = [(combo, *load(combo, settings)) for combo in COMBOS]
+    view, _ = load(WEEK_41, settings)
+    for stamp, label in PARKED_AS_OF_CASES:
+        case = replace(view, as_of_utc=stamp)
+        assert as_of_label(case, NOW) == label
+        cases.append((label, case, NOW))
+    return cases
+
+
+def test_the_parked_zz_never_touches_the_as_of_line(settings):
+    """The mark's own pixels are SECONDARY, the rest of its box and two columns before
+    it are black, and the as-of row says the time Today said, with AS OF dropped only when
+    Today's line would run under the mark (the weekday form reaches the frame's edge)."""
+    shortened = 0
+    for name, view, now in parked_views(settings):
+        today = render_today(view, now).poster
+        parked = render_parked(view, now).poster
+        px = parked.load()
+        assert all(px[at] == SECONDARY for at in ZZ_LIT), name
+        box = {(ZZ_X + dx, AS_OF_Y + dy) for dy in range(len(ZZ)) for dx in range(len(ZZ[0]))}
+        gap = {(x, y) for x in range(ZZ_X - ZZ_CLEAR, ZZ_X) for y in range(AS_OF_Y, SIZE)}
+        assert all(px[at] == (0, 0, 0) for at in (box | gap) - ZZ_LIT), name
+        above = (0, 0, SIZE, AS_OF_Y)
+        assert ImageChops.difference(today.crop(above), parked.crop(above)).getbbox() is None
+        as_of = as_of_label(view, now)
+        printed = parked_as_of(as_of)
+        if printed == as_of:
+            row = (0, AS_OF_Y, ZZ_X - ZZ_CLEAR, SIZE)
+            assert ImageChops.difference(today.crop(row), parked.crop(row)).getbbox() is None
+        else:
+            shortened += 1
+            assert as_of.startswith("AS OF ") and printed == as_of.removeprefix("AS OF ")
+            assert LEFT + text_width(as_of, SMALL) + ZZ_CLEAR > ZZ_X
+            expect = new_frame()
+            draw_text(expect, LEFT, AS_OF_Y, printed, SECONDARY, SMALL)
+            row = (0, AS_OF_Y, SIZE, SIZE)
+            assert ImageChops.difference(expect.crop(row), today.crop(row)).getbbox() is not None
+            for at in ZZ_LIT:
+                expect.putpixel(at, SECONDARY)
+            assert ImageChops.difference(expect.crop(row), parked.crop(row)).getbbox() is None
+    assert shortened >= 4
+
+
+def test_a_small_goal_keeps_book_shaped_spines_and_leaves_shelf_to_spare():
+    """Max, 2026-11-20: six books a year, not twelve, at the width a twelve-book shelf gives
+    them. Max, 2026-11-22: "all six books on one shelf": a goal of up to six is the top row
+    of a twelve-book case and the lower shelf holds only the lamp; seven and more split."""
+    twelve = shelf_slots(12)
+    assert [width for _, _, width, _ in twelve] == [6, 5, 7, 6, 7, 5] * 2
+    assert [tier for tier, *_ in twelve] == [0] * 6 + [1] * 6
+    assert shelf_slots(6) == twelve[:6], "six are the top shelf of twelve"
+    for target in range(1, 7):
+        slots = shelf_slots(target)
+        assert len(slots) == target
+        assert {tier for tier, *_ in slots} == {0}, target
+    three = shelf_slots(3)
+    assert [(x0, width) for _, x0, width, _ in three] == [(2, 7), (10, 6), (17, 8)]
+    seven = shelf_slots(7)
+    assert [tier for tier, *_ in seven] == [0] * 4 + [1] * 3, "past six, two shelves again"
+    for target in range(1, 13):
+        assert max(width for _, _, width, _ in shelf_slots(target)) <= 8, target
+        for _, x0, width, _ in shelf_slots(target):
+            assert x0 + width - 1 <= 46, (target, "clear of the plant and the lamp")
+    assert len(shelf_slots(40)) == 40, "a large goal is unchanged: one even width"

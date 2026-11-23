@@ -1,0 +1,96 @@
+{
+  "note": "Both parts fetched 130 minutes before the fixture's now, past the 45-minute limit: each page is headed AS OF.",
+  "weather": {
+    "temp_f": 41.0,
+    "feels_f": 36.5,
+    "code": 2,
+    "high_f": 44.6,
+    "low_f": 33.8,
+    "precip_pct_max": 15,
+    "hours": [
+      {
+        "hour_local": 18,
+        "temp_f": 41.0,
+        "precip_pct": 5,
+        "code": 2
+      },
+      {
+        "hour_local": 21,
+        "temp_f": 38.3,
+        "precip_pct": 10,
+        "code": 3
+      },
+      {
+        "hour_local": 0,
+        "temp_f": 36.0,
+        "precip_pct": 15,
+        "code": 3,
+        "tomorrow": true
+      },
+      {
+        "hour_local": 3,
+        "temp_f": 34.7,
+        "precip_pct": 10,
+        "code": 2,
+        "tomorrow": true
+      },
+      {
+        "hour_local": 6,
+        "temp_f": 33.8,
+        "precip_pct": 0,
+        "code": 0,
+        "tomorrow": true
+      },
+      {
+        "hour_local": 9,
+        "temp_f": 37.4,
+        "precip_pct": 0,
+        "code": 0,
+        "tomorrow": true
+      }
+    ],
+    "alerts": [],
+    "fetched_minutes_ago": 130
+  },
+  "lines": [
+    {
+      "line": "N",
+      "kind": "subway",
+      "status": "ok"
+    },
+    {
+      "line": "W",
+      "kind": "subway",
+      "status": "ok"
+    },
+    {
+      "line": "M",
+      "kind": "subway",
+      "status": "planned",
+      "headline": "Manhattan-bound M trains skip Steinway St and 36 St.",
+      "now": true,
+      "alerts": 1
+    },
+    {
+      "line": "Q103",
+      "kind": "bus",
+      "status": "ok"
+    },
+    {
+      "line": "Q66",
+      "kind": "bus",
+      "status": "ok"
+    },
+    {
+      "line": "Q69",
+      "kind": "bus",
+      "status": "ok"
+    },
+    {
+      "line": "B62",
+      "kind": "bus",
+      "status": "ok"
+    }
+  ],
+  "transit_fetched_minutes_ago": 130
+}

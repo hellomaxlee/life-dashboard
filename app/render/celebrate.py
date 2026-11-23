@@ -1,0 +1,414 @@
+"""Two celebration clips: the small-win sparkle and the week-complete party.
+
+Wins are celebrated on the device; nothing here is ever shown for a miss. Both clips are
+deterministic (a seeded generator, no clock), so they snapshot-test like any still frame.
+
+Sparkle: the win's own icon pops in small with a glint, bursts into rays, throws sparks that
+fall wide while the label arrives, and settles among four-point stars. No tail, no ring around
+the icon (Max, 2026-11-09: the old rising streak and ringed disc read as a sperm and an egg);
+the workout's disc carries a check mark so it reads as a badge.
+Party: the frame opens as the Week screen's dot row with the last dot missing; that dot drops
+in and bounces, all dots flash, then they throw confetti while "WEEK DONE" rides a rainbow wave.
+
+Each is shown as a few stills (the sparkle's SPARKLE_BEATS, drawn one by one; the party's
+PARTY_STEPS, picked from a run of PARTY_TICKS; every frame at or over
+rotation.PAGED_FRAME_MS, so the device job sends them one by one like Books pages). The
+panel shows a loading cycle for as long as a multi-frame animation takes to upload, 1.45 s a
+frame, so a 20-frame sparkle loaded for 30 s and the 56-frame party would have for 80; a
+still arrives with no loading cycle at all, and fetching a GIF instead is not something this
+panel's firmware does (Max, 2026-10-06 and 2026-10-07, run-service.md section 15). A step is
+therefore about 1.75 s on the panel, and motion has to come from how far one still is from
+the next, not from frame rate: each sparkle step is its own composition.
+
+The cadence: a step is on screen for its hold (STEP_MS) plus the 1.45 s its successor takes
+to upload, and no transport makes that upload faster (httpx, a raw one-write socket, nodelay,
+chunked and keep-alive all measured within noise of each other, 2026-10-07, run-service.md
+section 15). So the hold is as short as paging allows and the upload itself is most of the
+step: the sparkle's five steps are on screen about 9 s and the party's six about 10; four
+steps held a second each made 10 and read as lag (Max, 2026-10-07: "very laggy").
+"""
+
+from __future__ import annotations
+
+import math
+import random
+from dataclasses import dataclass
+from typing import Literal
+
+from app.render.font import BODY, SMALL, Font, draw_text, draw_text_centered, text_width
+from app.render.frame import SIZE, Clip, Color, Frame, new_frame
+from app.render.palette import BLACK, CONFETTI, GOLD, TEAL, TEXT, VIOLET, WHITE, dim, hue
+from app.render.screens import (
+    DOT_ROW_Y,
+    MOON,
+    dot_color,
+    dot_layout,
+    draw_bitmap,
+    draw_disc,
+    draw_ring,
+    fill_rect,
+    sleep_met,
+)
+from app.render.theme import theme_for
+from app.render.view import DayView, valid_count
+
+Win = Literal["sleep", "workout", "book"]
+
+WIN_LABELS: dict[str, tuple[str, ...]] = {
+    "sleep": ("RESTED",),
+    "workout": ("WORKOUT DONE",),
+    "book": ("BOOK DONE",),
+}
+WIN_ORDER: tuple[Win, ...] = ("workout", "sleep", "book")
+SPARKLE_BEATS = 5
+ICON_Y = 26
+PARTY_TICKS = 56
+PARTY_STEPS = (3, 11, 13, 17, 28, 44)
+STEP_MS = 300
+_LABEL_Y = 31
+_WAVE_Y = 42
+_WAVE_BOB_PX = 2
+_DROP_FRAMES = 12
+_FLASH_FRAMES = 4
+_GRAVITY = 0.16
+
+
+def _put(frame: Frame, x: int, y: int, color: Color) -> None:
+    if 0 <= x < SIZE and 0 <= y < SIZE:
+        frame.putpixel((x, y), color)
+
+
+def draw_twinkle(frame: Frame, x: int, y: int, size: int, color: Color) -> None:
+    """A four-point star: size 0 is a pixel, 1 a plus, 2 a plus with long arms and a white core."""
+    if size < 0:
+        return
+    _put(frame, x, y, WHITE if size == 2 else color)
+    for arm in range(1, size + 1):
+        shade = color if arm == 1 else dim(color, 0.55)
+        for dx, dy in ((arm, 0), (-arm, 0), (0, arm), (0, -arm)):
+            _put(frame, x + dx, y + dy, shade)
+
+
+def nth_dot_color(dot: int | None) -> Color:
+    """The colour of the week's Nth dot (1-based), as the Week screen draws it: coral, gold,
+    teal. None or 0 (count unknown) is gold."""
+    if dot is None or dot < 1:
+        return GOLD
+    return dot_color(dot - 1)
+
+
+def _win_icon(frame: Frame, win: str, grow: float, color: Color = GOLD, cy: int = ICON_Y) -> None:
+    cx = SIZE // 2
+    if win == "sleep":
+        if grow >= 0.5:
+            draw_bitmap(frame, cx - 4, cy - 5, MOON, VIOLET)
+        else:
+            draw_disc(frame, cx, cy, 2, VIOLET)
+    elif win == "book":
+        half = max(1, int(7 * grow))
+        fill_rect(frame, cx - half, cy - 5, cx - 1, cy + 5, TEAL)
+        fill_rect(frame, cx + 1, cy - 5, cx + half, cy + 5, TEAL)
+        fill_rect(frame, cx, cy - 5, cx, cy + 6, WHITE)
+        if half >= 5:
+            for line_y in (cy - 2, cy + 1):
+                fill_rect(frame, cx - half + 2, line_y, cx - 2, line_y, dim(TEAL, 0.45))
+                fill_rect(frame, cx + 2, line_y, cx + half - 2, line_y, dim(TEAL, 0.45))
+    else:
+        draw_disc(frame, cx, cy, max(1, int(7 * grow)), color)
+        if grow >= 1.0:
+            _check(frame, cx, cy)
+
+
+def _check(frame: Frame, cx: int, cy: int) -> None:
+    """A two-pixel check mark cut out of the workout disc, clear of its centre pixel."""
+    for dx, dy in ((-4, -1), (-3, 0), (-2, 1), (-1, 2), (0, 1), (1, 0), (2, -1), (3, -2), (4, -3)):
+        _put(frame, cx + dx, cy + dy, BLACK)
+        _put(frame, cx + dx, cy + dy + 1, BLACK)
+
+
+def _steps(ticks: list[Frame], steps: tuple[int, ...], poster: int) -> Clip:
+    return Clip(tuple(ticks[tick] for tick in steps), (STEP_MS,) * len(steps), poster_index=poster)
+
+
+def _pop_glint(frame: Frame, accent: Color) -> None:
+    """The first step's glint: a white star up and right of the small icon, a faint one opposite."""
+    cx = SIZE // 2
+    draw_twinkle(frame, cx + 7, ICON_Y - 7, 2, accent)
+    draw_twinkle(frame, cx - 6, ICON_Y + 6, 1, dim(accent, 0.6))
+
+
+def _burst_rays(frame: Frame, accent: Color) -> None:
+    """Twelve rays from the icon to the frame's edge, long and short by turns."""
+    cx = SIZE // 2
+    for ray in range(12):
+        angle = ray * math.pi / 6 + math.pi / 12
+        reach = 31 if ray % 2 == 0 else 23
+        for r in range(12, reach):
+            shade = WHITE if r < 16 else dim(accent, 1.0 - (r - 16) / (reach - 14))
+            _put(
+                frame,
+                cx + int(round(math.cos(angle) * r)),
+                ICON_Y + int(round(math.sin(angle) * r)),
+                shade,
+            )
+
+
+def _sparks(
+    frame: Frame, sparks: list[tuple[float, float, Color]], reach: float, fall: int, floor: int
+) -> None:
+    """The burst's sparks at `reach` pixels from the icon, each with a dim tail pointing back
+    at it, `fall` pixels down; none below `floor`, where the label sits."""
+    cx = SIZE // 2
+    for angle, pace, color in sparks:
+        for back, shade in ((0, color), (2, dim(color, 0.45))):
+            r = reach * pace - back
+            y = ICON_Y + int(round(math.sin(angle) * r)) + fall
+            if y < floor:
+                _put(frame, cx + int(round(math.cos(angle) * r)), y, shade)
+
+
+def _flourish(frame: Frame, win: str) -> None:
+    """The icon's own gesture on the fourth step: a glint off the workout's disc, a Z
+    drifting off the moon, a star over the book."""
+    cx = SIZE // 2
+    if win == "sleep":
+        draw_text(frame, cx + 7, ICON_Y - 9, "z", WHITE, SMALL)
+        draw_text(frame, cx + 12, ICON_Y - 15, "Z", WHITE, SMALL)
+    elif win == "book":
+        draw_twinkle(frame, cx, ICON_Y - 10, 2, GOLD)
+    else:
+        draw_twinkle(frame, cx + 9, ICON_Y - 8, 2, WHITE)
+        draw_twinkle(frame, cx - 9, ICON_Y - 6, 1, WHITE)
+
+
+def sparkle_clip(
+    win: Win = "workout",
+    seed: int = 11,
+    dot: int | None = None,
+    confetti: tuple[Color, ...] = CONFETTI,
+) -> Clip:
+    """The small-win clip, five stills of STEP_MS each, every one a different picture
+    (Max, 2026-10-09: "more dynamic"): the icon popping in small with a glint; the burst,
+    rays to the frame's edge; the sparks thrown out as the label arrives; the sparks
+    falling wide while the icon makes its own gesture; the icon settled among the stars.
+    `win` picks the icon and the label; for a workout, `dot` (the week's count including this
+    one) colours the disc, its rays and its ring like the Week screen's Nth dot (Max,
+    2026-10-06: a different colour for the 1st, 2nd and 3rd). `confetti` is what the sparks
+    are drawn from: the stock set, or the month theme's (theme.py), which adds its accent."""
+    rng = random.Random(seed)
+    accent = nth_dot_color(dot) if win == "workout" else GOLD
+    lines = WIN_LABELS[win]
+    star_floor = 53 - 7 * (len(lines) - 1)
+    stars = []
+    while len(stars) < 14:
+        x, y = rng.randrange(4, SIZE - 4), rng.randrange(4, star_floor)
+        if abs(x - SIZE // 2) < 12 and abs(y - ICON_Y) < 12:
+            continue
+        stars.append((x, y, rng.randrange(6), rng.random()))
+    sparks = [
+        (rng.uniform(0, 2 * math.pi), rng.uniform(0.8, 1.2), rng.choice(confetti))
+        for _ in range(28)
+    ]
+
+    frames: list[Frame] = []
+    for beat in range(SPARKLE_BEATS):
+        frame = new_frame()
+        if beat == 0:
+            _win_icon(frame, win, 0.45, accent)
+            _pop_glint(frame, accent)
+        elif beat == 1:
+            _burst_rays(frame, accent)
+            _win_icon(frame, win, 1.3 if win == "workout" else 1.0, accent)
+        else:
+            if beat == 2:
+                _sparks(frame, sparks, 20, 0, star_floor)
+            elif beat == 3:
+                _sparks(frame, sparks, 33, 5, star_floor)
+                _flourish(frame, win)
+            _win_icon(frame, win, 1.0, accent)
+        for index, (x, y, phase, colour_at) in enumerate(stars):
+            size = {
+                0: 0 if index % 2 else -1,
+                1: -1,
+                2: 2 if index % 2 else 0,
+                3: 0 if index % 2 else 2,
+                4: (1, 2, 1, 0, 2, 1)[phase],
+            }[beat]
+            draw_twinkle(frame, x, y, size, hue(colour_at + beat * 0.13))
+        if beat >= 2:
+            for row, line in enumerate(lines):
+                draw_text_centered(frame, 57 - 7 * (len(lines) - 1 - row), line, TEXT, SMALL)
+        frames.append(frame)
+    return Clip(tuple(frames), (STEP_MS,) * SPARKLE_BEATS, poster_index=2)
+
+
+def _bounce_y(tick: int) -> int:
+    """Fall from above the frame to the dot row with two rebounds."""
+    t = min(tick / (_DROP_FRAMES - 1), 1.0)
+    if t < 0.55:
+        height = 1.0 - (t / 0.55) ** 2
+    elif t < 0.85:
+        u = (t - 0.55) / 0.30
+        height = 0.28 * (1 - (2 * u - 1) ** 2)
+    else:
+        u = (t - 0.85) / 0.15
+        height = 0.08 * (1 - (2 * u - 1) ** 2)
+    return int(DOT_ROW_Y - height * (DOT_ROW_Y + 8) + 0.5)
+
+
+def _clear_text_box(
+    frame: Frame, text: str, y: int, height: int, margin: int, font: Font = SMALL
+) -> None:
+    """Black out where a label is about to go, so confetti never lands between its letters."""
+    width = text_width(text, font)
+    x = (SIZE - width) // 2
+    fill_rect(frame, x - margin, y - margin, x + width - 1 + margin, y + height - 1 + margin, BLACK)
+
+
+def _rainbow_wave(frame: Frame, text: str, y: int, tick: int) -> None:
+    x = (SIZE - text_width(text, BODY)) // 2
+    for index, char in enumerate(text):
+        bob = int(round(1.5 * math.sin(tick * 0.55 + index * 0.9)))
+        x = draw_text(frame, x, y + bob, char, hue(index * 0.11 + tick * 0.04), BODY)
+
+
+def party_clip(
+    count: int = 3, target: int = 3, seed: int = 7, confetti: tuple[Color, ...] = CONFETTI
+) -> Clip:
+    """The week-complete clip, six stills of STEP_MS each: the last dot falling, landed,
+    the flash, the burst with WEEK DONE, then confetti twice.
+
+    `count` and `target` are the week's stored numbers; the clip prints them as given.
+    `confetti` is the particle colour set, the stock one or the month theme's.
+    """
+    rng = random.Random(seed)
+    centres, radius = dot_layout(target)
+    burst_at = _DROP_FRAMES + _FLASH_FRAMES
+    particles = []
+    for index, cx in enumerate(centres):
+        for _ in range(22):
+            angle = rng.uniform(math.pi * 1.05, math.pi * 1.95)
+            speed = rng.uniform(0.9, 2.6)
+            particles.append(
+                (
+                    float(cx),
+                    float(DOT_ROW_Y),
+                    math.cos(angle) * speed,
+                    math.sin(angle) * speed,
+                    rng.choice(confetti),
+                    burst_at + index * 3 + rng.randrange(3),
+                    rng.randrange(2),
+                )
+            )
+    for _ in range(40):
+        particles.append(
+            (
+                float(rng.randrange(SIZE)),
+                -2.0,
+                rng.uniform(-0.3, 0.3),
+                rng.uniform(0.4, 1.1),
+                rng.choice(confetti),
+                burst_at + 6 + rng.randrange(30),
+                rng.randrange(2),
+            )
+        )
+
+    frames: list[Frame] = []
+    for tick in range(PARTY_TICKS):
+        frame = new_frame()
+        last = len(centres) - 1
+        for index, cx in enumerate(centres):
+            if index < last:
+                color = dot_color(index)
+                if tick >= burst_at:
+                    color = hue(index / len(centres) + (tick - burst_at) * 0.03)
+                draw_disc(frame, cx, DOT_ROW_Y, radius, color)
+        if tick < _DROP_FRAMES:
+            draw_ring(frame, centres[last], DOT_ROW_Y, radius, dim(WHITE, 0.3))
+            draw_disc(frame, centres[last], _bounce_y(tick), radius, dot_color(last))
+        elif tick < burst_at:
+            flash = WHITE if (tick - _DROP_FRAMES) % 2 == 0 else dot_color(last)
+            for index, cx in enumerate(centres):
+                draw_disc(frame, cx, DOT_ROW_Y, radius, flash if index == last else WHITE)
+                draw_ring(frame, cx, DOT_ROW_Y, radius + 2 + (tick - _DROP_FRAMES), GOLD)
+        else:
+            draw_disc(
+                frame,
+                centres[last],
+                DOT_ROW_Y,
+                radius,
+                hue(last / len(centres) + (tick - burst_at) * 0.03),
+            )
+
+        for x0, y0, vx, vy, color, born, wide in particles:
+            age = tick - born
+            if age < 0:
+                continue
+            x = int(x0 + vx * age)
+            y = int(y0 + vy * age + 0.5 * _GRAVITY * age * age)
+            shade = color if (age + wide) % 4 else WHITE
+            _put(frame, x, y, shade)
+            if wide:
+                _put(frame, x + 1, y, shade)
+        if tick >= burst_at:
+            label = f"{count} OF {target}"
+            _clear_text_box(frame, label, _LABEL_Y, SMALL.height, 1)
+            draw_text_centered(frame, _LABEL_Y, label, WHITE, SMALL)
+            _clear_text_box(
+                frame, "WEEK DONE", _WAVE_Y - _WAVE_BOB_PX, BODY.height + 2 * _WAVE_BOB_PX, 1, BODY
+            )
+            _rainbow_wave(frame, "WEEK DONE", _WAVE_Y, tick)
+        frames.append(frame)
+    return _steps(frames, PARTY_STEPS, poster=4)
+
+
+CELEBRATION_ORDER = ("sparkle", "party")
+
+
+@dataclass(frozen=True)
+class Celebration:
+    name: str
+    clip: Clip
+    earned: bool
+
+
+def earned_wins(view: DayView) -> list[Win]:
+    """Every small win the view itself shows, in WIN_ORDER: a quality workout, a night at the
+    sleep target, a finished book. Once the week's target is met the workout win stays for
+    the rest of that week, workout or not."""
+    earned = {
+        "workout": view.today_dot is True or week_complete(view),
+        "sleep": sleep_met(view),
+        "book": view.book_finished,
+    }
+    return [win for win in WIN_ORDER if earned[win]]
+
+
+def earned_win(view: DayView) -> Win | None:
+    """The first earned small win, or None."""
+    wins = earned_wins(view)
+    return wins[0] if wins else None
+
+
+def week_complete(view: DayView) -> bool:
+    return valid_count(view.week_dots) and view.week_dots >= view.week_target
+
+
+def celebrations_for(view: DayView) -> list[Celebration]:
+    """Both clips for a day, each marked earned or not.
+
+    A preview shows a clip the day did not earn as a labelled sample. An earned party prints
+    the week's stored count and target; a sample prints the target twice.
+    """
+    win = earned_win(view)
+    done = week_complete(view)
+    count = view.week_dots if done else view.week_target
+    confetti = theme_for(view).confetti
+    return [
+        Celebration(
+            "sparkle",
+            sparkle_clip(win or "workout", dot=view.week_dots, confetti=confetti),
+            win is not None,
+        ),
+        Celebration("party", party_clip(count, view.week_target, confetti=confetti), done),
+    ]

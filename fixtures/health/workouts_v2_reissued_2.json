@@ -1,0 +1,182 @@
+{
+ "data": {
+  "workouts": [
+   {
+    "id": "REISSUE-W-0001",
+    "name": "Running",
+    "start": "2026-09-22 07:00:00 -0400",
+    "end": "2026-09-22 07:40:00 -0400",
+    "duration": 2400,
+    "location": "Outdoor",
+    "isIndoor": false,
+    "distance": {
+     "qty": 4.0,
+     "units": "mi"
+    },
+    "heartRateData": [
+     {
+      "date": "2026-09-22 07:00:00 -0400",
+      "Min": 128,
+      "Avg": 148,
+      "Max": 162,
+      "source": "Apple Watch"
+     },
+     {
+      "date": "2026-09-22 07:02:00 -0400",
+      "Min": 128,
+      "Avg": 148,
+      "Max": 162,
+      "source": "Apple Watch"
+     },
+     {
+      "date": "2026-09-22 07:04:00 -0400",
+      "Min": 128,
+      "Avg": 148,
+      "Max": 162,
+      "source": "Apple Watch"
+     },
+     {
+      "date": "2026-09-22 07:06:00 -0400",
+      "Min": 128,
+      "Avg": 148,
+      "Max": 162,
+      "source": "Apple Watch"
+     },
+     {
+      "date": "2026-09-22 07:08:00 -0400",
+      "Min": 128,
+      "Avg": 148,
+      "Max": 162,
+      "source": "Apple Watch"
+     },
+     {
+      "date": "2026-09-22 07:10:00 -0400",
+      "Min": 128,
+      "Avg": 148,
+      "Max": 162,
+      "source": "Apple Watch"
+     },
+     {
+      "date": "2026-09-22 07:12:00 -0400",
+      "Min": 128,
+      "Avg": 148,
+      "Max": 162,
+      "source": "Apple Watch"
+     },
+     {
+      "date": "2026-09-22 07:14:00 -0400",
+      "Min": 128,
+      "Avg": 148,
+      "Max": 162,
+      "source": "Apple Watch"
+     },
+     {
+      "date": "2026-09-22 07:16:00 -0400",
+      "Min": 128,
+      "Avg": 148,
+      "Max": 162,
+      "source": "Apple Watch"
+     },
+     {
+      "date": "2026-09-22 07:18:00 -0400",
+      "Min": 128,
+      "Avg": 148,
+      "Max": 162,
+      "source": "Apple Watch"
+     },
+     {
+      "date": "2026-09-22 07:20:00 -0400",
+      "Min": 128,
+      "Avg": 148,
+      "Max": 162,
+      "source": "Apple Watch"
+     },
+     {
+      "date": "2026-09-22 07:22:00 -0400",
+      "Min": 128,
+      "Avg": 148,
+      "Max": 162,
+      "source": "Apple Watch"
+     },
+     {
+      "date": "2026-09-22 07:24:00 -0400",
+      "Min": 128,
+      "Avg": 148,
+      "Max": 162,
+      "source": "Apple Watch"
+     },
+     {
+      "date": "2026-09-22 07:26:00 -0400",
+      "Min": 128,
+      "Avg": 148,
+      "Max": 162,
+      "source": "Apple Watch"
+     },
+     {
+      "date": "2026-09-22 07:28:00 -0400",
+      "Min": 128,
+      "Avg": 148,
+      "Max": 162,
+      "source": "Apple Watch"
+     },
+     {
+      "date": "2026-09-22 07:30:00 -0400",
+      "Min": 128,
+      "Avg": 148,
+      "Max": 162,
+      "source": "Apple Watch"
+     },
+     {
+      "date": "2026-09-22 07:32:00 -0400",
+      "Min": 128,
+      "Avg": 148,
+      "Max": 162,
+      "source": "Apple Watch"
+     },
+     {
+      "date": "2026-09-22 07:34:00 -0400",
+      "Min": 128,
+      "Avg": 148,
+      "Max": 162,
+      "source": "Apple Watch"
+     },
+     {
+      "date": "2026-09-22 07:36:00 -0400",
+      "Min": 128,
+      "Avg": 148,
+      "Max": 162,
+      "source": "Apple Watch"
+     },
+     {
+      "date": "2026-09-22 07:38:00 -0400",
+      "Min": 128,
+      "Avg": 148,
+      "Max": 162,
+      "source": "Apple Watch"
+     }
+    ]
+   },
+   {
+    "id": "REISSUE-P-0001-B",
+    "name": "Running",
+    "start": "2026-09-22 07:01:00 -0400",
+    "end": "2026-09-22 07:40:00 -0400",
+    "duration": 2340,
+    "location": "Outdoor",
+    "isIndoor": false,
+    "distance": {
+     "qty": 4.12,
+     "units": "mi"
+    },
+    "activeEnergy": [
+     {
+      "date": "2026-09-22 07:01:00 -0400",
+      "qty": 11.0,
+      "units": "kcal",
+      "source": "Nike Run Club"
+     }
+    ]
+   }
+  ]
+ }
+}

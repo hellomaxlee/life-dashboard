@@ -1,0 +1,148 @@
+{
+  "data": {
+    "metrics": [
+      {
+        "name": "step_count",
+        "units": "count",
+        "data": [
+          {
+            "date": "2026-09-21 00:00:00 -0400",
+            "qty": 8421
+          },
+          {
+            "date": "2026-09-22 00:00:00 -0400",
+            "qty": 11230
+          },
+          {
+            "date": "2026-09-23 00:00:00 -0400",
+            "qty": 6712
+          }
+        ]
+      },
+      {
+        "name": "heart_rate_variability",
+        "units": "ms",
+        "data": [
+          {
+            "date": "2026-09-21 00:00:00 -0400",
+            "qty": 48.2,
+            "source": "Apple Watch"
+          },
+          {
+            "date": "2026-09-22 00:00:00 -0400",
+            "qty": 51.7,
+            "source": "Apple Watch"
+          },
+          {
+            "date": "2026-09-23 00:00:00 -0400",
+            "qty": 39.9,
+            "source": "Apple Watch"
+          }
+        ]
+      },
+      {
+        "name": "resting_heart_rate",
+        "units": "bpm",
+        "data": [
+          {
+            "date": "2026-09-21 00:00:00 -0400",
+            "qty": 52,
+            "source": "Apple Watch"
+          },
+          {
+            "date": "2026-09-22 00:00:00 -0400",
+            "qty": 51,
+            "source": "Apple Watch"
+          },
+          {
+            "date": "2026-09-23 00:00:00 -0400",
+            "qty": 55,
+            "source": "Apple Watch"
+          }
+        ]
+      },
+      {
+        "name": "vo2_max",
+        "units": "mL/min\u00b7kg",
+        "data": [
+          {
+            "date": "2026-09-21 00:00:00 -0400",
+            "qty": 48.9,
+            "source": "Apple Watch"
+          },
+          {
+            "date": "2026-09-22 00:00:00 -0400",
+            "qty": 48.9,
+            "source": "Apple Watch"
+          },
+          {
+            "date": "2026-09-23 00:00:00 -0400",
+            "qty": 49.1,
+            "source": "Apple Watch"
+          }
+        ]
+      },
+      {
+        "name": "time_in_daylight",
+        "units": "min",
+        "data": [
+          {
+            "date": "2026-09-21 00:00:00 -0400",
+            "qty": 42,
+            "source": "Apple Watch"
+          },
+          {
+            "date": "2026-09-22 00:00:00 -0400",
+            "qty": 65,
+            "source": "Apple Watch"
+          },
+          {
+            "date": "2026-09-23 00:00:00 -0400",
+            "qty": 18,
+            "source": "Apple Watch"
+          }
+        ]
+      },
+      {
+        "name": "sleep_analysis",
+        "units": "hr",
+        "data": [
+          {
+            "date": "2026-09-23",
+            "totalSleep": 7.15,
+            "asleep": 7.15,
+            "core": 4.0,
+            "deep": 1.15,
+            "rem": 2.0,
+            "awake": 0.35,
+            "sleepStart": "2026-09-22 23:10:00 -0400",
+            "sleepEnd": "2026-09-23 06:40:00 -0400",
+            "inBed": 7.5,
+            "inBedStart": "2026-09-22 23:00:00 -0400",
+            "inBedEnd": "2026-09-23 06:45:00 -0400",
+            "source": "Apple Watch"
+          }
+        ]
+      },
+      {
+        "name": "mindful_minutes",
+        "units": "min",
+        "data": [
+          {
+            "date": "2026-09-21 00:00:00 -0400",
+            "qty": 0
+          },
+          {
+            "date": "2026-09-22 00:00:00 -0400",
+            "qty": 5
+          },
+          {
+            "date": "2026-09-23 00:00:00 -0400",
+            "qty": 0
+          }
+        ]
+      }
+    ],
+    "workouts": []
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "name": "books this year: read_at wins, date_added only when read_at is empty",
+  "cell": "rest / all sources / never started / base",
+  "comment": [
+    "Effective date = read_at; when read_at is null and books.fallback_to_date_added is true, date_added. A book counts for a day when its effective date is in that day's calendar year and not after the day.",
+    "A: read_at 2026-02-01 (date_added 2025-12-01) -> counts (read_at wins; a mutant that uses date_added when read_at exists drops it).",
+    "B: read_at null, date_added 2026-05-05 -> counts via the fallback.",
+    "C: read_at 2025-11-20, date_added 2026-01-15 -> does not count (read_at exists and is last year; a mutant that counts by date_added adds it).",
+    "D: read_at 2026-10-10 = today -> counts on 10-10 and is book_finished_today; not counted on 10-09.",
+    "E: read_at null, date_added 2026-11-01 -> after today, not yet counted.",
+    "F: read_at '2026-04-02T14:00:00-07:00' (an ISO datetime with an offset) -> its home-timezone date 2026-04-02 counts.",
+    "books_ytd on 10-09 = A + B + F = 3; on 10-10 = A + B + F + D = 4; wins on 10-10 = [sleep, book] (7.0 h sleep both days)."
+  ],
+  "today_local": "2026-10-10",
+  "now_utc": "2026-10-10T16:00:00Z",
+  "inputs": {
+    "sleep": [
+      {"wake_day": "2026-10-09", "start_local": "2026-10-08 23:00", "end_local": "2026-10-09 06:00", "asleep_h": 7.0},
+      {"wake_day": "2026-10-10", "start_local": "2026-10-09 23:00", "end_local": "2026-10-10 06:00", "asleep_h": 7.0}
+    ],
+    "books": [
+      {"id": "A", "title": "A", "read_at": "2026-02-01", "date_added": "2025-12-01"},
+      {"id": "B", "title": "B", "read_at": null, "date_added": "2026-05-05"},
+      {"id": "C", "title": "C", "read_at": "2025-11-20", "date_added": "2026-01-15"},
+      {"id": "D", "title": "D", "read_at": "2026-10-10", "date_added": "2026-09-01"},
+      {"id": "E", "title": "E", "read_at": null, "date_added": "2026-11-01"},
+      {"id": "F", "title": "F", "read_at": "2026-04-02T14:00:00-07:00", "date_added": "2026-03-01"}
+    ],
+    "health_pushes_utc": ["2026-10-10T12:00:00Z"]
+  },
+  "expected": {
+    "daily": {
+      "2026-10-10": {"books_ytd": 4, "book_finished_today": true, "wins": ["sleep", "book"]},
+      "2026-10-09": {"books_ytd": 3, "book_finished_today": false, "wins": ["sleep"]}
+    }
+  }
+}

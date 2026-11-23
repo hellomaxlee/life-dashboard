@@ -1,0 +1,51 @@
+{
+  "name": "training load: one workout then seven rest days, EWMA with 7-day and 42-day time constants",
+  "cell": "rest / all sources / never started / off",
+  "comment": [
+    "R-2026-10-01: 25 min @155 (Z4 x4) = 100 -> TRIMP 100 on 10-01; every other day 0 (rest days enter the EWMA as 0, they are never skipped).",
+    "lambda_acute = 2/(7+1) = 0.25; lambda_chronic = 2/(42+1) = 2/43 = 0.046512. EWMA starts at 0 before the first stored day.",
+    "acute: 10-01 0.25x100 = 25.0; 10-02 0.75x25 = 18.75; 10-03 14.0625 -> 14.06; 10-04 10.546875 -> 10.55; 10-05 7.91015625 -> 7.91; 10-06 5.9326 -> 5.93; 10-07 4.4495 -> 4.45; 10-08 3.3371 -> 3.34.",
+    "chronic: 10-01 100x2/43 = 4.651163 -> 4.65; then x41/43 each day: 10-02 4.434830 -> 4.43; 10-03 4.228558 -> 4.23; 10-04 4.031881 -> 4.03; 10-05 3.844352 -> 3.84; 10-06 3.665545 -> 3.67; 10-07 3.495054 -> 3.50; 10-08 3.332494 -> 3.33.",
+    "Rounding is half up on the unrounded value (3.665545 -> 3.67). balance is null on every day: fewer than 14 days of history.",
+    "The run is 2.5 mi, so it is not a calibration run; bar stays 100 and the run (100 >= 100) is a dot."
+  ],
+  "today_local": "2026-10-08",
+  "now_utc": "2026-10-08T16:00:00Z",
+  "inputs": {
+    "activities": [
+      {
+        "id": "R-2026-10-01",
+        "type": "run",
+        "start_local": "2026-10-01 07:00",
+        "minutes": 25,
+        "distance_mi": 2.5,
+        "hr": [[25, 155]]
+      }
+    ],
+    "sleep": [
+      {
+        "wake_day": "2026-10-01",
+        "start_local": "2026-09-30 23:00",
+        "end_local": "2026-10-01 06:00",
+        "asleep_h": 7.0
+      }
+    ],
+    "health_pushes_utc": ["2026-10-08T12:00:00Z"]
+  },
+  "expected": {
+    "daily": {
+      "2026-10-01": {"quality_workout": true, "load_trimp": 100.0, "load_acute": 25.0, "load_chronic": 4.65, "load_balance": null},
+      "2026-10-02": {"load_trimp": 0.0, "load_acute": 18.75, "load_chronic": 4.43, "load_balance": null},
+      "2026-10-03": {"load_acute": 14.06, "load_chronic": 4.23},
+      "2026-10-04": {"load_acute": 10.55, "load_chronic": 4.03},
+      "2026-10-05": {"load_acute": 7.91, "load_chronic": 3.84},
+      "2026-10-06": {"load_acute": 5.93, "load_chronic": 3.67},
+      "2026-10-07": {"load_acute": 4.45, "load_chronic": 3.5},
+      "2026-10-08": {"quality_workout": false, "load_trimp": 0.0, "load_acute": 3.34, "load_chronic": 3.33, "load_balance": null}
+    },
+    "weekly": {
+      "2026-09-28": {"quality_workouts": 1, "week_hit": false, "weeks_hit_streak": 0},
+      "2026-10-05": {"quality_workouts": 0, "week_hit": null, "weeks_hit_streak": 0}
+    }
+  }
+}

@@ -1,0 +1,146 @@
+{
+  "name": "the load bar is calibrated mid-history and applies from the next week; past dots never re-score",
+  "cell": "train / all sources / alive / base",
+  "comment": [
+    "Lift110 = 10 min @120 (Z2 x2 = 20) + 30 min @140 (Z3 x3 = 90) = 110. Under the placeholder bar 100 it is a dot; under the calibrated bar 120 it is not.",
+    "Weeks 09-14 and 09-21: three Lift110 each -> 3 dots at bar 100, streak 2.",
+    "Calibration runs (type run, distance >= 4 x 1609.344 m, with samples): R-2026-09-28 40 @140 = 120 (4.2 mi); R-2026-09-30 10 @120 + 30 @140 = 110 (4.2 mi); R-2026-10-02 10 @140 (30) + 25 @155 (100) = 130 (4.3 mi), 35 min, ends 07:35 EDT = 11:35Z.",
+    "Third qualifying run lands 10-02: bar = median(120, 110, 130) = 120, rounded to the nearest 5 = 120; decided_at = that run's end 2026-10-02T11:35:00Z; effective from the Monday after the decision's week = 2026-10-05.",
+    "Week 09-28 keeps bar 100: all three runs count (110 >= 100), week_hit true, streak 3.",
+    "Week 10-05 at bar 120: L-2026-10-05 (110) no, R-2026-10-07 20 @140 + 20 @155 = 140 yes, L-2026-10-09 (110) no -> 1 dot, week_hit false, streak 0.",
+    "Week 10-12: three Lift110 -> 0 dots at bar 120. Week 10-19 (today Fri 10-23): L-2026-10-19 (110) -> 0, in progress.",
+    "Stage 1 (today Thu 10-01, before the third run exists): no history row, week 09-28 bar 100 placeholder, 09-30 is a dot. Stage 2 (today 10-23, everything stored): the history row exists and 09-30 is still a dot."
+  ],
+  "today_local": "2026-10-01",
+  "now_utc": "2026-10-01T16:00:00Z",
+  "inputs": {
+    "activities": [
+      {
+        "repeat_weekly": {
+          "id_prefix": "L-",
+          "from": "2026-09-14",
+          "to": "2026-09-27",
+          "weekdays": [0, 2, 4],
+          "time": "18:00",
+          "type": "lift",
+          "minutes": 40,
+          "hr": [[10, 120], [30, 140]]
+        }
+      },
+      {
+        "id": "R-2026-09-28",
+        "type": "run",
+        "start_local": "2026-09-28 07:00",
+        "minutes": 40,
+        "distance_mi": 4.2,
+        "hr": [[40, 140]]
+      },
+      {
+        "id": "R-2026-09-30",
+        "type": "run",
+        "start_local": "2026-09-30 07:00",
+        "minutes": 40,
+        "distance_mi": 4.2,
+        "hr": [[10, 120], [30, 140]]
+      }
+    ],
+    "health_pushes_utc": ["2026-09-28T10:00:00Z", "2026-10-01T12:00:00Z"]
+  },
+  "stages": [
+    {
+      "today_local": "2026-10-01",
+      "now_utc": "2026-10-01T16:00:00Z",
+      "expected": {
+        "daily": {
+          "2026-09-30": {"quality_workout": true, "workout_load": 110.0}
+        },
+        "weekly": {
+          "2026-09-28": {"quality_workouts": 2, "week_hit": null, "weeks_hit_streak": 2, "load_bar": 100.0, "load_bar_source": "placeholder"}
+        },
+        "load_bar_history": []
+      }
+    },
+    {
+      "today_local": "2026-10-23",
+      "now_utc": "2026-10-23T16:00:00Z",
+      "add": {
+        "activities": [
+          {
+            "id": "R-2026-10-02",
+            "type": "run",
+            "start_local": "2026-10-02 07:00",
+            "minutes": 35,
+            "distance_mi": 4.3,
+            "hr": [[10, 140], [25, 155]]
+          },
+          {
+            "id": "L-2026-10-05",
+            "type": "lift",
+            "start_local": "2026-10-05 18:00",
+            "minutes": 40,
+            "hr": [[10, 120], [30, 140]]
+          },
+          {
+            "id": "R-2026-10-07",
+            "type": "run",
+            "start_local": "2026-10-07 07:00",
+            "minutes": 40,
+            "distance_mi": 3.0,
+            "hr": [[20, 140], [20, 155]]
+          },
+          {
+            "id": "L-2026-10-09",
+            "type": "lift",
+            "start_local": "2026-10-09 18:00",
+            "minutes": 40,
+            "hr": [[10, 120], [30, 140]]
+          },
+          {
+            "repeat_weekly": {
+              "id_prefix": "L-",
+              "from": "2026-10-12",
+              "to": "2026-10-18",
+              "weekdays": [0, 2, 4],
+              "time": "18:00",
+              "type": "lift",
+              "minutes": 40,
+              "hr": [[10, 120], [30, 140]]
+            }
+          },
+          {
+            "id": "L-2026-10-19",
+            "type": "lift",
+            "start_local": "2026-10-19 18:00",
+            "minutes": 40,
+            "hr": [[10, 120], [30, 140]]
+          }
+        ],
+        "health_pushes_utc": ["2026-10-05T10:00:00Z", "2026-10-12T10:00:00Z", "2026-10-19T10:00:00Z", "2026-10-23T12:00:00Z"]
+      },
+      "expected": {
+        "daily": {
+          "2026-09-30": {"quality_workout": true, "workout_load": 110.0},
+          "2026-10-05": {"quality_workout": false, "workout_load": 110.0, "load_trimp": 110.0},
+          "2026-10-07": {"quality_workout": true, "workout_load": 140.0},
+          "2026-10-14": {"quality_workout": false, "workout_load": 110.0}
+        },
+        "weekly": {
+          "2026-09-14": {"quality_workouts": 3, "week_hit": true, "weeks_hit_streak": 1, "load_bar": 100.0, "load_bar_source": "placeholder"},
+          "2026-09-21": {"quality_workouts": 3, "week_hit": true, "weeks_hit_streak": 2},
+          "2026-09-28": {"quality_workouts": 3, "week_hit": true, "weeks_hit_streak": 3, "load_bar": 100.0, "load_bar_source": "placeholder", "week_complete_at": "2026-10-02T11:35:00Z"},
+          "2026-10-05": {"quality_workouts": 1, "week_hit": false, "weeks_hit_streak": 0, "load_bar": 120.0, "load_bar_source": "calibrated"},
+          "2026-10-12": {"quality_workouts": 0, "week_hit": false, "weeks_hit_streak": 0, "load_bar": 120.0, "load_bar_source": "calibrated"},
+          "2026-10-19": {"quality_workouts": 0, "week_hit": null, "weeks_hit_streak": 0, "load_bar": 120.0, "load_bar_source": "calibrated"}
+        },
+        "load_bar_history": [
+          {
+            "effective_from_week": "2026-10-05",
+            "value": 120.0,
+            "source_ids": ["R-2026-09-28", "R-2026-09-30", "R-2026-10-02"],
+            "decided_at_utc": "2026-10-02T11:35:00Z"
+          }
+        ]
+      }
+    }
+  ]
+}

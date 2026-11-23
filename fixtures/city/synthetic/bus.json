@@ -1,0 +1,188 @@
+{
+ "header": {
+  "gtfs_realtime_version": "2.0",
+  "incrementality": "FULL_DATASET",
+  "timestamp": 1791169200,
+  "transit_realtime.mercury_feed_header": {
+   "mercury_version": "1.0"
+  }
+ },
+ "entity": [
+  {
+   "id": "synthetic:11",
+   "alert": {
+    "active_period": [
+     {
+      "start": 1791166200
+     }
+    ],
+    "informed_entity": [
+     {
+      "agency_id": "MTABC",
+      "route_id": "Q69",
+      "transit_realtime.mercury_entity_selector": {
+       "sort_order": "MTA:Q69:20"
+      }
+     }
+    ],
+    "header_text": {
+     "translation": [
+      {
+       "text": "Q69 buses are detoured in both directions on 21st St between 35th Ave and 36th Ave because of FDNY activity.",
+       "language": "en"
+      },
+      {
+       "text": "<p>Q69 buses are detoured in both directions on 21st St between 35th Ave and 36th Ave because of FDNY activity.</p>",
+       "language": "en-html"
+      }
+     ]
+    },
+    "description_text": {
+     "translation": [
+      {
+       "text": "SYNTHETIC fixture alert; not a real MTA message.",
+       "language": "en"
+      }
+     ]
+    },
+    "transit_realtime.mercury_alert": {
+     "created_at": 1791166200,
+     "updated_at": 1791166200,
+     "alert_type": "Detour",
+     "display_before_active": 0
+    }
+   }
+  },
+  {
+   "id": "synthetic:12",
+   "alert": {
+    "informed_entity": [
+     {
+      "agency_id": "MTABC",
+      "route_id": "Q103",
+      "transit_realtime.mercury_entity_selector": {
+       "sort_order": "MTA:Q103:20"
+      }
+     }
+    ],
+    "header_text": {
+     "translation": [
+      {
+       "text": "Southbound Q103 buses detour from Vernon Blvd between 35th Ave and 36th Ave for utility work",
+       "language": "en"
+      },
+      {
+       "text": "<p>Southbound Q103 buses detour from Vernon Blvd between 35th Ave and 36th Ave for utility work</p>",
+       "language": "en-html"
+      }
+     ]
+    },
+    "description_text": {
+     "translation": [
+      {
+       "text": "SYNTHETIC fixture alert; not a real MTA message.",
+       "language": "en"
+      }
+     ]
+    },
+    "transit_realtime.mercury_alert": {
+     "created_at": 1788267600,
+     "updated_at": 1788267600,
+     "alert_type": "Planned - Detour",
+     "display_before_active": 0
+    }
+   }
+  },
+  {
+   "id": "synthetic:13",
+   "alert": {
+    "active_period": [
+     {
+      "start": 1788235200
+     }
+    ],
+    "informed_entity": [
+     {
+      "agency_id": "MTA NYCT",
+      "route_id": "B62",
+      "transit_realtime.mercury_entity_selector": {
+       "sort_order": "MTA:B62:20"
+      }
+     }
+    ],
+    "header_text": {
+     "translation": [
+      {
+       "text": "Northbound B62 stop on Jackson Ave at 21st St has moved to the far side of the intersection",
+       "language": "en"
+      },
+      {
+       "text": "<p>Northbound B62 stop on Jackson Ave at 21st St has moved to the far side of the intersection</p>",
+       "language": "en-html"
+      }
+     ]
+    },
+    "description_text": {
+     "translation": [
+      {
+       "text": "SYNTHETIC fixture alert; not a real MTA message.",
+       "language": "en"
+      }
+     ]
+    },
+    "transit_realtime.mercury_alert": {
+     "created_at": 1788267600,
+     "updated_at": 1788267600,
+     "alert_type": "Boarding Change",
+     "display_before_active": 0
+    }
+   }
+  },
+  {
+   "id": "synthetic:14",
+   "alert": {
+    "active_period": [
+     {
+      "start": 1791205200,
+      "end": 1791226800
+     }
+    ],
+    "informed_entity": [
+     {
+      "agency_id": "MTABC",
+      "route_id": "Q66",
+      "transit_realtime.mercury_entity_selector": {
+       "sort_order": "MTA:Q66:20"
+      }
+     }
+    ],
+    "header_text": {
+     "translation": [
+      {
+       "text": "Westbound Q66 stop on Northern Blvd at 44th St is closed",
+       "language": "en"
+      },
+      {
+       "text": "<p>Westbound Q66 stop on Northern Blvd at 44th St is closed</p>",
+       "language": "en-html"
+      }
+     ]
+    },
+    "description_text": {
+     "translation": [
+      {
+       "text": "SYNTHETIC fixture alert; not a real MTA message.",
+       "language": "en"
+      }
+     ]
+    },
+    "transit_realtime.mercury_alert": {
+     "created_at": 1788267600,
+     "updated_at": 1788267600,
+     "alert_type": "Planned - Stops Skipped",
+     "display_before_active": 0
+    }
+   }
+  }
+ ]
+}

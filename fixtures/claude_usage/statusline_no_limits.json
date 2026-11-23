@@ -1,0 +1,7 @@
+{
+  "session_id": "00000000-0000-4000-8000-000000000000",
+  "cwd": "/Users/example/project",
+  "model": {"id": "claude-example", "display_name": "Example"},
+  "workspace": {"current_dir": "/Users/example/project", "project_dir": "/Users/example/project"},
+  "context_window": {"used_percentage": 3.0}
+}

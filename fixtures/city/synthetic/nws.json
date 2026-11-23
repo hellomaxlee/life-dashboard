@@ -1,0 +1,65 @@
+{
+ "@context": {
+  "@version": "1.1"
+ },
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "id": "https://api.weather.gov/alerts/urn:oid:synthetic.0001",
+   "type": "Feature",
+   "geometry": null,
+   "properties": {
+    "@id": "https://api.weather.gov/alerts/urn:oid:synthetic.0001",
+    "@type": "wx:Alert",
+    "id": "urn:oid:synthetic.0001",
+    "areaDesc": "Northern Queens",
+    "geocode": {
+     "SAME": [
+      "036081"
+     ],
+     "UGC": [
+      "NYZ176"
+     ]
+    },
+    "affectedZones": [
+     "https://api.weather.gov/zones/forecast/NYZ176"
+    ],
+    "references": [],
+    "sent": "2026-10-04T15:12:00-04:00",
+    "effective": "2026-10-04T15:12:00-04:00",
+    "onset": "2026-10-04T18:00:00-04:00",
+    "expires": "2026-10-05T00:00:00-04:00",
+    "ends": "2026-10-05T06:00:00-04:00",
+    "status": "Actual",
+    "messageType": "Alert",
+    "category": "Met",
+    "severity": "Moderate",
+    "certainty": "Likely",
+    "urgency": "Expected",
+    "event": "Wind Advisory",
+    "sender": "w-nws.webmaster@noaa.gov",
+    "senderName": "NWS New York NY",
+    "headline": "Wind Advisory issued October 4 at 3:12PM EDT until October 5 at 6:00AM EDT by NWS New York NY",
+    "description": "SYNTHETIC fixture alert; not a real NWS message.",
+    "instruction": null,
+    "response": "Execute",
+    "note": null,
+    "parameters": {},
+    "scope": "Public",
+    "code": "IPAWSv1.0",
+    "language": "en-US",
+    "web": "http://www.weather.gov",
+    "eventCode": {
+     "SAME": [
+      "NWS"
+     ],
+     "NationalWeatherService": [
+      "WIY"
+     ]
+    }
+   }
+  }
+ ],
+ "title": "Current watches, warnings, and advisories for 40.77 N, 73.94 W",
+ "updated": "2026-10-05T03:00:57+00:00"
+}
