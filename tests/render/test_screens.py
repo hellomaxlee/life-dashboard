@@ -380,3 +380,29 @@ def test_a_small_goal_keeps_book_shaped_spines_and_leaves_shelf_to_spare():
         for _, x0, width, _ in shelf_slots(target):
             assert x0 + width - 1 <= 46, (target, "clear of the plant and the lamp")
     assert len(shelf_slots(40)) == 40, "a large goal is unchanged: one even width"
+
+
+def test_a_bookworm_keeps_the_lower_shelf_while_a_small_goal_leaves_it_bare(settings):
+    """Max, 2026-11-22: "fill the second row with a bookworm or something else for now"."""
+    from app.render.screens import BOOKWORM, BOOKWORM_X, DECOR_INK, DECOR_X, ONE_SHELF_MAX
+
+    view, _ = load(WEEK_41, settings)
+    top = TIER_BOARDS[1] - len(BOOKWORM)
+    cells = [
+        (BOOKWORM_X + dx, top + dy, DECOR_INK[cell])
+        for dy, row in enumerate(BOOKWORM)
+        for dx, cell in enumerate(row)
+        if cell != "."
+    ]
+    assert len({len(row) for row in BOOKWORM}) == 1
+    assert min(y for _, y, _ in cells) > TIER_BOARDS[0] + 1, "under the top board"
+    assert max(x for x, _, _ in cells) < DECOR_X - 1, "clear of the lamp"
+    assert all(cell != "." for cell in BOOKWORM[-1][:2]), "it stands on the shelf"
+    for target in (1, ONE_SHELF_MAX):
+        for read in (0, 2, 8, None):
+            frame = render_books(replace(view, books_ytd=read, books_target=target)).poster
+            assert all(frame.getpixel((x, y)) == ink for x, y, ink in cells), (target, read)
+    for target in (ONE_SHELF_MAX + 1, 12):
+        with_books = render_books(replace(view, books_ytd=0, books_target=target)).poster
+        drawn = sum(with_books.getpixel((x, y)) == ink for x, y, ink in cells)
+        assert drawn < len(cells) // 4, (target, "books on the lower shelf, no worm")
