@@ -9,7 +9,8 @@ at three LEDs a cell, the caption, and a rail of one pip per day down each side;
 calendar, every day of every month (Max, 2026-10-07: "I really like this panel").
 
 The calendar is the month's name and year and a Monday-first grid with one cell per day: today
-bright, the days to come recessed, and each day gone drawn in what it earned when the view
+bright, the days to come recessed, and each day gone drawn in what it earned (a great day,
+workout and sleep both, with a white glow round its cell) when the view
 carries that month's stored wins (`DayView.month_wins`; soft cells in the month's colour when
 it does not). The wins are read from the metrics rows as written; nothing is computed here.
 Without a feature (none generated yet, the model unavailable or over
@@ -224,13 +225,19 @@ def month_color(month: int) -> Color:
 
 QUIET_DAY: Color = (96, 100, 128)
 WIN_COLORS: dict[str, Color] = {"workout": GOLD, "sleep": VIOLET, "book": TEAL}
+GLOW: Color = WHITE
 
 
 def _draw_wins(frame: Frame, x: int, y: int, wins: tuple[str, ...], quiet: Color) -> None:
     """A day gone, always a whole cell so the grid holds (display audit, 2026-11-15): gold
     for a workout, violet for sleep in its band, gold over violet for both, `quiet` for a day
     that earned neither; a finished book is a teal square set in the cell's lower right
-    corner. The wins' colours are the sparkle icons'."""
+    corner. The wins' colours are the sparkle icons'. A great day, workout and sleep both
+    (Max, 2026-11-27: "glowing or extra colorful in some way"), keeps its gold over violet
+    and glows: a white rim one LED out in the gutter on all four sides, corners left open so
+    two great days side by side stay two cells (Mei-Lin Tsao; dimmed gold and violet halos,
+    a rainbow cell and a white core were tried on a 1x sheet and washed out or lost the
+    meaning colours under the LED curve)."""
     half = CELL // 2
     top = WIN_COLORS["workout"] if "workout" in wins else None
     bottom = WIN_COLORS["sleep"] if "sleep" in wins else None
@@ -238,6 +245,11 @@ def _draw_wins(frame: Frame, x: int, y: int, wins: tuple[str, ...], quiet: Color
     fill_rect(frame, x, y + half, x + CELL - 1, y + CELL - 1, bottom or top or quiet)
     if "book" in wins:
         fill_rect(frame, x + CELL - 3, y + CELL - 3, x + CELL - 1, y + CELL - 1, WIN_COLORS["book"])
+    if top and bottom:
+        fill_rect(frame, x, y - 1, x + CELL - 1, y - 1, GLOW)
+        fill_rect(frame, x, y + CELL, x + CELL - 1, y + CELL, GLOW)
+        fill_rect(frame, x - 1, y, x - 1, y + CELL - 1, GLOW)
+        fill_rect(frame, x + CELL, y, x + CELL, y + CELL - 1, GLOW)
 
 
 def _calendar_frame(

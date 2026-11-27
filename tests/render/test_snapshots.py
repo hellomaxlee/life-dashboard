@@ -1,4 +1,4 @@
-"""Pixel-exact snapshots of every screen and both clips.
+"""Pixel-exact snapshots of every screen and the celebration clips.
 
 The poster frame of each clip is a committed PNG; every frame and duration of each clip is
 covered by a digest in snapshots/digests.json. UPDATE_SNAPSHOTS=1 rewrites them; a changed
@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 from PIL import Image, ImageChops
 
-from app.render.celebrate import party_clip, sparkle_clip
+from app.render.celebrate import great_day_clip, party_clip, sparkle_clip
 from app.render.frame import Clip
 from app.render.rotation import ROTATION_ORDER
 from app.render.view import DayView
@@ -69,6 +69,10 @@ def test_sparkle_matches_snapshot(win):
     check(sparkle_clip(win), f"celebrations/sparkle_{win}")
 
 
+def test_great_day_matches_snapshot():
+    check(great_day_clip(), "celebrations/great_day")
+
+
 def test_party_matches_snapshot():
     check(party_clip(3, 3), "celebrations/party")
 
@@ -77,7 +81,7 @@ def test_no_orphan_snapshots():
     expected = {f"{c}/{s}" for c in COMBOS for s in ROTATION_ORDER}
     expected |= {f"empty/{s}" for s in ROTATION_ORDER}
     expected |= {f"celebrations/sparkle_{w}" for w in ("sleep", "workout", "book")}
-    expected |= {"celebrations/party"}
+    expected |= {"celebrations/party", "celebrations/great_day"}
     on_disk = {
         str(Path(p).relative_to(SNAPSHOTS).with_suffix("")) for p in SNAPSHOTS.rglob("*.png")
     }

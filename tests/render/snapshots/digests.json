@@ -1,4 +1,8 @@
 {
+  "celebrations/great_day": {
+    "frames": 5,
+    "sha256": "dd3e5007f4f7a8857ea0483426ddad595dfbc31cdb0dc355beca1e0d6b97952d"
+  },
   "celebrations/party": {
     "frames": 6,
     "sha256": "aeda02b95872f6f4584b1bb095a98584a35ac36fa962393d1391706b53755b40"

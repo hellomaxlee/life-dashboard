@@ -1,12 +1,16 @@
-"""Two celebration clips: the small-win sparkle and the week-complete party.
+"""Three celebration clips: the small-win sparkle, the great day and the week-complete party.
 
-Wins are celebrated on the device; nothing here is ever shown for a miss. Both clips are
+Wins are celebrated on the device; nothing here is ever shown for a miss. Every clip is
 deterministic (a seeded generator, no clock), so they snapshot-test like any still frame.
 
 Sparkle: the win's own icon pops in small with a glint, bursts into rays, throws sparks that
 fall wide while the label arrives, and settles among four-point stars. No tail, no ring around
 the icon (Max, 2026-11-09: the old rising streak and ringed disc read as a sperm and an egg);
 the workout's disc carries a check mark so it reads as a badge.
+Great day (Max, 2026-11-27; design Mei-Lin Tsao): a day with both its quality workout and a
+night in the sleep band. The two wins' own icons, the violet moon and the gold badge, arrive
+apart, meet in a burst of gold and violet rays, and a rainbow in the family's colours rises
+over the pair from both feet and closes above them while "GREAT DAY" arrives.
 Party: the frame opens as the Week screen's dot row with the last dot missing; that dot drops
 in and bounces, all dots flash, then they throw confetti while "WEEK DONE" rides a rainbow wave.
 
@@ -37,7 +41,20 @@ from typing import Literal
 
 from app.render.font import BODY, SMALL, Font, draw_text, draw_text_centered, text_width
 from app.render.frame import SIZE, Clip, Color, Frame, new_frame
-from app.render.palette import BLACK, CONFETTI, GOLD, TEAL, TEXT, VIOLET, WHITE, dim, hue
+from app.render.palette import (
+    BLACK,
+    CONFETTI,
+    CORAL,
+    GOLD,
+    GREEN,
+    SKY,
+    TEAL,
+    TEXT,
+    VIOLET,
+    WHITE,
+    dim,
+    hue,
+)
 from app.render.screens import (
     DOT_ROW_Y,
     MOON,
@@ -62,6 +79,9 @@ WIN_LABELS: dict[str, tuple[str, ...]] = {
 WIN_ORDER: tuple[Win, ...] = ("workout", "sleep", "book")
 SPARKLE_BEATS = 5
 ICON_Y = 26
+GREAT_DAY = "great-day"
+GREAT_DAY_LABEL = "GREAT DAY"
+GREAT_DAY_BEATS = 5
 PARTY_TICKS = 56
 PARTY_STEPS = (3, 11, 13, 17, 28, 44)
 STEP_MS = 300
@@ -242,6 +262,120 @@ def sparkle_clip(
     return Clip(tuple(frames), (STEP_MS,) * SPARKLE_BEATS, poster_index=2)
 
 
+_PAIR_Y = 38
+_PAIR_DX = 10
+_BOW_Y = 43
+_BOW_RADIUS = 25
+_BOW_BANDS: tuple[Color, ...] = (CORAL, GOLD, GREEN, SKY, VIOLET)
+
+
+def _pair(frame: Frame, apart: int, grow: float) -> None:
+    """The sleep moon on the left and the workout badge on the right, `apart` pixels either
+    side of the centre line; under full size the moon is a small disc and the badge unchecked."""
+    cx = SIZE // 2
+    if grow >= 1.0:
+        draw_bitmap(frame, cx - apart - 4, _PAIR_Y - 5, MOON, VIOLET)
+        draw_disc(frame, cx + apart, _PAIR_Y, 6, GOLD)
+        _check(frame, cx + apart, _PAIR_Y)
+    else:
+        draw_disc(frame, cx - apart, _PAIR_Y, 2, VIOLET)
+        draw_disc(frame, cx + apart, _PAIR_Y, 3, GOLD)
+
+
+def _pair_rays(frame: Frame) -> None:
+    """Twelve rays from behind the two icons, gold on the badge's side and violet on the
+    moon's, white where they leave the pair."""
+    cx = SIZE // 2
+    for ray in range(12):
+        angle = ray * math.pi / 6 + math.pi / 12
+        reach = 34 if ray % 2 == 0 else 26
+        accent = GOLD if math.cos(angle) > 0 else VIOLET
+        for r in range(13, reach):
+            shade = WHITE if r < 17 else dim(accent, 1.0 - (r - 17) / (reach - 15))
+            _put(
+                frame,
+                cx + int(round(math.cos(angle) * r)),
+                _PAIR_Y + int(round(math.sin(angle) * r)),
+                shade,
+            )
+
+
+def _bow(frame: Frame, rise: float) -> None:
+    """The rainbow over the pair, one pixel a band, coral outermost: `rise` is how far up
+    each side it has grown from its foot, 0 to 1, and at 1 the two sides have met."""
+    cx = SIZE // 2
+    for y in range(_BOW_Y - _BOW_RADIUS, _BOW_Y + 1):
+        for x in range(SIZE):
+            dx, dy = x - cx, y - _BOW_Y
+            band = _BOW_RADIUS - int(round(math.hypot(dx, dy)))
+            if not 0 <= band < len(_BOW_BANDS):
+                continue
+            if math.atan2(-dy, abs(dx)) <= rise * math.pi / 2 + 1e-9:
+                _put(frame, x, y, _BOW_BANDS[band])
+
+
+def great_day_clip(seed: int = 23, confetti: tuple[Color, ...] = CONFETTI) -> Clip:
+    """The great-day clip, five stills of STEP_MS each, every one its own picture: the moon
+    and the badge small and apart, each with a glint; the two at full size side by side in a
+    burst of gold and violet rays; the rainbow risen half way from both feet as the label
+    arrives and sparks fly; the rainbow closed with a star over its crown; the pair
+    settled under it among the stars. `confetti` is what the sparks are drawn from."""
+    rng = random.Random(seed)
+    cx = SIZE // 2
+    stars = []
+    while len(stars) < 12:
+        x, y = rng.randrange(3, SIZE - 3), rng.randrange(3, _BOW_Y - 2)
+        if math.hypot(x - cx, y - _BOW_Y) < _BOW_RADIUS + 4:
+            continue
+        if any(abs(x - sx) < 6 and abs(y - sy) < 6 for sx, sy, _, _ in stars):
+            continue
+        stars.append((x, y, rng.randrange(6), rng.random()))
+    sparks = [
+        (rng.uniform(math.pi * 1.05, math.pi * 1.95), rng.uniform(0.8, 1.2), rng.choice(confetti))
+        for _ in range(22)
+    ]
+
+    frames: list[Frame] = []
+    for beat in range(GREAT_DAY_BEATS):
+        frame = new_frame()
+        if beat == 0:
+            _pair(frame, 20, 0.45)
+            draw_twinkle(frame, cx - 20 - 5, _PAIR_Y - 6, 1, VIOLET)
+            draw_twinkle(frame, cx + 20 + 6, _PAIR_Y - 7, 2, GOLD)
+        elif beat == 1:
+            _pair_rays(frame)
+            _pair(frame, _PAIR_DX, 1.0)
+        else:
+            _bow(frame, (0.5, 1.0, 1.0)[beat - 2])
+            if beat == 2:
+                for angle, pace, color in sparks:
+                    r = 17 * pace
+                    _put(
+                        frame,
+                        cx + int(round(math.cos(angle) * r)),
+                        _PAIR_Y + int(round(math.sin(angle) * r)),
+                        color,
+                    )
+            elif beat == 3:
+                draw_twinkle(frame, cx, _BOW_Y - _BOW_RADIUS - 5, 2, GOLD)
+            _pair(frame, _PAIR_DX, 1.0)
+        for index, (x, y, phase, colour_at) in enumerate(stars):
+            size = {
+                0: -1,
+                1: -1,
+                2: 0 if index % 2 else -1,
+                3: 2 if index % 2 else 0,
+                4: (1, 2, 1, 0, 2, 1)[phase],
+            }[beat]
+            draw_twinkle(frame, x, y, size, hue(colour_at + beat * 0.13))
+        if beat >= 2:
+            x = (SIZE - text_width(GREAT_DAY_LABEL, SMALL)) // 2
+            for index, char in enumerate(GREAT_DAY_LABEL):
+                x = draw_text(frame, x, 57, char, hue(index * 0.11 + beat * 0.2), SMALL)
+        frames.append(frame)
+    return Clip(tuple(frames), (STEP_MS,) * GREAT_DAY_BEATS, poster_index=3)
+
+
 def _bounce_y(tick: int) -> int:
     """Fall from above the frame to the dot row with two rebounds."""
     t = min(tick / (_DROP_FRAMES - 1), 1.0)
@@ -362,7 +496,7 @@ def party_clip(
     return _steps(frames, PARTY_STEPS, poster=4)
 
 
-CELEBRATION_ORDER = ("sparkle", "party")
+CELEBRATION_ORDER = ("sparkle", GREAT_DAY, "party")
 
 
 @dataclass(frozen=True)
@@ -390,12 +524,18 @@ def earned_win(view: DayView) -> Win | None:
     return wins[0] if wins else None
 
 
+def great_day(view: DayView) -> bool:
+    """Both of the shown day's own wins: a quality workout that day and a night in the sleep
+    band. The workout win a finished week carries to its later days does not make one."""
+    return view.today_dot is True and sleep_met(view)
+
+
 def week_complete(view: DayView) -> bool:
     return valid_count(view.week_dots) and view.week_dots >= view.week_target
 
 
 def celebrations_for(view: DayView) -> list[Celebration]:
-    """Both clips for a day, each marked earned or not.
+    """The three clips for a day, each marked earned or not.
 
     A preview shows a clip the day did not earn as a labelled sample. An earned party prints
     the week's stored count and target; a sample prints the target twice.
@@ -410,5 +550,6 @@ def celebrations_for(view: DayView) -> list[Celebration]:
             sparkle_clip(win or "workout", dot=view.week_dots, confetti=confetti),
             win is not None,
         ),
+        Celebration(GREAT_DAY, great_day_clip(confetti=confetti), great_day(view)),
         Celebration("party", party_clip(count, view.week_target, confetti=confetti), done),
     ]

@@ -40,11 +40,15 @@ def test_the_fixture_day_goes_out_in_rotation_order_with_timings(device, capsys)
     city = [f"city page {n} of 4" for n in range(1, 5)]
     month = [f"month page {n} of 2" for n in range(1, 3)]
     assert names[:8] == ["today", *city, "week", *month]
-    wins = [f"win-{win} page {n} of 5" for win in ("workout", "sleep") for n in range(1, 6)]
-    assert names[-10:] == wins
-    pages = len(names) - 18
+    wins = [
+        f"{name} page {n} of 5"
+        for name in ("win-workout", "win-sleep", "great-day")
+        for n in range(1, 6)
+    ]
+    assert names[-15:] == wins
+    pages = len(names) - 23
     assert pages > 1
-    assert names[8:-10] == [f"books page {n} of {pages}" for n in range(1, pages + 1)]
+    assert names[8:-15] == [f"books page {n} of {pages}" for n in range(1, pages + 1)]
     assert all("sent in" in line and "hold" in line for line in lines)
     assert ["hold 6 s" in line for line in lines[1:5]] == [True, True, False, False]
     assert "hold 5 s" in lines[3] and "hold 5 s" in lines[4], "weather, lines, two alerts"
@@ -52,7 +56,7 @@ def test_the_fixture_day_goes_out_in_rotation_order_with_timings(device, capsys)
         "the plate, then the calendar"
     )
     sends = [body for body in seen if body["Command"] == "Draw/SendHttpGif"]
-    assert sorted({body["PicID"] for body in sends}) == list(range(1, 19 + pages))
+    assert sorted({body["PicID"] for body in sends}) == list(range(1, 24 + pages))
     assert {body["PicWidth"] for body in sends} == {64}
 
 

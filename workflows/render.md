@@ -5,7 +5,7 @@ Owner: Diego Almeida. QA: Lucía Ferrer. Tool: `tools/render.py`. Skill: `/frame
 ## What it does
 
 Renders the five rotation screens (Today, City, Week, Month, Books + summary) and the two celebration
-clips (sparkle, party) to files, raw and through the LED gamma emulator, at 1x and enlarged.
+clips (sparkle, great-day, party) to files, raw and through the LED gamma emulator, at 1x and enlarged.
 Nothing is sent to a device and nothing leaves the machine.
 
 ## Commands
@@ -27,7 +27,7 @@ enlarged files; the 1x files are always written.
 One folder per screen, in rotation order, then the celebrations:
 
 ```
-<out>/today/    <out>/city/    <out>/week/    <out>/month/    <out>/books/    <out>/sparkle/    <out>/party/
+<out>/today/    <out>/city/    <out>/week/    <out>/month/    <out>/books/    <out>/sparkle/    <out>/great-day/    <out>/party/
 ```
 
 Each folder holds:
@@ -46,7 +46,7 @@ lines per page, 2 s each; a 110-character line is about seven pages); Week never
 Claude reading is a still: amber dot, amber age line in place of the reset line); Today never; City is always paged (weather 6 s, lines 6 s, then 5 s for each of up to three
 affected lines) unless there is no city status, which is one still; Month is
 two pages (the plate 6 s, the calendar 6 s) when a feature is stored, else the calendar
-alone; both celebrations always. No clip may exceed 59 frames, the most one device animation is assumed
+alone; all three celebrations always. No clip may exceed 59 frames, the most one device animation is assumed
 to hold; a test holds every fixture to it and the Pixoo adapter refuses a longer clip.
 
 What the screens say when data is thin. Today's dot label states the dot, not the day:
@@ -89,7 +89,7 @@ quotation that crosses a line or a page keeps its colour on each; a summary with
 or an odd number of marks (a quotation the 220-character cut ran through), is all TEXT as
 before.
 
-The tool and the preview page always render both celebrations so they can be looked at. One
+The tool and the preview page always render all three celebrations so they can be looked at. One
 the day's data did not earn is labelled `(sample)`; an earned party prints the week's stored
 count and target.
 
@@ -185,7 +185,9 @@ Until then `tests/render/test_snapshots.py` fails for that fixture by design; no
 `GET /pixoo` is the display as a Pixoo-64 on a desk: a dark bezel, a 64x64 matrix drawn as
 round LEDs with black gaps and a soft glow, and the rotation running live the way the device
 job runs it: Today → City → Week → Month → Books → one sparkle per small win the day earned
-(workout, sleep, book) → the week-complete party once the week's target is met, repeating
+(workout, sleep, book) → the great day when that day has both its own quality workout and a
+night in the sleep band (five stills at 300 ms: the moon and the badge apart, together in a
+burst, a rainbow rising over them, closed, settled; "GREAT DAY") → the week-complete party once the week's target is met, repeating
 (day, the day's city, week, month, year, then the wins). `app.render.rotation.sequence_names` is the one
 definition; a restart begins at Today. A still holds for `device.screen_seconds` (6 s). Anything animated holds
 for whole plays and is never replaced part way: Books until its summary has paged through
@@ -206,7 +208,7 @@ brightness 10 to 100 %, LED gamma on/off (default on), pause, next screen. Brigh
 gamma are client-side: the server ships `led_lut(brightness=b)` for every step and the raw
 `int(v * b)` table beside it, so dimming scales the PWM level before the panel curve exactly as
 `led_gamma(frame, brightness=b)` does, and changing either redraws from cached pixels without
-another request. The strip under the device shows both celebrations with earned or sample
+another request. The strip under the device shows all three celebrations with earned or sample
 marked; a button plays either on the panel. The page starts at Today, as the device does.
 `#screen=month` (or `today`, `city`, `week`, `books`, `win-sleep`, `party`) in the URL starts the
 rotation on that screen so a screenshot can target one; a celebration the day did not earn

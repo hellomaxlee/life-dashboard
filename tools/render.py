@@ -1,9 +1,10 @@
-"""Render every screen and both celebration clips to files, for the eye test.
+"""Render every screen and the three celebration clips to files, for the eye test.
 
 python -m tools.render --fixture fixtures/days/<combo>.json --out data/preview/<combo>
 python -m tools.render --date YYYY-MM-DD --scale 8
 
-One folder per screen under --out (today, city, week, month, books, sparkle, party), each holding
+One folder per screen under --out (today, city, week, month, books, sparkle, great-day, party), each
+holding
 frame_1x.png, frame_<scale>x.png, frame_gamma_1x.png, frame_gamma_<scale>x.png and, for an
 animated clip, clip_1x.gif, clip_<scale>x.gif, clip_gamma_1x.gif, clip_gamma_<scale>x.gif; a
 paged screen (city, month, books) also gets page_<n>_1x.png and page_<n>_gamma_1x.png.
@@ -31,7 +32,7 @@ from app.timeutil import from_utc_iso, now_utc
 
 
 def render_all(view: DayView, now: datetime) -> list[tuple[str, Clip, bool]]:
-    """(name, clip, sample) for the rotation in order, then the two celebrations.
+    """(name, clip, sample) for the rotation in order, then the three celebrations.
 
     `sample` is True for a celebration the day's data did not earn.
     """

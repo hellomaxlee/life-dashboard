@@ -1,7 +1,8 @@
 """The scheduled display rotation: a tick sends the next screen once the last one's hold is up.
 
-Today, City, Week, Month, Books, one sparkle per small win the day earned, then the
-week-complete party once the week's target is met, wrapping (the sequence and its holds are
+Today, City, Week, Month, Books, one sparkle per small win the day earned, the great day on a
+day with both its workout and its sleep, then the week-complete party once the week's target
+is met, wrapping (the sequence and its holds are
 `app.render.rotation`; a restart begins at Today). A paged screen (City, Books, Month with a
 note) goes page by page as stills. The scheduler runs one tick, then moves the next run to
 `due()`: the moment the screen just sent has had its hold, so no tick overlaps a slow send.

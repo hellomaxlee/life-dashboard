@@ -6,10 +6,11 @@ frame.MAX_CLIP_FRAMES frames (a test holds every fixture to it), so any of them 
 the device as one animation.
 
 The sequence is day, the day's city, week, month, year, then the wins: Today, City, Week,
-Month, Books, one sparkle per small win the day earned, and the week-complete party once the
-week's target is met, repeated. `sequence_names` is the one definition; the device job,
-/pixoo, /preview and the tools all read it. PARKED is outside the sequence: Today with a dim
-"zz", what the device job leaves up when its host is about to sleep.
+Month, Books, one sparkle per small win the day earned, the great day when that day has both
+its workout and its sleep, and the week-complete party once the week's target is met,
+repeated. `sequence_names` is the one definition; the device job, /pixoo, /preview and the
+tools all read it. PARKED is outside the sequence: Today with a dim "zz", what the device job
+leaves up when its host is about to sleep.
 A still screen holds for the dwell (`device.screen_seconds`). A paged screen (City's weather,
 lines and alert pages, Books' summary, Month's plate, note and calendar, and both
 celebrations, which are steps of celebrate.STEP_MS each) holds until it has paged through
@@ -28,7 +29,16 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from app.render.celebrate import WIN_ORDER, earned_wins, party_clip, sparkle_clip, week_complete
+from app.render.celebrate import (
+    GREAT_DAY,
+    WIN_ORDER,
+    earned_wins,
+    great_day,
+    great_day_clip,
+    party_clip,
+    sparkle_clip,
+    week_complete,
+)
 from app.render.city import render_city
 from app.render.frame import Clip, still
 from app.render.month import render_month
@@ -41,18 +51,19 @@ WIN_PREFIX = "win-"
 WIN_NAMES = tuple(f"{WIN_PREFIX}{win}" for win in WIN_ORDER)
 PARTY = "party"
 PARKED = "parked"
-SCREEN_NAMES = (*ROTATION_ORDER, *WIN_NAMES, PARTY)
+SCREEN_NAMES = (*ROTATION_ORDER, *WIN_NAMES, GREAT_DAY, PARTY)
 ONE_PASS = ("city", "month", "books", PARTY)
 WIN_HOLD_MS = 4000
 PAGED_FRAME_MS = 300
 
 
 def sequence_names(view: DayView) -> tuple[str, ...]:
-    """Today, City, Week, Month, Books, the day's earned small wins, the party if the week is
-    done."""
+    """Today, City, Week, Month, Books, the day's earned small wins, the great day if it has
+    both its workout and its sleep, the party if the week is done."""
     wins = tuple(f"{WIN_PREFIX}{win}" for win in earned_wins(view))
+    great = (GREAT_DAY,) if great_day(view) else ()
     party = (PARTY,) if week_complete(view) else ()
-    return (*ROTATION_ORDER, *wins, *party)
+    return (*ROTATION_ORDER, *wins, *great, *party)
 
 
 def party_for(view: DayView) -> Clip:
@@ -78,6 +89,8 @@ def render_screen(name: str, view: DayView, now: datetime) -> Clip:
         win = name.removeprefix(WIN_PREFIX)
         dot = view.week_dots if win == "workout" else None
         return sparkle_clip(win, dot=dot, confetti=theme_for(view).confetti)
+    if name == GREAT_DAY:
+        return great_day_clip(confetti=theme_for(view).confetti)
     if name == PARTY:
         return party_for(view)
     if name == PARKED:

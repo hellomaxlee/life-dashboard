@@ -422,9 +422,13 @@ def test_the_sequence_is_day_week_month_year_then_the_wins_then_the_party():
     base = ("today", "city", "week", "month", "books")
     assert sequence_names(plain) == base
     wins = replace(plain, today_dot=True, sleep_hours=7.5, book_finished=True, week_dots=2)
-    assert sequence_names(wins) == (*base, "win-workout", "win-sleep", "win-book")
+    assert sequence_names(wins) == (*base, "win-workout", "win-sleep", "win-book", "great-day")
     done = replace(plain, week_dots=3, sleep_hours=7.5)
-    assert sequence_names(done) == (*base, "win-workout", "win-sleep", "party")
+    assert sequence_names(done) == (*base, "win-workout", "win-sleep", "party"), (
+        "the workout win a finished week carries is not a workout that day: no great day"
+    )
+    both = replace(done, today_dot=True)
+    assert sequence_names(both)[5:] == ("win-workout", "win-sleep", "great-day", "party")
     slots = rotation_sequence(replace(done, month_feature=sample()), NOW, 6)
     assert [name for name, _, _ in slots] == list(sequence_names(done))
     holds = {name: hold for name, _, hold in slots}

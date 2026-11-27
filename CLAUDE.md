@@ -7,7 +7,7 @@ life-dashboard: a single-user life dashboard that turns Max's training, sleep, a
 1. A day's Health Auto Export push and a Goodreads poll land in SQLite idempotently; replaying the same payloads changes no metric.
 2. The same workout reported by two HealthKit source apps (Watch and a phone app that writes to Health) is one activity everywhere; no metric double-counts it.
 3. Quality-workout counts per week, the weeks-hit streak, daily wins, training load (acute, chronic, balance), and books-this-year match hand-computed golden cases.
-4. Every rotation screen and both celebration clips render in the browser at 1x and 8x, are legible at 1x under LED gamma, and reach the Pixoo through an adapter.
+4. Every rotation screen and all three celebration clips render in the browser at 1x and 8x, are legible at 1x under LED gamma, and reach the Pixoo through an adapter.
 5. The daily summary cites only numbers present in the metrics table, stays within a configured monthly budget, and falls back to rule-based copy when the model is unavailable.
 6. The service survives a restart and a power cut with no data loss; a backup restores to an identical metrics table.
 

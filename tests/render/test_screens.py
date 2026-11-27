@@ -92,6 +92,7 @@ def test_every_screen_and_clip_renders_at_1x_and_8x(combo, settings):
         "month",
         "books",
         "sparkle",
+        "great-day",
         "party",
     ]
     for _, clip in clips:

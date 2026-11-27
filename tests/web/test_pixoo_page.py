@@ -62,7 +62,16 @@ def test_rotation_json_lists_the_sequence_with_valid_frames(client, settings):
     clips = {name: clip for name, clip, _ in sequence}
     holds = {name: hold for name, _, hold in sequence}
     names = [s["name"] for s in body["screens"]]
-    assert names == ["today", "city", "week", "month", "books", "win-workout", "win-sleep"]
+    assert names == [
+        "today",
+        "city",
+        "week",
+        "month",
+        "books",
+        "win-workout",
+        "win-sleep",
+        "great-day",
+    ]
     assert body["dwell_ms"] == settings.device.screen_seconds * 1000 == 6000
     assert body["source"] == {"fixture": WEEK_41}
     assert body["day_local"] == view.day_local and body["as_of_local"] == "2026-09-30 6:10PM EDT"
@@ -86,7 +95,7 @@ def test_rotation_json_lists_the_sequence_with_valid_frames(client, settings):
     assert holds["books"] == clips["books"].total_ms > 6000, "the whole message pages through"
     assert holds["win-workout"] == holds["win-sleep"] == 1500, "five steps of 300 ms, one pass"
     expected = {c.name: c for c in celebrations_for(view)}
-    assert [c["name"] for c in body["celebrations"]] == ["sparkle", "party"]
+    assert [c["name"] for c in body["celebrations"]] == ["sparkle", "great-day", "party"]
     for celebration in body["celebrations"]:
         clip = expected[celebration["name"]].clip
         assert celebration["earned"] == expected[celebration["name"]].earned
@@ -94,22 +103,26 @@ def test_rotation_json_lists_the_sequence_with_valid_frames(client, settings):
         assert celebration["total_ms"] == clip.total_ms
         last = _png(client.get(celebration["frames"][-1]["url"]))
         assert ImageChops.difference(last, clip.frames[-1]).getbbox() is None
-    assert body["celebrations"][0]["earned"] and not body["celebrations"][1]["earned"]
+    assert [c["earned"] for c in body["celebrations"]] == [True, True, False]
     complete = client.get(f"/pixoo/rotation.json?fixture={WEEK_COMPLETE}").json()
-    assert complete["celebrations"][1]["earned"]
+    assert complete["celebrations"][2]["earned"]
     done, done_now = load(WEEK_COMPLETE, settings)
     assert [s["name"] for s in complete["screens"]] == list(sequence_names(done))
     assert [s["name"] for s in complete["screens"]][4:] == [
         "books",
         "win-workout",
         "win-sleep",
+        "great-day",
         "party",
     ]
+    great = complete["screens"][-2]
+    assert (len(great["frames"]), great["hold_ms"]) == (5, 1500), "one pass of five"
+    assert great["frames"] == complete["celebrations"][1]["frames"], "one great-day clip"
     party = complete["screens"][-1]
     clip = render_screen("party", done, done_now)
     assert (len(party["frames"]), party["hold_ms"]) == (6, clip.total_ms), "one pass of six"
     assert party["frames"][0]["url"].startswith("/pixoo/frame/party/0.png?")
-    assert party["frames"] == complete["celebrations"][1]["frames"], "one party clip, not two"
+    assert party["frames"] == complete["celebrations"][2]["frames"], "one party clip, not two"
     shown = _png(client.get(party["frames"][3]["url"]))
     assert ImageChops.difference(shown, clip.frames[3]).getbbox() is None
     assert len(frames["month"]) == 2 and len(complete["screens"][2]["frames"]) == 1

@@ -13,8 +13,9 @@ nothing is fetched or rendered again. `gamma=1` on the frame endpoint exists for
 /preview and so a test can prove the shipped tables equal the emulator pixel for pixel.
 
 The sequence and its holds are `app.render.rotation`'s, the same the device job sends: Today,
-City, Week, Month, Books, one sparkle per earned small win, then the week-complete party when the
-week is done; a clip loops while it is held. `#screen=<name>` starts on that screen
+City, Week, Month, Books, one sparkle per earned small win, the great day on a day with both
+its workout and its sleep, then the week-complete party when the week is done; a clip loops
+while it is held. `#screen=<name>` starts on that screen
 (`#screen=city`, `#screen=month`, `#screen=win-sleep`, `#screen=party`); a celebration the
 day did not earn is played once as a sample instead. No external scripts, fonts, or assets;
 everything is inline and the page works on the LAN only.
@@ -32,7 +33,14 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from app.render.adapters import served
 from app.render.adapters.file import png_bytes
-from app.render.celebrate import CELEBRATION_ORDER, Celebration, celebrations_for, week_complete
+from app.render.celebrate import (
+    CELEBRATION_ORDER,
+    GREAT_DAY,
+    Celebration,
+    celebrations_for,
+    great_day,
+    week_complete,
+)
 from app.render.frame import Clip
 from app.render.gamma import led_gamma, led_lut
 from app.render.rotation import PARTY, SCREEN_NAMES, render_screen, rotation_sequence
@@ -59,7 +67,10 @@ NAMES = (*SCREEN_NAMES, *(name for name in CELEBRATION_ORDER if name not in SCRE
 
 def _clip(view: DayView, now: datetime, name: str) -> tuple[Clip, bool]:
     """(clip, earned) for one screen or celebration. A rotation screen is always earned; the
-    party is the rotation's own clip, earned once the week is complete."""
+    great day and the party are the rotation's own clips, earned on a day with both wins and
+    once the week is complete."""
+    if name == GREAT_DAY:
+        return render_screen(name, view, now), great_day(view)
     if name in SCREEN_NAMES:
         return render_screen(name, view, now), name != PARTY or week_complete(view)
     found: Celebration = next(c for c in celebrations_for(view) if c.name == name)
@@ -267,11 +278,15 @@ _STRIP = (
     "<div class='strip' id='strip'>"
     "<figure><img id='thumb-sparkle' alt='sparkle'><figcaption id='label-sparkle'>sparkle"
     "</figcaption><button type='button' data-play='sparkle'>play sparkle</button></figure>"
+    "<figure><img id='thumb-great-day' alt='great day'>"
+    "<figcaption id='label-great-day'>great-day</figcaption>"
+    "<button type='button' data-play='great-day'>play great day</button></figure>"
     "<figure><img id='thumb-party' alt='party'><figcaption id='label-party'>party</figcaption>"
     "<button type='button' data-play='party'>play party</button></figure>"
     "</div>"
     "<p class='note'>The rotation runs Today, City, Week, Month, Books, then each small win "
-    "the day earned and the party once the week is done. "
+    "the day earned, the great day when it has both its workout and its sleep, and the party "
+    "once the week is done. "
     "Frames are rendered by the service and drawn here as LEDs; the page only "
     "maps pixels. Brightness scales the PWM level before the panel curve. Judge legibility on "
     "the LED-gamma view.</p></main>"

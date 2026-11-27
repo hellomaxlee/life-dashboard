@@ -1,4 +1,4 @@
-"""GET /preview: every screen (Today, City, Week, Month, Books) and both celebrations, at 1x
+"""GET /preview: every screen (Today, City, Week, Month, Books) and the three celebrations, at 1x
 and 8x, raw and through LED gamma. A paged screen (City, Books, Month) is a GIF of its pages.
 
 /preview?date=YYYY-MM-DD reads the database for that home-timezone day (default: today).

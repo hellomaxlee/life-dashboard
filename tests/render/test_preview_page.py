@@ -12,7 +12,7 @@ from app.web.preview import PLACEHOLDER
 from tests.render import STALE, WEEK_41, load, rotation
 from tools.render import main as render_main
 
-NAMES = ("today", "city", "week", "month", "books", "sparkle", "party")
+NAMES = ("today", "city", "week", "month", "books", "sparkle", "great-day", "party")
 
 
 pytestmark = pytest.mark.usefixtures("no_scenery")
@@ -28,7 +28,7 @@ def test_preview_page_shows_every_screen_four_ways(client):
             for gamma in (0, 1):
                 src = f"/preview/image/{name}?fixture={WEEK_41}&amp;scale={scale}&amp;gamma={gamma}"
                 assert src in page.text, src
-    assert page.text.count("<img ") == 28
+    assert page.text.count("<img ") == 32
     order = [page.text.index(f"/preview/image/{name}?") for name in NAMES]
     assert order == sorted(order), "rows follow the rotation: today, city, week, month, books"
 
@@ -94,7 +94,7 @@ def test_render_tool_writes_the_documented_files(tmp_path, settings, capsys):
     assert {p.name for p in (out / "month").iterdir()} == stills, "no feature: the calendar"
     assert {p.name for p in (out / "week").iterdir()} == stills, "stale Week is a still"
     view, now = load(STALE, settings)
-    for name, count in (("sparkle", 5), ("party", 6)):
+    for name, count in (("sparkle", 5), ("great-day", 5), ("party", 6)):
         assert {p.name for p in (out / name).iterdir()} == stills | clips | pages(count), name
     for name in ("city", "books"):
         count = len(rotation(view, now)[name].frames)
@@ -115,6 +115,7 @@ def test_render_tool_writes_the_documented_files(tmp_path, settings, capsys):
         "month",
         "books",
         "sparkle (sample)",
+        "great-day (sample)",
         "party (sample)",
     ]
     with_note = tmp_path / "with-note"

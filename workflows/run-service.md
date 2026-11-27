@@ -322,7 +322,8 @@ launchctl remove com.maxlee.probe
 ```
 
 What the job does: Today, City, Week, Month, Books, one sparkle for each small win the shown
-day earned, the party on a completed week, wrapping, each rendered for today's
+day earned, the great day (five stills, like a sparkle) when that day has both its workout
+and its sleep, the party on a completed week, wrapping, each rendered for today's
 America/New_York day from a fresh db connection. A still stays `screen_seconds`; Books
 (pages are 2 s each) stays until it has played through; a sparkle is five stills held 0.3 s
 each and the party six, sent one at a time like Books pages, so neither ever shows the

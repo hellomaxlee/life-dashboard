@@ -26,7 +26,7 @@ from app.jobs.rotation import (
 from app.jobs.sleepwatch import SleepWatcher
 from app.main import create_app
 from app.render.adapters.pixoo import PixooAdapter, PixooError
-from app.render.celebrate import STEP_MS, party_clip, sparkle_clip
+from app.render.celebrate import STEP_MS, great_day_clip, party_clip, sparkle_clip
 from app.render.frame import Clip, still
 from app.render.rotation import (
     ROTATION_ORDER,
@@ -421,12 +421,12 @@ def test_each_earned_small_win_gets_its_own_slot_after_books(db, jobs_settings):
     clock, adapter = Clock(), FakeAdapter()
     rotation = DeviceRotation(settings, opener(settings), adapter, clock)
     shown = []
-    for _ in range(48):
+    for _ in range(54):
         result = rotation.tick()
         if result != HOLDING and (not shown or shown[-1][0] != result):
             shown.append((result, (clock.now - NOON).total_seconds()))
         clock.now += timedelta(seconds=1)
-    assert shown[:9] == [
+    assert shown[:10] == [
         ("today", 0),
         ("city", 6),
         ("week", 12),
@@ -435,8 +435,10 @@ def test_each_earned_small_win_gets_its_own_slot_after_books(db, jobs_settings):
         ("win-workout", 30),
         ("win-sleep", 35),
         ("win-book", 40),
-        ("today", 45),
-    ], "each sparkle is five steps of STEP_MS, sent one still at a time"
+        ("great-day", 45),
+        ("today", 50),
+    ], "each sparkle and the great day is five steps of STEP_MS, sent one still at a time"
+    assert same(adapter.sent[20], still(great_day_clip().frames[0], STEP_MS))
     assert same(adapter.sent[5], still(sparkle_clip("workout").frames[0], STEP_MS))
     assert same(adapter.sent[15], still(sparkle_clip("book").frames[0], STEP_MS))
 
@@ -663,7 +665,13 @@ def test_every_win_belongs_to_the_day_the_today_screen_shows(db, jobs_settings):
     set_day(db, "2026-10-02", quality_workout=False, workout_count=0)
     friday = view_from_db(db, jobs_settings, "2026-10-02")
     assert friday.day_shown == "2026-10-01"
-    assert list(sequence_names(friday)) == [*PLAIN, "win-workout", "win-sleep", "win-book"]
+    assert list(sequence_names(friday)) == [
+        *PLAIN,
+        "win-workout",
+        "win-sleep",
+        "win-book",
+        "great-day",
+    ]
     db.execute(
         "UPDATE daily_metrics SET metrics_json = ? WHERE day_local = '2026-10-02'",
         (json.dumps({"quality_workout": False, "workout_count": 0, "book_finished_today": True}),),

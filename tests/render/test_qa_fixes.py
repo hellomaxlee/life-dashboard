@@ -53,6 +53,7 @@ def test_every_clip_fits_the_device_frame_limit(combo, settings):
         "month",
         "books",
         "sparkle",
+        "great-day",
         "party",
     ]
     assert MAX_CLIP_FRAMES == 59
@@ -264,18 +265,21 @@ def test_celebrations_are_marked_sample_unless_earned(settings, client, capsys):
     plain = DayView(day_local="2026-10-02")
     assert [(c.name, c.earned) for c in celebrations_for(plain)] == [
         ("sparkle", False),
+        ("great-day", False),
         ("party", False),
     ]
     two_dots, _ = load(WEEK_41, settings)
     assert [(c.name, c.earned) for c in celebrations_for(two_dots)] == [
         ("sparkle", True),
+        ("great-day", True),
         ("party", False),
     ]
     four = replace(two_dots, week_dots=4, today_dot=None, sleep_hours=6.0)
-    sparkle, party = celebrations_for(four)
+    sparkle, great, party = celebrations_for(four)
     assert (sparkle.earned, party.earned) == (True, True), "a finished week keeps the workout win"
+    assert not great.earned, "a kept workout win and a short night are not a great day"
     short = replace(two_dots, week_dots=2, today_dot=None, sleep_hours=6.0)
-    assert [c.earned for c in celebrations_for(short)] == [False, False]
+    assert [c.earned for c in celebrations_for(short)] == [False, False, False]
     confetti = theme_for(four).confetti
     assert party.clip.poster.tobytes() == party_clip(4, 3, confetti=confetti).poster.tobytes()
     assert party.clip.poster.tobytes() != party_clip(3, 3, confetti=confetti).poster.tobytes()
